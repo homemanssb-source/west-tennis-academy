@@ -11,15 +11,18 @@ function normalizePhone(phone: string): string {
 export async function POST(request: NextRequest) {
   try {
     const { phone, pin } = await request.json()
-    const normalized = normalizePhone(phone)
+    if (!phone || !pin) {
+      return NextResponse.json({ error: '전화번호와 PIN을 입력해 주세요.' }, { status: 400 })
+    }
 
+    const normalized = normalizePhone(phone)
     const admin = await createAdminClient()
 
     const { data: profile } = await admin
       .from('profiles')
-      .select('id, pin_code, role, is_active, name')
+      .select('id, name, role, pin_code, is_active')
       .eq('phone', normalized)
-      .single()
+      .maybeSingle()
 
     if (!profile) {
       return NextResponse.json({ error: '등록되지 않은 전화번호입니다.' }, { status: 404 })
@@ -31,13 +34,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'PIN이 올바르지 않습니다.' }, { status: 401 })
     }
 
-    // 세션 쿠키 발급
     const cookieStore = await cookies()
     const sessionValue = Buffer.from(JSON.stringify({
       userId: profile.id,
       role: profile.role,
       name: profile.name,
-      exp: Date.now() + 1000 * 60 * 60 * 24 * 7, // 7일
+      exp: Date.now() + 1000 * 60 * 60 * 24 * 7,
     })).toString('base64')
 
     cookieStore.set('wta_session', sessionValue, {
