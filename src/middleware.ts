@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server'
+﻿import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = ['/login', '/onboarding', '/set-pin', '/api/auth']
 

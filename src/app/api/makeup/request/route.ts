@@ -1,4 +1,4 @@
-import { createAdminClient } from '@/lib/supabase/server'
+﻿import { createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     if (!slot) return NextResponse.json({ error: '해당 슬롯을 찾을 수 없습니다.' }, { status: 404 })
     if (slot.status !== 'cancelled') return NextResponse.json({ error: '취소된 레슨만 보강 신청 가능합니다.' }, { status: 400 })
 
+    // 당일 취소 + 미납 차단
     const scheduledAt = new Date(slot.scheduled_at)
     const cancelledAt = slot.cancelled_at ? new Date(slot.cancelled_at) : null
     const isSameDay = cancelledAt && cancelledAt.toDateString() === scheduledAt.toDateString()

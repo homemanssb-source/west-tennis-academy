@@ -9,16 +9,17 @@ const DAY_LABELS: Record<string, string> = {
 }
 const TIMES = ['06:00','07:00','08:00','09:00','10:00','11:00','17:00','18:00','19:00','20:00']
 const LESSON_TYPES = [
-  { value: 'individual',  label: '개인레슨',   isGroup: false },
-  { value: 'group_2',     label: '단체 2:1',   isGroup: true  },
-  { value: 'group_3',     label: '단체 3:1',   isGroup: true  },
-  { value: 'group_4',     label: '단체 4:1',   isGroup: true  },
-  { value: 'group_other', label: '그룹(기타)', isGroup: true  },
+  { value: 'individual',   label: '개인레슨',   isGroup: false },
+  { value: 'group_2',      label: '단체 2:1',   isGroup: true  },
+  { value: 'group_3',      label: '단체 3:1',   isGroup: true  },
+  { value: 'group_4',      label: '단체 4:1',   isGroup: true  },
+  { value: 'group_other',  label: '그룹(기타)', isGroup: true  },
 ]
 
 export default function OnboardingPage() {
   const router = useRouter()
   const supabase = createClient()
+
   const [form, setForm] = useState({
     name: '', gender: '', birth_date: '', tennis_career: '',
     coach_id: '', lesson_type: 'individual',
@@ -62,7 +63,9 @@ export default function OnboardingPage() {
     if (form.preferred_times.length === 0) { setError('희망 시간을 선택해 주세요.'); return }
     if (!termsChecked) { setError('이용약관에 동의해 주세요.'); return }
     if (!phone) { setError('전화번호 정보가 없습니다. 처음부터 다시 시도해 주세요.'); return }
-    setLoading(true); setError('')
+
+    setLoading(true)
+    setError('')
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -86,6 +89,7 @@ export default function OnboardingPage() {
         <button onClick={() => router.back()} className="w-9 h-9 rounded-xl bg-[#1B4D2E]/8 border border-[#1B4D2E]/15 flex items-center justify-center text-[#1B4D2E] mr-3">←</button>
         <div className="font-oswald text-base font-semibold tracking-[2px] text-[#1B4D2E]">회원 등록</div>
       </div>
+
       <div className="flex-1 px-4 pt-4 pb-16">
         <h2 className="font-serif text-2xl font-semibold text-[#0F2010] mb-1">회원 정보 입력</h2>
         <p className="text-sm text-[#5A8A5A] mb-6">정확한 정보로 최적의 레슨 배정</p>
@@ -108,6 +112,13 @@ export default function OnboardingPage() {
             <div>
               <label className="block text-[11px] font-medium text-[#5A8A5A] tracking-[1px] uppercase mb-2">생년월일</label>
               <input type="date" className="wta-input" value={form.birth_date} onChange={e => setForm(f => ({ ...f, birth_date: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-[#5A8A5A] tracking-[1px] uppercase mb-2">연락처</label>
+            <div className="relative">
+              <input className="wta-input opacity-60 cursor-not-allowed" value={phone} disabled />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">🔒</span>
             </div>
           </div>
           <div>

@@ -1,4 +1,4 @@
-import BottomNav from '@/components/ui/BottomNav'
+﻿import BottomNav from '@/components/ui/BottomNav'
 
 const MEMBER_NAV = [
   { icon: '🏠', label: '홈',    href: '/home' },

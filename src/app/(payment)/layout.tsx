@@ -1,4 +1,4 @@
-import BottomNav from '@/components/ui/BottomNav'
+﻿import BottomNav from '@/components/ui/BottomNav'
 
 const PAYMENT_NAV = [
   { icon: '💳', label: '대시보드', href: '/payment/dashboard' },

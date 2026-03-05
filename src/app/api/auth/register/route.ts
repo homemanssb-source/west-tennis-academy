@@ -1,5 +1,6 @@
-import { createAdminClient } from '@/lib/supabase/server'
+﻿import { createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '')
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     const normalized = normalizePhone(phone)
     const admin = await createAdminClient()
 
-    // 기존 회원 확인
+    // 중복 체크
     const { data: existing } = await admin
       .from('profiles')
       .select('id')
@@ -28,41 +29,45 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (existing) {
-      return NextResponse.json({ error: '이미 가입된 전화번호입니다.' }, { status: 409 })
+      return NextResponse.json({ error: '이미 등록된 전화번호입니다.' }, { status: 409 })
     }
 
-    // auth.users 더미 생성
+    // auth.users에 더미 유저 생성 (profiles FK 때문에 필요)
     const { data: authUser, error: authError } = await admin.auth.admin.createUser({
       phone: normalized,
       phone_confirm: true,
+      user_metadata: { name },
     })
 
-    if (authError) throw authError
+    if (authError || !authUser.user) {
+      return NextResponse.json({ error: '계정 생성에 실패했습니다.' }, { status: 500 })
+    }
 
-    // profiles 생성
+    const userId = authUser.user.id
+
+    // profiles 테이블에 저장
     const { error: profileError } = await admin.from('profiles').insert({
-      id: authUser.user.id,
+      id: userId,
       phone: normalized,
-      name,
-      gender: gender || null,
-      birth_date: birth_date || null,
+      name, gender, birth_date: birth_date || null,
       tennis_career: tennis_career || null,
       coach_id: coach_id || null,
-      lesson_type: lesson_type || 'individual',
-      preferred_days: preferred_days || [],
-      preferred_times: preferred_times || [],
+      lesson_type, preferred_days, preferred_times,
       notes: notes || null,
-      auto_rollover: auto_rollover ?? true,
+      auto_rollover,
       role: 'member',
       is_active: true,
-      is_primary: true,
     })
 
-    if (profileError) throw profileError
+    if (profileError) {
+      // 롤백
+      await admin.auth.admin.deleteUser(userId)
+      return NextResponse.json({ error: '프로필 저장에 실패했습니다.' }, { status: 500 })
+    }
 
-    return NextResponse.json({ success: true, userId: authUser.user.id })
-  } catch (e: any) {
+    return NextResponse.json({ success: true, userId })
+  } catch (e) {
     console.error('register error:', e)
-    return NextResponse.json({ error: e.message ?? '등록에 실패했습니다.' }, { status: 500 })
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 })
   }
 }

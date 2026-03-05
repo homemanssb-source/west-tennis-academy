@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+﻿import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/server'
 import MemberHomeClient from '@/components/member/MemberHomeClient'
