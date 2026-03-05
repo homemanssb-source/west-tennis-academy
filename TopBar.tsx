@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { useRouter } from 'next/navigation'
 
 interface TopBarProps {
@@ -18,7 +18,8 @@ export default function TopBar({ title, subtitle, showBack = false, rightSlot }:
             onClick={() => router.back()}
             className="w-9 h-9 rounded-xl bg-[#1B4D2E]/8 border border-[#1B4D2E]/15 flex items-center justify-center text-[#1B4D2E] text-lg"
           >
-            ←          </button>
+            ←
+          </button>
         )}
         <div>
           <div className="font-oswald text-base font-semibold tracking-[2px] text-[#1B4D2E]">{title}</div>
