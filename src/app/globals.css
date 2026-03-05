@@ -1,26 +1,122 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-forest: #1B4D2E;
+  --color-lime: #3DB840;
+  --color-clay: #C85A1E;
+  --color-gold: #B07D1A;
+  --font-family-oswald: 'Oswald', sans-serif;
+  --font-family-noto: 'Noto Sans KR', sans-serif;
+  --font-family-serif: 'Noto Serif KR', serif;
+  --font-family-mono: 'JetBrains Mono', monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+* { -webkit-tap-highlight-color: transparent; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #F0F7F0;
+  color: #0F2010;
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-family: 'Noto Sans KR', sans-serif;
 }
+
+input, select, textarea { outline: none; -webkit-appearance: none; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(27,77,46,.2); border-radius: 4px; }
+
+.wta-card {
+  background: white;
+  border: 1px solid rgba(27,77,46,0.1);
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.wta-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: white;
+  border: 1.5px solid rgba(27,77,46,0.15);
+  color: #0F2010;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+.wta-input:focus {
+  border-color: #3DB840;
+  box-shadow: 0 0 0 2px rgba(61,184,64,0.1);
+}
+.wta-input::placeholder { color: #9AB89A; }
+
+.wta-btn-primary {
+  width: 100%;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: #1B4D2E;
+  color: white;
+  border: none;
+  font-family: 'Oswald', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(27,77,46,0.2);
+}
+.wta-btn-primary:hover { background: #163d24; }
+.wta-btn-primary:active { transform: scale(0.98); }
+.wta-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.wta-btn-secondary {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 1rem;
+  background: transparent;
+  color: #2A5A2A;
+  border: 1px solid rgba(27,77,46,0.2);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.wta-btn-secondary:hover { border-color: #1B4D2E; background: rgba(27,77,46,0.05); }
+.wta-btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.wta-chip {
+  padding: 0.5rem 0.75rem;
+  border-radius: 9999px;
+  background: #EAF3EA;
+  border: 1.5px solid rgba(27,77,46,0.15);
+  font-size: 0.875rem;
+  color: #2A5A2A;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.wta-chip-selected {
+  background: #1B4D2E;
+  border-color: #1B4D2E;
+  color: white;
+  box-shadow: 0 2px 6px rgba(27,77,46,0.2);
+}
+
+.wta-section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: #1B4D2E;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.25rem 0;
+}
+
+.badge-green { padding: 2px 8px; border-radius: 9999px; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-size: 10px; font-family: monospace; }
+.badge-red   { padding: 2px 8px; border-radius: 9999px; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-size: 10px; font-family: monospace; }
+.badge-gold  { padding: 2px 8px; border-radius: 9999px; background: #fffbeb; color: #b45309; border: 1px solid #fde68a; font-size: 10px; font-family: monospace; }
+.badge-gray  { padding: 2px 8px; border-radius: 9999px; background: #f9fafb; color: #4b5563; border: 1px solid #e5e7eb; font-size: 10px; font-family: monospace; }
+.badge-blue  { padding: 2px 8px; border-radius: 9999px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10px; font-family: monospace; }
