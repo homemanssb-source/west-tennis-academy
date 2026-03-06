@@ -1,1 +1,1 @@
-﻿export { default } from '@/app/owner/payment/page'
+export { default } from '@/app/owner/payment/page'

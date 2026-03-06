@@ -1,1 +1,1 @@
-﻿export { default } from '@/app/owner/coaches/page'
+export { default } from '@/app/owner/coaches/page'

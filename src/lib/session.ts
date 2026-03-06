@@ -1,4 +1,4 @@
-﻿import { cookies } from 'next/headers'
+import { cookies } from 'next/headers'
 import { SessionUser } from './types'
 
 const COOKIE_NAME = 'wta-session'

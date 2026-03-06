@@ -1,4 +1,4 @@
-﻿import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 
 // ⚠️ 절대 클라이언트 컴포넌트에서 import 금지
 // API route 에서만 사용
