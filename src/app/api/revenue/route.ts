@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     .order('month')
 
   if (!months || months.length === 0) {
-    return NextResponse.json({ year, monthly: [] })
+    return NextResponse.json({ year, monthly: [], totalPaid: 0, totalUnpaid: 0 })
   }
 
   // 각 month별 레슨플랜 집계
