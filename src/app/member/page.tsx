@@ -2,6 +2,7 @@
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Link from 'next/link'
+import NotificationBell from '@/components/notifications/NotificationBell'
 
 export default async function MemberHomePage() {
   const session = await getSession()
@@ -13,14 +14,7 @@ export default async function MemberHomePage() {
 
   const { data: todaySlots } = await supabaseAdmin
     .from('lesson_slots')
-    .select(`
-      id, scheduled_at, duration_minutes, status,
-      lesson_plan:lesson_plan_id (
-        lesson_type,
-        coach:coach_id ( name ),
-        member_id
-      )
-    `)
+    .select(`id, scheduled_at, duration_minutes, status, lesson_plan:lesson_plan_id ( lesson_type, coach:coach_id(name), member_id )`)
     .gte('scheduled_at', start)
     .lte('scheduled_at', end)
 
@@ -31,9 +25,9 @@ export default async function MemberHomePage() {
     .select('id, payment_status, total_count, completed_count')
     .eq('member_id', session.id)
 
-  const totalLessons    = (plans ?? []).reduce((s: number, p: any) => s + p.total_count, 0)
+  const totalLessons     = (plans ?? []).reduce((s: number, p: any) => s + p.total_count, 0)
   const completedLessons = (plans ?? []).reduce((s: number, p: any) => s + p.completed_count, 0)
-  const unpaidCount     = (plans ?? []).filter((p: any) => p.payment_status === 'unpaid').length
+  const unpaidCount      = (plans ?? []).filter((p: any) => p.payment_status === 'unpaid').length
 
   const STATUS_STYLE: Record<string, { bg: string; border: string; color: string; label: string }> = {
     scheduled: { bg: '#f0fdf4', border: '#4ade80', color: '#15803d', label: '예정' },
@@ -41,26 +35,26 @@ export default async function MemberHomePage() {
     absent:    { bg: '#fef2f2', border: '#f87171', color: '#b91c1c', label: '결석' },
     makeup:    { bg: '#fdf4ff', border: '#c084fc', color: '#7e22ce', label: '보강' },
   }
-
   const fmtTime = (dt: string) => new Date(dt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
 
   return (
     <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* 헤더 */}
       <div style={{ background: '#7e22ce', padding: '2rem 1.25rem 1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: 'white' }}>WTA</div>
             <div style={{ color: 'rgba(255,255,255,.7)', fontSize: '0.75rem' }}>서부 테니스 아카데미</div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>👤 {session.name}</div>
-            <div style={{ color: 'rgba(255,255,255,.6)', fontSize: '0.75rem' }}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <NotificationBell />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>👤 {session.name}</div>
+              <div style={{ color: 'rgba(255,255,255,.6)', fontSize: '0.75rem' }}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 통계 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.75rem', padding: '1rem 1.25rem 0' }}>
         {[
           { label: '전체 수업', value: totalLessons,     color: '#7e22ce', bg: '#fdf4ff', unit: '회' },
@@ -74,7 +68,6 @@ export default async function MemberHomePage() {
         ))}
       </div>
 
-      {/* 오늘 수업 */}
       <div style={{ padding: '1rem 1.25rem', flex: 1 }}>
         <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>오늘 수업</div>
         {myToday.length === 0 ? (
@@ -113,17 +106,12 @@ export default async function MemberHomePage() {
         )}
       </div>
 
-      {/* 하단 탭바 */}
-      <div className="bottom-nav" style={{ paddingBottom: '0.5rem' }}>
-        <Link href="/member" className="bottom-nav-item active">
-          <span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span>
-        </Link>
-        <Link href="/member/schedule" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span>
-        </Link>
-        <Link href="/member/payment" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span>
-        </Link>
+      <div className="bottom-nav">
+        <Link href="/member" className="bottom-nav-item active"><span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span></Link>
+        <Link href="/member/schedule" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span></Link>
+        <Link href="/member/makeup" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🔁</span><span>보강</span></Link>
+        <Link href="/member/payment" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span></Link>
+        <Link href="/member/family" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>👨‍👩‍👧‍👦</span><span>가족</span></Link>
       </div>
     </div>
   )

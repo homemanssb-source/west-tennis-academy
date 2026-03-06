@@ -2,6 +2,7 @@
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Link from 'next/link'
+import NotificationBell from '@/components/notifications/NotificationBell'
 
 export default async function CoachHomePage() {
   const session = await getSession()
@@ -38,21 +39,22 @@ export default async function CoachHomePage() {
 
   return (
     <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* 헤더 */}
       <div style={{ background: '#1d4ed8', padding: '2rem 1.25rem 1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: 'white' }}>WTA</div>
             <div style={{ color: 'rgba(255,255,255,.7)', fontSize: '0.75rem' }}>코치 대시보드</div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>🎾 {session.name}</div>
-            <div style={{ color: 'rgba(255,255,255,.6)', fontSize: '0.75rem' }}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <NotificationBell />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>🎾 {session.name}</div>
+              <div style={{ color: 'rgba(255,255,255,.6)', fontSize: '0.75rem' }}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 오늘 통계 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.75rem', padding: '1rem 1.25rem 0' }}>
         {[
           { label: '전체', value: mySlots.length, color: '#1d4ed8', bg: '#eff6ff' },
@@ -66,11 +68,27 @@ export default async function CoachHomePage() {
         ))}
       </div>
 
-      {/* 오늘 수업 */}
+      <div style={{ padding: '1rem 1.25rem 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
+          <Link href="/coach/blocks" style={{ textDecoration: 'none' }}>
+            <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.875rem', padding: '0.875rem', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.25rem', marginBottom: '2px' }}>🚫</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c' }}>휴무 관리</div>
+            </div>
+          </Link>
+          <Link href="/coach/schedule" style={{ textDecoration: 'none' }}>
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.25rem', marginBottom: '2px' }}>📅</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>전체 스케줄</div>
+            </div>
+          </Link>
+        </div>
+      </div>
+
       <div style={{ flex: 1, padding: '1rem 1.25rem 6rem' }}>
         <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>오늘 수업</div>
         {mySlots.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 0', color: '#9ca3af' }}>
+          <div style={{ textAlign: 'center', padding: '2rem 0', color: '#9ca3af' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎾</div>
             <p style={{ fontSize: '0.875rem' }}>오늘 예정된 수업이 없습니다</p>
           </div>
@@ -93,16 +111,10 @@ export default async function CoachHomePage() {
         )}
       </div>
 
-      {/* 하단 탭바 */}
       <div className="bottom-nav">
-        <Link href="/coach" className="bottom-nav-item active">
-          <span style={{ fontSize: '1.25rem' }}>🏠</span>
-          <span>홈</span>
-        </Link>
-        <Link href="/coach/schedule" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>📅</span>
-          <span>스케줄</span>
-        </Link>
+        <Link href="/coach" className="bottom-nav-item active"><span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span></Link>
+        <Link href="/coach/schedule" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span></Link>
+        <Link href="/coach/blocks" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span></Link>
       </div>
     </div>
   )
