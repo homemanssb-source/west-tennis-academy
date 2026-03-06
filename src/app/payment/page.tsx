@@ -1,6 +1,7 @@
-import { redirect } from 'next/navigation'
+﻿import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import Link from 'next/link'
+import LogoutButton from '@/components/LogoutButton'
 import NotificationBell from '@/components/notifications/NotificationBell'
 
 export default async function PaymentHomePage() {
@@ -43,12 +44,9 @@ export default async function PaymentHomePage() {
           </Link>
         ))}
 
-        <form action="/api/auth/logout" method="POST" style={{ marginTop: '1rem', textAlign: 'center' }}>
-          <button type="submit" style={{ background: 'transparent', border: '1.5px solid #e5e7eb', borderRadius: '0.75rem', padding: '0.625rem 1.5rem', color: '#9ca3af', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-            로그아웃
-          </button>
-        </form>
+        <div style={{ marginTop: '1rem', textAlign: 'center' }}><LogoutButton /></div>
       </div>
     </div>
   )
 }
+
