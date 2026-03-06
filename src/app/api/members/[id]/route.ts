@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
 
   const [{ data: member }, { data: plans }, { data: family }] = await Promise.all([
-    supabaseAdmin.from('profiles').select('id, name, phone, created_at, coach_id, coach:coach_id(name)').eq('id', id).single(),
+    supabaseAdmin.from('profiles').select('id, name, phone, created_at, coach:coach_id(name)').eq('id', id).single(),
     supabaseAdmin.from('lesson_plans').select(`
       id, lesson_type, total_count, completed_count, payment_status, amount, unit_minutes, created_at,
       month:month_id ( year, month ),
@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!member) return NextResponse.json({ error: '회원 없음' }, { status: 404 })
 
-  const allSlots  = (plans ?? []).flatMap((p: any) => p.slots ?? [])
+  const allSlots         = (plans ?? []).flatMap((p: any) => p.slots ?? [])
   const totalLessons     = allSlots.length
   const completedLessons = allSlots.filter((s: any) => s.status === 'completed').length
   const absentLessons    = allSlots.filter((s: any) => s.status === 'absent').length
@@ -38,4 +38,32 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     plans: plans ?? [],
     family: family ?? [],
   })
+}
+
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession()
+  if (!session || !['owner','admin'].includes(session.role)) {
+    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+  }
+  const { id } = await params
+  const body = await req.json()
+
+  if (body.action === 'reset_pin') {
+    const bcrypt = await import('bcryptjs')
+    const tempPin = '123456'
+    const pin_hash = await bcrypt.hash(tempPin, 10)
+    await supabaseAdmin.from('profiles').update({ pin_hash, pin_must_change: true }).eq('id', id)
+    return NextResponse.json({ temp_pin: tempPin })
+  }
+
+  if (body.action === 'toggle_active') {
+    const { data: profile } = await supabaseAdmin.from('profiles').select('is_active').eq('id', id).single()
+    await supabaseAdmin.from('profiles').update({ is_active: !profile?.is_active }).eq('id', id)
+    return NextResponse.json({ ok: true })
+  }
+
+  const { name, phone } = body
+  const { error } = await supabaseAdmin.from('profiles').update({ name, phone }).eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
 }
