@@ -39,20 +39,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       .single()
     if (appErr) return NextResponse.json({ error: appErr.message }, { status: 500 })
 
-    // 이미 가입된 전화번호인지 확인
+    // 같은 role(member)인 경우만 중복 체크
     const { data: existing } = await supabaseAdmin
       .from('profiles')
       .select('id, name')
       .eq('phone', app.phone)
+      .eq('role', 'member')
       .single()
 
     if (existing) {
-      // 이미 존재하면 application만 approved로 변경
       await supabaseAdmin
         .from('member_applications')
         .update({ status: 'approved', reviewed_by: session.id, reviewed_at: new Date().toISOString() })
         .eq('id', id)
-      return NextResponse.json({ ok: true, already_exists: true, message: '이미 등록된 회원입니다. 신청서만 승인 처리되었습니다.' })
+      return NextResponse.json({ ok: true, already_exists: true, message: '이미 등록된 회원입니다.' })
     }
 
     const tempPin = '123456'
