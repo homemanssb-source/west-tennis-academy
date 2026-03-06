@@ -23,22 +23,24 @@ export default async function OwnerDashboard() {
   ])
 
   const stats = [
-    { label: '전체 회원',  value: memberCount ?? 0,  unit: '명', color: '#16A34A', bg: '#f0fdf4', href: '/owner/members' },
-    { label: '코치',       value: coachCount ?? 0,   unit: '명', color: '#1d4ed8', bg: '#eff6ff', href: '/owner/coaches' },
-    { label: '가입 신청',  value: appCount ?? 0,     unit: '건', color: '#854d0e', bg: '#fef9c3', href: '/owner/applications' },
-    { label: '미납',       value: unpaidCount ?? 0,  unit: '건', color: '#b91c1c', bg: '#fef2f2', href: '/owner/payment' },
+    { label: '전체 회원',  value: memberCount ?? 0, unit: '명', color: '#16A34A', bg: '#f0fdf4', href: '/owner/members' },
+    { label: '코치',       value: coachCount ?? 0,  unit: '명', color: '#1d4ed8', bg: '#eff6ff', href: '/owner/coaches' },
+    { label: '가입 신청',  value: appCount ?? 0,    unit: '건', color: '#854d0e', bg: '#fef9c3', href: '/owner/applications' },
+    { label: '미납',       value: unpaidCount ?? 0, unit: '건', color: '#b91c1c', bg: '#fef2f2', href: '/owner/payment' },
   ]
 
   const menus = [
-    { emoji: '📋', label: '회원 가입서',    sub: '신청 확인 및 승인',     href: '/owner/applications',  badge: appCount ?? 0,     badgeColor: '#854d0e', badgeBg: '#fef9c3' },
-    { emoji: '👥', label: '회원 관리',      sub: '회원 등록·수정·삭제',  href: '/owner/members',        badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '🎾', label: '코치 관리',      sub: '코치 등록·수정',        href: '/owner/coaches',        badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '📅', label: '스케줄',         sub: '전체 수업 시간표',       href: '/owner/schedule',       badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '💰', label: '납부 관리',      sub: '납부 현황·상태 변경',    href: '/owner/payment',        badge: unpaidCount ?? 0,  badgeColor: '#b91c1c', badgeBg: '#fee2e2' },
-    { emoji: '🏆', label: '수업 프로그램',  sub: '프로그램 종류 관리',     href: '/owner/programs',       badge: programCount ?? 0, badgeColor: '#15803d', badgeBg: '#dcfce7' },
-    { emoji: '📊', label: '월별 리포트',    sub: '수업·납부 현황 분석',    href: '/owner/reports',        badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '🔔', label: '알림 발송',      sub: '회원·코치에게 공지',     href: '/owner/notifications',  badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '⚙️', label: '시스템 설정',   sub: 'PIN·월·스탭 관리',       href: '/owner/settings',       badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📺', label: '실시간 현황',   sub: '코치별 수업 라이브뷰',      href: '/owner/dashboard',      badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📋', label: '회원 가입서',   sub: '신청 확인 및 승인',          href: '/owner/applications',   badge: appCount ?? 0,    badgeColor: '#854d0e', badgeBg: '#fef9c3' },
+    { emoji: '👥', label: '회원 관리',     sub: '회원 등록·수정·이력',        href: '/owner/members',         badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '🎾', label: '코치 관리',     sub: '코치 등록·수정',             href: '/owner/coaches',         badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📅', label: '스케줄',        sub: '전체 수업 시간표',            href: '/owner/schedule',        badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '💰', label: '납부 관리',     sub: '납부 현황·상태 변경',         href: '/owner/payment',         badge: unpaidCount ?? 0, badgeColor: '#b91c1c', badgeBg: '#fee2e2' },
+    { emoji: '🏆', label: '수업 프로그램', sub: '프로그램 종류 관리',          href: '/owner/programs',        badge: programCount ?? 0, badgeColor: '#15803d', badgeBg: '#dcfce7' },
+    { emoji: '📊', label: '월별 리포트',   sub: '수업·납부 현황 분석',         href: '/owner/reports',         badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '⚠️', label: '미등록 탐지',  sub: '이번달 미등록 회원 확인',     href: '/owner/unregistered',    badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '🔔', label: '알림 발송',     sub: '회원·코치에게 공지',          href: '/owner/notifications',   badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '⚙️', label: '시스템 설정',  sub: 'PIN·월·스탭 관리',            href: '/owner/settings',        badge: 0, badgeColor: '', badgeBg: '' },
   ]
 
   return (
