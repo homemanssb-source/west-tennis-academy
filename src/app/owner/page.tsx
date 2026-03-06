@@ -1,5 +1,4 @@
-python3 << 'EOF'
-content = """import { redirect } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Link from 'next/link'
@@ -31,20 +30,20 @@ export default async function OwnerDashboard() {
   ]
 
   const menus = [
-    { emoji: '📺', label: '실시간 현황',   sub: '코치별 수업 라이브뷰',      href: '/owner/dashboard',    badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '📋', label: '회원 가입서',   sub: '신청 확인 및 승인',          href: '/owner/applications', badge: appCount ?? 0, badgeColor: '#854d0e', badgeBg: '#fef9c3' },
-    { emoji: '👥', label: '회원 관리',     sub: '회원 등록·수정·이력',        href: '/owner/members',      badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '🎾', label: '코치 관리',     sub: '코치 등록·수정',             href: '/owner/coaches',      badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '📅', label: '스케줄',        sub: '전체 수업 시간표',            href: '/owner/schedule',     badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '💰', label: '납부 관리',     sub: '납부 현황·상태 변경',         href: '/owner/payment',      badge: unpaidCount ?? 0, badgeColor: '#b91c1c', badgeBg: '#fee2e2' },
-    { emoji: '🏆', label: '수업 프로그램', sub: '프로그램 종류 관리',          href: '/owner/programs',     badge: programCount ?? 0, badgeColor: '#15803d', badgeBg: '#dcfce7' },
-    { emoji: '📊', label: '월별 리포트',   sub: '수업·납부 현황 분석',         href: '/owner/reports',      badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '⚠️', label: '미등록 탐지',  sub: '이번달 미등록 회원 확인',     href: '/owner/unregistered', badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '🔔', label: '알림 발송',     sub: '회원·코치에게 공지',          href: '/owner/notifications',badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '💹', label: '연간 매출',     sub: '월별 수입 추이 그래프',       href: '/owner/revenue',      badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '📈', label: '코치 부하',     sub: '코치별 수업수·완료율 비교',   href: '/owner/coach-stats',  badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '📋', label: '플랜 복사',     sub: '지난달 플랜 이번달로 복사',   href: '/owner/lesson-copy',  badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '⚙️', label: '시스템 설정',  sub: 'PIN·월·스탭 관리',            href: '/owner/settings',     badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📺', label: '실시간 현황',   sub: '코치별 수업 라이브뷰',      href: '/owner/dashboard',     badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '📋', label: '회원 가입서',   sub: '신청 확인 및 승인',          href: '/owner/applications',  badge: appCount ?? 0,   badgeColor: '#854d0e', badgeBg: '#fef9c3' },
+    { emoji: '👥', label: '회원 관리',     sub: '회원 등록·수정·이력',        href: '/owner/members',       badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '🎾', label: '코치 관리',     sub: '코치 등록·수정',             href: '/owner/coaches',       badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '📅', label: '스케줄',        sub: '전체 수업 시간표',            href: '/owner/schedule',      badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '💰', label: '납부 관리',     sub: '납부 현황·상태 변경',         href: '/owner/payment',       badge: unpaidCount ?? 0, badgeColor: '#b91c1c', badgeBg: '#fee2e2' },
+    { emoji: '🏆', label: '수업 프로그램', sub: '프로그램 종류 관리',          href: '/owner/programs',      badge: programCount ?? 0, badgeColor: '#15803d', badgeBg: '#dcfce7' },
+    { emoji: '📊', label: '월별 리포트',   sub: '수업·납부 현황 분석',         href: '/owner/reports',       badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '⚠️', label: '미등록 탐지',  sub: '이번달 미등록 회원 확인',     href: '/owner/unregistered',  badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '🔔', label: '알림 발송',     sub: '회원·코치에게 공지',          href: '/owner/notifications', badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '💹', label: '연간 매출',     sub: '월별 수입 추이 그래프',       href: '/owner/revenue',       badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '📈', label: '코치 부하',     sub: '코치별 수업수·완료율 비교',   href: '/owner/coach-stats',   badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '📋', label: '플랜 복사',     sub: '지난달 플랜 이번달로 복사',   href: '/owner/lesson-copy',   badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '⚙️', label: '시스템 설정',  sub: 'PIN·월·스탭 관리',            href: '/owner/settings',      badge: 0,               badgeColor: '',        badgeBg: '' },
   ]
 
   return (
@@ -103,8 +102,3 @@ export default async function OwnerDashboard() {
     </div>
   )
 }
-"""
-with open('src/app/owner/page.tsx', 'w', encoding='utf-8') as f:
-    f.write(content)
-print('완료')
-EOF
