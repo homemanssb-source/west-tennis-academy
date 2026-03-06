@@ -44,6 +44,22 @@ export default function CoachSchedulePage() {
 
   useEffect(() => { load() }, [load])
 
+  const handleCancel = async () => {
+    if (!selected) return
+    const reason = prompt('취소 사유 (선택사항)')
+    if (reason === null) return // 취소 누름
+    setSaving(true)
+    await fetch('/api/lesson-slots/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot_id: selected.id, reason }),
+    })
+    setSaving(false)
+    setSelected(null)
+    setMemo('')
+    load()
+  }
+
   const handleStatus = async (status: string) => {
     if (!selected) return
     setSaving(true)
@@ -149,9 +165,16 @@ export default function CoachSchedulePage() {
                 </button>
               ))}
             </div>
+            {selected.status !== 'completed' && (
+              <button onClick={handleCancel} disabled={saving}
+                style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                🗑 수업 취소 (회원 알림 발송)
+              </button>
+            )}
           </div>
         </div>
       )}
     </div>
   )
 }
+

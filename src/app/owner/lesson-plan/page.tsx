@@ -39,7 +39,17 @@ export default function LessonPlanPage() {
     fetch('/api/members').then(r => r.json()).then(d => setMembers(Array.isArray(d) ? d : []))
     fetch('/api/coaches').then(r => r.json()).then(d => setCoaches(Array.isArray(d) ? d : []))
     fetch('/api/months').then(r => r.json()).then(d => setMonths(Array.isArray(d) ? d : []))
-    fetch('/api/programs').then(r => r.json()).then(d => setPrograms(Array.isArray(d) ? d.filter((p: Program) => p) : []))
+    fetch('/api/programs').then(r => r.json()).then(d => {
+      const list = Array.isArray(d) ? d.filter((p: Program) => p) : []
+      setPrograms(list)
+      // 1:1 프로그램이 있으면 자동 선택
+      const oneOnOne = list.find((p: Program) => p.ratio === '1:1')
+      if (oneOnOne) {
+        setProgramId(oneOnOne.id)
+        setLessonType(oneOnOne.name)
+        setUnitMin(oneOnOne.unit_minutes)
+      }
+    })
   }, [])
 
   // 회원 선택 시 가족 구성원 조회
@@ -261,3 +271,4 @@ export default function LessonPlanPage() {
     </div>
   )
 }
+

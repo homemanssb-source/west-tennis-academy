@@ -40,6 +40,9 @@ export default async function OwnerDashboard() {
     { emoji: '📊', label: '월별 리포트',   sub: '수업·납부 현황 분석',         href: '/owner/reports',         badge: 0, badgeColor: '', badgeBg: '' },
     { emoji: '⚠️', label: '미등록 탐지',  sub: '이번달 미등록 회원 확인',     href: '/owner/unregistered',    badge: 0, badgeColor: '', badgeBg: '' },
     { emoji: '🔔', label: '알림 발송',     sub: '회원·코치에게 공지',          href: '/owner/notifications',   badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '💹', label: '연간 매출',     sub: '월별 수입 추이 그래프',       href: '/owner/revenue',     badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📈', label: '코치 부하',     sub: '코치별 수업 수·완료율 비교',  href: '/owner/coach-stats', badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📋', label: '플랜 복사',     sub: '지난달 플랜 이번달로 복사',   href: '/owner/lesson-copy', badge: 0, badgeColor: '', badgeBg: '' },
     { emoji: '⚙️', label: '시스템 설정',  sub: 'PIN·월·스탭 관리',            href: '/owner/settings',        badge: 0, badgeColor: '', badgeBg: '' },
   ]
 
@@ -102,3 +105,4 @@ export default async function OwnerDashboard() {
     </div>
   )
 }
+
