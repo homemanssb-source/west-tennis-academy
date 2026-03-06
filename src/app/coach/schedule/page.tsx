@@ -33,6 +33,9 @@ export default function CoachSchedulePage() {
   const [selected, setSelected] = useState<Slot | null>(null)
   const [saving, setSaving]     = useState(false)
   const [memo, setMemo]         = useState('')
+  const [showMakeup, setShowMakeup] = useState(false)
+  const [makeupDate, setMakeupDate] = useState('')
+  const [makeupTime, setMakeupTime] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -47,7 +50,7 @@ export default function CoachSchedulePage() {
   const handleCancel = async () => {
     if (!selected) return
     const reason = prompt('취소 사유 (선택사항)')
-    if (reason === null) return // 취소 누름
+    if (reason === null) return
     setSaving(true)
     await fetch('/api/lesson-slots/cancel', {
       method: 'POST',
@@ -62,15 +65,36 @@ export default function CoachSchedulePage() {
 
   const handleStatus = async (status: string) => {
     if (!selected) return
+    if (status === 'makeup') {
+      setShowMakeup(true)
+      return
+    }
     setSaving(true)
     await fetch(`/api/lesson-slots/${selected.id}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, memo: memo || null }),
     })
     setSaving(false)
     setSelected(null)
     setMemo('')
+    load()
+  }
+
+  const handleMakeupSubmit = async () => {
+    if (!selected || !makeupDate || !makeupTime) return
+    setSaving(true)
+    const makeup_datetime = `${makeupDate}T${makeupTime}:00+09:00`
+    await fetch('/api/makeup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ original_slot_id: selected.id, makeup_datetime }),
+    })
+    setSaving(false)
+    setShowMakeup(false)
+    setSelected(null)
+    setMakeupDate('')
+    setMakeupTime('')
     load()
   }
 
@@ -109,7 +133,7 @@ export default function CoachSchedulePage() {
             {slots.map(s => {
               const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
               return (
-                <div key={s.id} onClick={() => { setSelected(s); setMemo(s.memo ?? '') }}
+                <div key={s.id} onClick={() => { setSelected(s); setMemo(s.memo ?? ''); setShowMakeup(false) }}
                   style={{ background: st.bg, borderLeft: `4px solid ${st.border}`, borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
                   <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '48px' }}>{fmtTime(s.scheduled_at)}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -140,7 +164,7 @@ export default function CoachSchedulePage() {
       {/* 수업 처리 모달 */}
       {selected && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) { setSelected(null); setMemo('') } }}>
+          onClick={e => { if (e.target === e.currentTarget) { setSelected(null); setMemo(''); setShowMakeup(false) } }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem' }}>
             <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>수업 처리</h2>
@@ -154,8 +178,8 @@ export default function CoachSchedulePage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
               {[
-                { status: 'completed', label: '✅ 완료', bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-                { status: 'absent',    label: '❌ 결석', bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
+                { status: 'completed', label: '✅ 완료',  bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+                { status: 'absent',    label: '❌ 결석',  bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
                 { status: 'makeup',    label: '🔁 보강',  bg: '#fdf4ff', color: '#7e22ce', border: '#e9d5ff' },
                 { status: 'scheduled', label: '🔄 예정',  bg: '#f0fdf4', color: '#15803d', border: '#86efac' },
               ].map(btn => (
@@ -165,6 +189,28 @@ export default function CoachSchedulePage() {
                 </button>
               ))}
             </div>
+
+            {/* 보강 날짜 선택 UI */}
+            {showMakeup && (
+              <div style={{ marginTop: '1rem', background: '#fdf4ff', border: '1.5px solid #c084fc', borderRadius: '0.875rem', padding: '1rem' }}>
+                <div style={{ fontWeight: 700, color: '#7e22ce', marginBottom: '0.75rem', fontSize: '0.875rem' }}>📅 보강 날짜 선택</div>
+                <input type="date" value={makeupDate} onChange={e => setMakeupDate(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #e9d5ff', borderRadius: '0.5rem', marginBottom: '0.5rem', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+                <input type="time" value={makeupTime} onChange={e => setMakeupTime(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #e9d5ff', borderRadius: '0.5rem', marginBottom: '0.75rem', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => setShowMakeup(false)}
+                    style={{ flex: 1, padding: '0.625rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', background: 'white', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>
+                    취소
+                  </button>
+                  <button onClick={handleMakeupSubmit} disabled={!makeupDate || !makeupTime || saving}
+                    style={{ flex: 1, padding: '0.625rem', border: 'none', borderRadius: '0.625rem', background: (!makeupDate || !makeupTime || saving) ? '#d1d5db' : '#7e22ce', color: 'white', cursor: (!makeupDate || !makeupTime || saving) ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>
+                    보강 확정
+                  </button>
+                </div>
+              </div>
+            )}
+
             {selected.status !== 'completed' && (
               <button onClick={handleCancel} disabled={saving}
                 style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
@@ -177,4 +223,3 @@ export default function CoachSchedulePage() {
     </div>
   )
 }
-

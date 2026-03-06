@@ -45,6 +45,7 @@ export default async function OwnerDashboard() {
     { emoji: '📈', label: '코치 부하',     sub: '코치별 수업수·완료율 비교',   href: '/owner/coach-stats',   badge: 0,               badgeColor: '',        badgeBg: '' },
     { emoji: '📋', label: '플랜 복사',     sub: '지난달 플랜 이번달로 복사',   href: '/owner/lesson-copy',   badge: 0,               badgeColor: '',        badgeBg: '' },
     { emoji: '⚙️', label: '시스템 설정',  sub: 'PIN·월·스탭 관리',            href: '/owner/settings',      badge: 0,               badgeColor: '',        badgeBg: '' },
+    { emoji: '📆', label: '주간 스케줄', sub: '전체 코치 주간 수업표', href: '/owner/weekly', badge: 0, badgeColor: '', badgeBg: '' },
   ]
 
   return (
