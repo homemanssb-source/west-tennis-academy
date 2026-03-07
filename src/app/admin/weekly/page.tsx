@@ -7,7 +7,7 @@ interface Slot {
   lesson_plan: { lesson_type: string; member: { id: string; name: string }; coach: { id: string; name: string } }
 }
 
-const DAYS = ['\uc6d4','\ud654','\uc218','\ubaa9','\uae08','\ud1a0','\uc77c']
+const DAYS = ['월','화','수','목','금','토','일']
 const START_HOUR = 8, END_HOUR = 22, CELL_MIN = 10, CELL_H = 18
 const TOTAL_CELLS = ((END_HOUR - START_HOUR) * 60) / CELL_MIN
 const STATUS_COLOR: Record<string,string> = { scheduled:'#16A34A', completed:'#1d4ed8', cancelled:'#b91c1c', makeup:'#7e22ce' }
@@ -23,7 +23,7 @@ function getMonday(d: Date) {
 }
 function toYMD(d: Date) { return d.toISOString().split('T')[0] }
 
-export default function WeeklySchedulePage() {
+export default function AdminWeeklyPage() {
   const [monday, setMonday] = useState(() => getMonday(new Date()))
   const [slots, setSlots] = useState<Slot[]>([])
   const [loading, setLoading] = useState(true)
@@ -102,7 +102,7 @@ export default function WeeklySchedulePage() {
                         <div style={{ fontSize:'9px', fontWeight:700, color, lineHeight:1.3 }}>{String(dt.getHours()).padStart(2,'0')}:{String(dt.getMinutes()).padStart(2,'0')}</div>
                         <div style={{ fontSize:'10px', fontWeight:700, color:'#111827', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{slot.lesson_plan?.member?.name ?? '-'}</div>
                         {height>=42 && <div style={{ fontSize:'9px', color:'#6b7280', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{slot.lesson_plan?.coach?.name}</div>}
-                        {slot.is_makeup && <div style={{ fontSize:'8px', background:'#e9d5ff', color:'#7e22ce', borderRadius:'9999px', padding:'0 4px', display:'inline-block', marginTop:'1px' }}>\ubcf4\uac15</div>}
+                        {slot.is_makeup && <div style={{ fontSize:'8px', background:'#e9d5ff', color:'#7e22ce', borderRadius:'9999px', padding:'0 4px', display:'inline-block', marginTop:'1px' }}>보강</div>}
                       </div>
                     )
                   })}
@@ -118,31 +118,31 @@ export default function WeeklySchedulePage() {
   return (
     <div style={{ background:'#f9fafb', minHeight:'100vh' }}>
       <div style={{ background:'white', borderBottom:'1.5px solid #f3f4f6', padding:'0.875rem 1.25rem', position:'sticky', top:0, zIndex:40, display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap' }}>
-        <Link href='/owner' style={{ color:'#9ca3af', textDecoration:'none', fontSize:'1.25rem' }}>\u2190</Link>
-        <h1 style={{ fontFamily:'Oswald,sans-serif', fontSize:'1.25rem', fontWeight:700, color:'#111827' }}>\uc8fc\uac04 \uc2a4\ucf00\uc904</h1>
+        <Link href='/admin' style={{ color:'#9ca3af', textDecoration:'none', fontSize:'1.25rem' }}>←</Link>
+        <h1 style={{ fontFamily:'Oswald,sans-serif', fontSize:'1.25rem', fontWeight:700, color:'#111827' }}>주간 스케줄</h1>
         <div style={{ display:'flex', gap:'3px', background:'#f3f4f6', borderRadius:'0.625rem', padding:'3px' }}>
-          <button onClick={() => { setViewMode('all'); setSelCoach('all') }} style={{ padding:'0.25rem 0.75rem', borderRadius:'0.5rem', border:'none', background:viewMode==='all'?'white':'transparent', color:viewMode==='all'?'#111827':'#9ca3af', fontWeight:viewMode==='all'?700:400, fontSize:'0.8rem', cursor:'pointer', whiteSpace:'nowrap' }}>\uc804\uccb4 \ubcf4\uae30</button>
-          <button onClick={() => { setViewMode('byCoach'); setSelCoach('all') }} style={{ padding:'0.25rem 0.75rem', borderRadius:'0.5rem', border:'none', background:viewMode==='byCoach'?'white':'transparent', color:viewMode==='byCoach'?'#111827':'#9ca3af', fontWeight:viewMode==='byCoach'?700:400, fontSize:'0.8rem', cursor:'pointer', whiteSpace:'nowrap' }}>\uc120\uc0dd\ub2d8\ubcc4</button>
+          <button onClick={() => { setViewMode('all'); setSelCoach('all') }} style={{ padding:'0.25rem 0.75rem', borderRadius:'0.5rem', border:'none', background:viewMode==='all'?'white':'transparent', color:viewMode==='all'?'#111827':'#9ca3af', fontWeight:viewMode==='all'?700:400, fontSize:'0.8rem', cursor:'pointer', whiteSpace:'nowrap' }}>전체 보기</button>
+          <button onClick={() => { setViewMode('byCoach'); setSelCoach('all') }} style={{ padding:'0.25rem 0.75rem', borderRadius:'0.5rem', border:'none', background:viewMode==='byCoach'?'white':'transparent', color:viewMode==='byCoach'?'#111827':'#9ca3af', fontWeight:viewMode==='byCoach'?700:400, fontSize:'0.8rem', cursor:'pointer', whiteSpace:'nowrap' }}>선생님별</button>
         </div>
         {viewMode==='all' && coaches.length>0 && (
           <select value={selCoach} onChange={e => setSelCoach(e.target.value)} style={{ padding:'0.375rem 0.75rem', border:'1.5px solid #e5e7eb', borderRadius:'0.625rem', background:'white', fontSize:'0.8rem', color:'#374151', cursor:'pointer' }}>
-            <option value='all'>\uc804\uccb4 \ucf54\uce58</option>
-            {coaches.map(c => <option key={c.id} value={c.id}>{c.name} \ucf54\uce58</option>)}
+            <option value='all'>전체 코치</option>
+            {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 코치</option>)}
           </select>
         )}
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'0.5rem' }}>
-          <button onClick={() => changeWeek(-1)} style={{ padding:'0.375rem 0.75rem', border:'1.5px solid #e5e7eb', borderRadius:'0.5rem', background:'white', cursor:'pointer' }}>\u25c0</button>
+          <button onClick={() => changeWeek(-1)} style={{ padding:'0.375rem 0.75rem', border:'1.5px solid #e5e7eb', borderRadius:'0.5rem', background:'white', cursor:'pointer' }}>◀</button>
           <span style={{ fontSize:'0.875rem', fontWeight:700, color:'#111827', whiteSpace:'nowrap' }}>{weekLabel}</span>
-          <button onClick={() => changeWeek(1)} style={{ padding:'0.375rem 0.75rem', border:'1.5px solid #e5e7eb', borderRadius:'0.5rem', background:'white', cursor:'pointer' }}>\u25b6</button>
+          <button onClick={() => changeWeek(1)} style={{ padding:'0.375rem 0.75rem', border:'1.5px solid #e5e7eb', borderRadius:'0.5rem', background:'white', cursor:'pointer' }}>▶</button>
         </div>
       </div>
       {loading ? (
-        <div style={{ textAlign:'center', padding:'4rem', color:'#9ca3af' }}>\ubd88\ub7ec\uc624\ub294 \uc911...</div>
+        <div style={{ textAlign:'center', padding:'4rem', color:'#9ca3af' }}>불러오는 중...</div>
       ) : (
         <div style={{ padding:'1rem' }}>
           {viewMode==='all' && (
             <><div style={{ display:'flex', gap:'1rem', marginBottom:'0.75rem', flexWrap:'wrap' }}>
-              {[['scheduled','\uc608\uc815'],['completed','\uc644\ub8cc'],['cancelled','\uacb0\uc11d'],['makeup','\ubcf4\uac15']].map(([k,l]) => (
+              {[['scheduled','예정'],['completed','완료'],['cancelled','결석'],['makeup','보강']].map(([k,l]) => (
                 <div key={k} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', color:'#6b7280' }}>
                   <div style={{ width:'10px', height:'10px', background:STATUS_COLOR[k], borderRadius:'2px' }}/>{l}
                 </div>
@@ -161,7 +161,7 @@ export default function WeeklySchedulePage() {
               </div>
             )}
             {coaches.length===0 ? (
-              <div style={{ textAlign:'center', padding:'3rem', color:'#9ca3af' }}>\ub4f1\ub85d\ub41c \ucf54\uce58\uac00 \uc5c6\uc2b5\ub2c8\ub2e4</div>
+              <div style={{ textAlign:'center', padding:'3rem', color:'#9ca3af' }}>등록된 코치가 없습니다</div>
             ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:'2rem' }}>
                 {coaches.map((coach,ci) => {
@@ -171,8 +171,8 @@ export default function WeeklySchedulePage() {
                     <div key={coach.id}>
                       <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 1rem', background:'white', borderRadius:'0.75rem', border:'2px solid '+color, marginBottom:'0.5rem' }}>
                         <div style={{ width:12, height:12, borderRadius:'50%', background:color, flexShrink:0 }}/>
-                        <span style={{ fontFamily:'Oswald,sans-serif', fontWeight:700, fontSize:'1rem', color:'#111827' }}>{coach.name} \ucf54\uce58</span>
-                        <span style={{ marginLeft:'auto', fontSize:'0.75rem', color:'#6b7280' }}>\uc774\ubc88 \uc8fc {coachSlots.length}\uac74</span>
+                        <span style={{ fontFamily:'Oswald,sans-serif', fontWeight:700, fontSize:'1rem', color:'#111827' }}>{coach.name} 코치</span>
+                        <span style={{ marginLeft:'auto', fontSize:'0.75rem', color:'#6b7280' }}>이번 주 {coachSlots.length}건</span>
                       </div>
                       <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={coachSlots} /></div>
                     </div>
