@@ -19,13 +19,13 @@ export default async function AdminDashboard() {
   ])
 
   const menus = [
-    { emoji: '📋', label: '회원 가입서',  sub: '신청 확인 및 승인',    href: '/admin/applications', badge: appCount ?? 0, badgeColor: '#854d0e', badgeBg: '#fef9c3' },
-    { emoji: '👥', label: '회원 관리',    sub: '회원 등록·수정',        href: '/admin/members',      badge: memberCount ?? 0, badgeColor: '#15803d', badgeBg: '#dcfce7' },
-    { emoji: '🎾', label: '코치 관리',    sub: '코치 등록·수정',        href: '/admin/coaches',      badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '💰', label: '납부 관리',    sub: '납부 현황·상태 변경',   href: '/admin/payment',      badge: unpaidCount ?? 0, badgeColor: '#b91c1c', badgeBg: '#fee2e2' },
-    { emoji: '📅', label: '수업월 관리',  sub: '월 등록',               href: '/admin/settings',     badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '📆', label: '주간 스케줄', sub: '전체 코치 주간 수업표', href: '/owner/weekly', badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '📝', label: '스케줄 등록', sub: '레슨 플랜 등록', href: '/admin/lesson-plan', badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📋', label: '회원 가입서',  sub: '신청 확인 및 승인',      href: '/admin/applications', badge: appCount ?? 0,    badgeColor: '#854d0e', badgeBg: '#fef9c3' },
+    { emoji: '👥', label: '회원 관리',    sub: '회원 등록·수정',          href: '/admin/members',      badge: memberCount ?? 0, badgeColor: '#15803d', badgeBg: '#dcfce7' },
+    { emoji: '🎾', label: '코치 관리',    sub: '코치 등록·수정',          href: '/admin/coaches',      badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '💰', label: '납부 관리',    sub: '납부 현황·상태 변경',     href: '/admin/payment',      badge: unpaidCount ?? 0, badgeColor: '#b91c1c', badgeBg: '#fee2e2' },
+    { emoji: '📅', label: '수업월 관리',  sub: '월 등록',                 href: '/admin/settings',     badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📆', label: '주간 스케줄',  sub: '전체 코치 주간 수업표',   href: '/owner/weekly',       badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📝', label: '스케줄 등록',  sub: '레슨 플랜 등록',          href: '/admin/lesson-plan',  badge: 0, badgeColor: '', badgeBg: '' },
   ]
 
   return (
@@ -46,7 +46,7 @@ export default async function AdminDashboard() {
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>
           {menus.map(m => (
-            <Link key={m.label} href={m.href} style={{ textDecoration: 'none' }}>
+            <Link key={m.href} href={m.href} style={{ textDecoration: 'none' }}>
               <div style={{ background: 'white', border: '1.5px solid #f3f4f6', borderRadius: '1rem', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.875rem', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
                 <div style={{ fontSize: '1.75rem', flexShrink: 0 }}>{m.emoji}</div>
                 <div style={{ flex: 1 }}>
@@ -63,10 +63,8 @@ export default async function AdminDashboard() {
             </Link>
           ))}
         </div>
-
         <div style={{ marginTop: '2rem', textAlign: 'center' }}><LogoutButton /></div>
       </div>
     </div>
   )
 }
-
