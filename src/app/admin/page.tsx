@@ -24,7 +24,7 @@ export default async function AdminDashboard() {
     { emoji: '🎾', label: '코치 관리',    sub: '코치 등록·수정',          href: '/admin/coaches',      badge: 0, badgeColor: '', badgeBg: '' },
     { emoji: '💰', label: '납부 관리',    sub: '납부 현황·상태 변경',     href: '/admin/payment',      badge: unpaidCount ?? 0, badgeColor: '#b91c1c', badgeBg: '#fee2e2' },
     { emoji: '📅', label: '수업월 관리',  sub: '월 등록',                 href: '/admin/settings',     badge: 0, badgeColor: '', badgeBg: '' },
-    { emoji: '📆', label: '주간 스케줄',  sub: '전체 코치 주간 수업표',   href: '/owner/weekly',       badge: 0, badgeColor: '', badgeBg: '' },
+    { emoji: '📆', label: '주간 스케줄',  sub: '전체 코치 주간 수업표',   href: '/admin/weekly',       badge: 0, badgeColor: '', badgeBg: '' },
     { emoji: '📝', label: '스케줄 등록',  sub: '레슨 플랜 등록',          href: '/admin/lesson-plan',  badge: 0, badgeColor: '', badgeBg: '' },
   ]
 
