@@ -3,18 +3,19 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
 // PATCH - 상태 변경 (코치: 수락/거절, 관리자: 최종 승인/거절/수정)
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+
   const session = await getSession()
   if (!session) return NextResponse.json({ error: '로그인 필요' }, { status: 401 })
 
   const body = await req.json()
   const { action, coach_note, admin_note, requested_at, coach_id } = body
-  // action: 'coach_approve' | 'coach_reject' | 'admin_approve' | 'admin_reject'
 
   const { data: app, error: fetchErr } = await supabaseAdmin
     .from('lesson_applications')
     .select('*, member:profiles!lesson_applications_member_id_fkey(id, name), coach:profiles!lesson_applications_coach_id_fkey(id, name)')
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (fetchErr || !app) return NextResponse.json({ error: '신청 없음' }, { status: 404 })
@@ -27,10 +28,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const { error } = await supabaseAdmin
       .from('lesson_applications')
       .update({ status: 'pending_admin', coach_note: coach_note ?? null })
-      .eq('id', params.id)
+      .eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // 관리자/운영자에게 알림
     const { data: admins } = await supabaseAdmin
       .from('profiles')
       .select('id')
@@ -54,10 +54,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const { error } = await supabaseAdmin
       .from('lesson_applications')
       .update({ status: 'rejected', coach_note: coach_note ?? null })
-      .eq('id', params.id)
+      .eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // 회원에게 거절 알림
     await supabaseAdmin.from('notifications').insert({
       profile_id: app.member_id,
       title: '수업 신청 거절',
@@ -74,11 +73,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: '권한 없음' }, { status: 403 })
     }
 
-    // 시간 또는 코치 수정 가능
     const finalTime    = requested_at ?? app.requested_at
     const finalCoachId = coach_id ?? app.coach_id
 
-    // lesson_plan 조회 (해당 월 + 회원 + 코치)
     let { data: plan } = await supabaseAdmin
       .from('lesson_plans')
       .select('id, total_count')
@@ -87,7 +84,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       .eq('month_id', app.month_id)
       .single()
 
-    // 플랜 없으면 새로 생성
     if (!plan) {
       const { data: newPlan, error: planErr } = await supabaseAdmin
         .from('lesson_plans')
@@ -107,14 +103,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       if (planErr) return NextResponse.json({ error: planErr.message }, { status: 500 })
       plan = newPlan
     } else {
-      // 기존 플랜에 횟수 추가
       await supabaseAdmin
         .from('lesson_plans')
         .update({ total_count: (plan.total_count ?? 0) + 1 })
         .eq('id', plan.id)
     }
 
-    // 슬롯 생성
     const { error: slotErr } = await supabaseAdmin
       .from('lesson_slots')
       .insert({
@@ -127,13 +121,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       })
     if (slotErr) return NextResponse.json({ error: slotErr.message }, { status: 500 })
 
-    // 신청 상태 승인으로 변경
     await supabaseAdmin
       .from('lesson_applications')
       .update({ status: 'approved', admin_note: admin_note ?? null })
-      .eq('id', params.id)
+      .eq('id', id)
 
-    // 회원에게 확정 알림
     const dt = new Date(finalTime)
     const timeStr =
       dt.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' }) +
@@ -159,7 +151,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     await supabaseAdmin
       .from('lesson_applications')
       .update({ status: 'rejected', admin_note: admin_note ?? null })
-      .eq('id', params.id)
+      .eq('id', id)
 
     await supabaseAdmin.from('notifications').insert({
       profile_id: app.member_id,
