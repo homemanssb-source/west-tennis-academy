@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 
@@ -25,13 +25,18 @@ const STATUS: Record<string, { label: string; color: string; bg: string }> = {
   rejected:      { label: '거절',        color: '#b91c1c', bg: '#fee2e2' },
 }
 
-function generateDates(year: number, month: number, startDate: Date, weekdays: number[], timeStr: string): Date[] {
+function generateDates(year: number, month: number, startDate: Date, weekdays: number[], timeStr: string, dayTimesMap?: Record<number, string>): Date[] {
   const result: Date[] = []
   const lastDay = new Date(year, month, 0).getDate()
-  const [h, m] = timeStr.split(':').map(Number)
   for (let d = startDate.getDate(); d <= lastDay; d++) {
-    const date = new Date(year, month - 1, d, h, m)
-    if (weekdays.includes(date.getDay())) result.push(date)
+    const date = new Date(year, month - 1, d)
+    const dow = date.getDay()
+    if (!weekdays.includes(dow)) continue
+    const tStr = dayTimesMap?.[dow] ?? timeStr
+    if (!tStr) continue
+    const [h, m] = tStr.split(':').map(Number)
+    date.setHours(h, m, 0, 0)
+    result.push(date)
   }
   return result
 }
@@ -69,6 +74,7 @@ export default function MemberApplyPage() {
   const [busySlots,     setBusySlots]     = useState<SlotInfo[]>([])
   const [selectedDate,  setSelectedDate]  = useState<Date | null>(null)
   const [selectedTime,  setSelectedTime]  = useState('')
+  const [dayTimes, setDayTimes] = useState<Record<number, string>>({})
   const [repeatDays,    setRepeatDays]    = useState<number[]>([])
   const [generatedDates, setGeneratedDates] = useState<Date[]>([])
   const [manualCount,   setManualCount]   = useState(0)
@@ -115,13 +121,15 @@ export default function MemberApplyPage() {
   }, [coachId, weekOffset])
 
   useEffect(() => {
-    if (!selectedDate || !selectedTime || repeatDays.length === 0) return
+    if (!selectedDate || repeatDays.length === 0) return
+    const hasAllTimes = repeatDays.every(dow => dayTimes[dow])
+    if (!hasAllTimes) return
     const m = months.find(m => m.id === monthId)
     if (!m) return
-    const dates = generateDates(m.year, m.month, selectedDate, repeatDays, selectedTime)
+    const dates = generateDates(m.year, m.month, selectedDate, repeatDays, selectedTime, dayTimes)
     setGeneratedDates(dates)
     setManualCount(dates.length)
-  }, [selectedDate, selectedTime, repeatDays, monthId])
+  }, [selectedDate, selectedTime, dayTimes, repeatDays, monthId])
 
   const checkSlot = (date: Date, time: string, statusList: string[]) => {
     const [h, min] = time.split(':').map(Number)
@@ -328,8 +336,10 @@ export default function MemberApplyPage() {
                             return (
                               <td key={d.toISOString()} style={{ padding: '2px', textAlign: 'center' }}>
                                 <button disabled={busy || isPast} onClick={() => {
-                                    setSelectedDate(new Date(d)); setSelectedTime(time)
                                     const dow = d.getDay()
+                                    setSelectedDate(new Date(d))
+                                    setSelectedTime(time)
+                                    setDayTimes(prev => ({ ...prev, [dow]: time }))
                                     if (!repeatDays.includes(dow)) setRepeatDays([dow])
                                   }}
                                   style={{ width: '100%', padding: '5px 2px', borderRadius: '4px', border: 'none',
@@ -368,6 +378,36 @@ export default function MemberApplyPage() {
                 <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.875rem' }}>
                   {fmtDate(selectedDate!)}부터 {selectedMonth?.year}년 {selectedMonth?.month}월 말일까지
                 </p>
+                {/* 요일별 시간 선택 */}
+                {repeatDays.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '0.75rem' }}>
+                    {repeatDays.map(dow => (
+                      <div key={dow} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.625rem' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', minWidth: '32px' }}>
+                          {DAYS_LABEL[dow === 0 ? 6 : dow - 1]}요일
+                        </span>
+                        <select
+                          value={dayTimes[dow] ?? ''}
+                          onChange={e => {
+                            const t = e.target.value
+                            setDayTimes(prev => ({ ...prev, [dow]: t }))
+                            if (dow === selectedDate?.getDay()) setSelectedTime(t)
+                          }}
+                          style={{ flex: 1, padding: '0.375rem 0.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', fontSize: '0.8rem', background: 'white', color: '#111827', outline: 'none' }}
+                        >
+                          <option value=''>시간 선택</option>
+                          {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        {dayTimes[dow] && <span style={{ fontSize: '0.75rem', color: '#16A34A', fontWeight: 700 }}>✓</span>}
+                      </div>
+                    ))}
+                    {!repeatDays.every(d => dayTimes[d]) && (
+                      <div style={{ fontSize: '0.75rem', color: '#854d0e', padding: '0.375rem 0.75rem', background: '#fef9c3', borderRadius: '0.5rem' }}>
+                        ⚠ 모든 요일의 시간을 선택해주세요
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1rem' }}>
                   {DAYS_LABEL.map(day => {
                     const dow    = WEEKDAY_MAP[day]
@@ -501,3 +541,6 @@ export default function MemberApplyPage() {
     </div>
   )
 }
+
+
+
