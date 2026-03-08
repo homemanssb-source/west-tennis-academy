@@ -56,7 +56,8 @@ export default function CoachHolidaysPage() {
     })
     const d = await res.json()
     setSaving(false)
-    if (d.error) { alert('저장 실패: ' + d.error); return }
+    console.log('저장 응답:', JSON.stringify(d))
+    if (d.error) { alert('저장 실패: ' + d.error + '\n\n전송 데이터: ' + JSON.stringify(body)); return }
     setShowForm(false)
     setReason('')
     load()
@@ -246,5 +247,6 @@ export default function CoachHolidaysPage() {
     </div>
   )
 }
+
 
 

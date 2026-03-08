@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+﻿import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Link from 'next/link'
@@ -113,9 +113,11 @@ export default async function CoachHomePage() {
 
       <div className="bottom-nav">
         <Link href="/coach" className="bottom-nav-item active"><span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span></Link>
-        <Link href="/coach/schedule" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span></Link>
+        <Link href="/coach/applications" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📋</span><span>신청확인</span></Link>
         <Link href="/coach/blocks" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span></Link>
+        <Link href="/coach/applications" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📋</span><span>신청확인</span></Link><Link href="/coach/blocks" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span></Link>
       </div>
     </div>
   )
 }
+

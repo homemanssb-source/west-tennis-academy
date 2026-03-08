@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     .from('coach_blocks')
     .select('*')
     .eq('coach_id', coachId)
-    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
@@ -65,3 +65,4 @@ export async function DELETE(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
+

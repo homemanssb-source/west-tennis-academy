@@ -268,6 +268,7 @@ export default function CoachApplicationsPage() {
           <span style={{ fontSize: '1.25rem' }}>🎾</span>
           <span>신청</span>
           {pending.length > 0 && <span style={{ position: 'absolute', top: '4px', right: '12px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: '9999px' }}>{pending.length}</span>}
+        <Link href="/coach/blocks" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span></Link>
         </Link>
       </div>
     </div>
