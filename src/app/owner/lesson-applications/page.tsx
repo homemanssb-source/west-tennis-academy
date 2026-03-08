@@ -18,13 +18,13 @@ interface App {
 interface Coach { id: string; name: string }
 
 const STATUS: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  pending_coach: { label: '肄붿튂 ?뺤씤 以?, color: '#854d0e', bg: '#fef9c3', border: '#fde68a' },
-  pending_admin: { label: '?뱀씤 ?湲?,   color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd' },
-  approved:      { label: '?뺤젙',        color: '#15803d', bg: '#dcfce7', border: '#86efac' },
-  rejected:      { label: '嫄곗젅',        color: '#b91c1c', bg: '#fee2e2', border: '#fca5a5' },
+  pending_coach: { label: '코치 확인 중', color: '#854d0e', bg: '#fef9c3', border: '#fde68a' },
+  pending_admin: { label: '승인 대기',   color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd' },
+  approved:      { label: '확정',        color: '#15803d', bg: '#dcfce7', border: '#86efac' },
+  rejected:      { label: '거절',        color: '#b91c1c', bg: '#fee2e2', border: '#fca5a5' },
 }
 
-const DAYS = ['??,'??,'??,'??,'紐?,'湲?,'??]
+const DAYS = ['일','월','화','수','목','금','토']
 
 export default function OwnerApplicationsPage() {
   const [apps,    setApps]    = useState<App[]>([])
@@ -54,16 +54,16 @@ export default function OwnerApplicationsPage() {
   const openModal = (a: App) => {
     setSelected(a)
     setAdminNote('')
-    const dt = new Date(a.requested_at)
-    setEditDate(dt.toISOString().split('T')[0])
-    setEditTime(`${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`)
+    setEditDate('')   // 비워두기 - 수정할 때만 입력
+    setEditTime('')   // 비워두기 - 수정할 때만 입력
     setEditCoach(a.coach?.id ?? '')
   }
 
   const handleAction = async (action: 'admin_approve' | 'admin_reject') => {
     if (!selected) return
     setSaving(true)
-    const requested_at = action === 'admin_approve'
+    // 날짜/시간 둘 다 입력했을 때만 변경, 아니면 기존 시간 유지
+    const requested_at = (action === 'admin_approve' && editDate && editTime)
       ? `${editDate}T${editTime}:00+09:00`
       : undefined
     await fetch(`/api/lesson-applications/${selected.id}`, {
@@ -100,14 +100,15 @@ export default function OwnerApplicationsPage() {
 
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      {/* ?ㅻ뜑 */}
+      {/* 헤더 */}
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>??/Link>
-          <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827', flex: 1 }}>?섏뾽 ?좎껌 愿由?/h1>
+          <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
+          <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827', flex: 1 }}>수업 신청 관리</h1>
           {pendingCount > 0 && (
             <span style={{ background: '#fee2e2', color: '#b91c1c', fontSize: '0.75rem', fontWeight: 700, padding: '3px 10px', borderRadius: '9999px' }}>
-              ?뱀씤 ?湲?{pendingCount}嫄?            </span>
+              승인 대기 {pendingCount}건
+            </span>
           )}
         </div>
         <div style={{ maxWidth: '900px', margin: '0.75rem auto 0', display: 'flex', gap: '0.5rem' }}>
@@ -116,7 +117,7 @@ export default function OwnerApplicationsPage() {
               style={{ padding: '0.375rem 0.875rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif',
                 background: filter === f ? '#1d4ed8' : '#f3f4f6',
                 color: filter === f ? 'white' : '#6b7280' }}>
-              {f === 'pending_admin' ? `?뱀씤 ?湲?(${pendingCount})` : '?꾩껜'}
+              {f === 'pending_admin' ? `승인 대기 (${pendingCount})` : '전체'}
             </button>
           ))}
         </div>
@@ -124,11 +125,11 @@ export default function OwnerApplicationsPage() {
 
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1rem 1.5rem 2rem' }}>
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>遺덈윭?ㅻ뒗 以?..</div>
+          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>불러오는 중...</div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>??/div>
-            <p>{filter === 'pending_admin' ? '?뱀씤 ?湲??좎껌???놁뒿?덈떎' : '?좎껌 ?댁뿭???놁뒿?덈떎'}</p>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
+            <p>{filter === 'pending_admin' ? '승인 대기 신청이 없습니다' : '신청 내역이 없습니다'}</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
@@ -153,15 +154,16 @@ export default function OwnerApplicationsPage() {
                       </div>
                       <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#374151' }}>{fmtDt(a.requested_at)}</div>
                       <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
-                        {a.coach?.name} 肄붿튂 쨌 {a.duration_minutes}遺?쨌 {a.lesson_type} 쨌 {a.month?.year}??{a.month?.month}??                      </div>
+                        {a.coach?.name} 코치 · {a.duration_minutes}분 · {a.lesson_type} · {a.month?.year}년 {a.month?.month}월
+                      </div>
                       {a.coach_note && (
                         <div style={{ marginTop: '6px', fontSize: '0.75rem', background: '#fef9c3', color: '#854d0e', padding: '4px 8px', borderRadius: '0.5rem' }}>
-                          肄붿튂 硫붾え: {a.coach_note}
+                          코치 메모: {a.coach_note}
                         </div>
                       )}
                     </div>
                     {a.status === 'pending_admin' && (
-                      <span style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700, flexShrink: 0 }}>?대┃ ??/span>
+                      <span style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700, flexShrink: 0 }}>클릭 →</span>
                     )}
                   </div>
                 </div>
@@ -171,58 +173,58 @@ export default function OwnerApplicationsPage() {
         )}
       </div>
 
-      {/* ?뱀씤 紐⑤떖 */}
+      {/* 승인 모달 */}
       {selected && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
           onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '480px', borderRadius: '1.5rem', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem' }}>理쒖쥌 ?뱀씤</h2>
+            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem' }}>최종 승인</h2>
 
             <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1.25rem' }}>
               <div style={{ fontWeight: 700, color: '#111827' }}>{selected.member?.name}</div>
               <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
-                ?먮옒 ?좎껌: {fmtDt(selected.requested_at)}
+                신청 시간: {fmtDt(selected.requested_at)}
               </div>
               {selected.coach_note && (
-                <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#854d0e' }}>肄붿튂 硫붾え: {selected.coach_note}</div>
+                <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#854d0e' }}>코치 메모: {selected.coach_note}</div>
               )}
             </div>
 
-            {/* ?쒓컙/肄붿튂 ?섏젙 媛??*/}
+            {/* 시간/코치 수정 가능 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>
-                ?륅툘 ?쒓컙/肄붿튂 ?섏젙 媛??(?꾩슂 ??
+                ✏️ 시간/코치 수정 시에만 입력 (빈칸이면 신청 시간 그대로 확정)
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginBottom: '4px' }}>?좎쭨</label>
+                  <label style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginBottom: '4px' }}>날짜 (변경 시)</label>
                   <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} style={inputStyle} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginBottom: '4px' }}>?쒓컙</label>
+                  <label style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginBottom: '4px' }}>시간 (변경 시)</label>
                   <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)} style={inputStyle} />
                 </div>
               </div>
               <div>
-                <label style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginBottom: '4px' }}>肄붿튂</label>
+                <label style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginBottom: '4px' }}>코치</label>
                 <select value={editCoach} onChange={e => setEditCoach(e.target.value)} style={inputStyle}>
-                  {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 肄붿튂</option>)}
+                  {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 코치</option>)}
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginBottom: '4px' }}>愿由?硫붾え (?뚯썝?먭쾶 ?꾨떖)</label>
-                <input style={inputStyle} placeholder="?좏깮 ?ы빆" value={adminNote} onChange={e => setAdminNote(e.target.value)} />
+                <label style={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', marginBottom: '4px' }}>관리 메모 (회원에게 전달)</label>
+                <input style={inputStyle} placeholder="선택 사항" value={adminNote} onChange={e => setAdminNote(e.target.value)} />
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: '0.625rem' }}>
               <button onClick={() => handleAction('admin_approve')} disabled={saving}
                 style={{ flex: 2, padding: '0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                {saving ? '泥섎━ 以?..' : '??理쒖쥌 ?뱀씤 ???섏뾽 ?뺤젙'}
+                {saving ? '처리 중...' : '✅ 최종 승인 → 수업 확정'}
               </button>
               <button onClick={() => handleAction('admin_reject')} disabled={saving}
                 style={{ flex: 1, padding: '0.875rem', background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                嫄곗젅
+                거절
               </button>
             </div>
           </div>
@@ -231,4 +233,3 @@ export default function OwnerApplicationsPage() {
     </div>
   )
 }
-
