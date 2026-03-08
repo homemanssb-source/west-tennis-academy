@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   const totalSlots  = plans.reduce((s, p) => s + (p.total_count || 0), 0)
   const doneSlots   = plans.reduce((s, p) => s + (p.completed_count || 0), 0)
 
-  // 코치별 통계
+  // 코치별 집계
   const coachMap: Record<string, {
     id: string; name: string
     totalCount: number; completedCount: number
@@ -42,13 +42,14 @@ export async function GET(req: NextRequest) {
   }> = {}
 
   for (const p of plans) {
-    const coach = p.coach as { id: string; name: string } | null
+    // 타입 에러 수정: unknown으로 먼저 변환 후 캐스팅
+    const coach = (p.coach as unknown) as { id: string; name: string } | null
     if (!coach) continue
     if (!coachMap[coach.id]) {
       coachMap[coach.id] = { id: coach.id, name: coach.name, totalCount: 0, completedCount: 0, paidAmount: 0, unpaidAmount: 0, planCount: 0 }
     }
-    coachMap[coach.id].planCount     += 1
-    coachMap[coach.id].totalCount    += p.total_count || 0
+    coachMap[coach.id].planCount      += 1
+    coachMap[coach.id].totalCount     += p.total_count || 0
     coachMap[coach.id].completedCount += p.completed_count || 0
     if (p.payment_status === 'paid')   coachMap[coach.id].paidAmount   += p.amount || 0
     if (p.payment_status === 'unpaid') coachMap[coach.id].unpaidAmount += p.amount || 0
