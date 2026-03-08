@@ -1,6 +1,5 @@
-'use client'
-
-import { useState } from 'react'
+﻿'use client'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface Props {
@@ -16,6 +15,7 @@ export default function LoginForm({ role, label, color, emoji }: Props) {
   const [pin, setPin]       = useState('')
   const [error, setError]   = useState('')
   const [loading, setLoading] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const handlePhone = (v: string) => {
     const num = v.replace(/\D/g, '').slice(0, 11)
@@ -29,7 +29,6 @@ export default function LoginForm({ role, label, color, emoji }: Props) {
     setError('')
     if (phone.replace(/-/g,'').length < 10) return setError('전화번호를 입력해주세요')
     if (pin.length !== 6) return setError('PIN 6자리를 입력해주세요')
-
     setLoading(true)
     try {
       const res = await fetch('/api/auth/login', {
@@ -71,20 +70,36 @@ export default function LoginForm({ role, label, color, emoji }: Props) {
 
         <div>
           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">PIN 6자리</label>
-          <div className="flex gap-2 mb-2">
+          {/* PIN 박스 - 클릭하면 숨겨진 input 포커스 */}
+          <div
+            className="flex gap-2 cursor-pointer"
+            onClick={() => inputRef.current?.focus()}
+          >
             {Array.from({length: 6}).map((_, i) => (
-              <div key={i} className={`pin-box ${pin.length > i ? 'filled' : ''} ${pin.length === i ? 'active' : ''}`}>
+              <div
+                key={i}
+                className={`pin-box ${pin.length > i ? 'filled' : ''} ${pin.length === i ? 'active' : ''}`}
+              >
                 {pin.length > i ? '●' : ''}
               </div>
             ))}
           </div>
+          {/* 숨겨진 input - 실제 입력 처리 */}
           <input
-            className="input-base"
-            placeholder="숫자 6자리"
-            value={pin}
-            onChange={e => setPin(e.target.value.replace(/\D/g,'').slice(0,6))}
+            ref={inputRef}
+            type="password"
             inputMode="numeric"
             maxLength={6}
+            value={pin}
+            onChange={e => setPin(e.target.value.replace(/\D/g,'').slice(0,6))}
+            style={{
+              position: 'absolute',
+              opacity: 0,
+              pointerEvents: 'none',
+              width: 1,
+              height: 1,
+            }}
+            autoComplete="off"
           />
         </div>
 

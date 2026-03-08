@@ -34,13 +34,12 @@ export default function PaymentPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [coaches, setCoaches] = useState<Coach[]>([])
 
-  // 회원 검색
   const [memberSearch, setMemberSearch] = useState('')
   const [showMemberDrop, setShowMemberDrop] = useState(false)
   const memberSearchRef = useRef<HTMLDivElement>(null)
 
   const [extraForm, setExtraForm] = useState({
-    member_id: '', member_name: '', coach_id: '', month_id: '',
+    member_id: '', coach_id: '', month_id: '',
     lesson_type: '추가수업', unit_minutes: 60,
     scheduled_date: '', scheduled_time: '', amount: 0,
   })
@@ -60,7 +59,6 @@ export default function PaymentPage() {
     fetch('/api/coaches').then(r => r.json()).then(d => setCoaches(Array.isArray(d) ? d : []))
   }, [])
 
-  // 외부 클릭시 드롭다운 닫기
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (memberSearchRef.current && !memberSearchRef.current.contains(e.target as Node)) {
@@ -71,9 +69,10 @@ export default function PaymentPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const filteredMembers = members.filter(m =>
-    m.name.toLowerCase().includes(memberSearch.toLowerCase())
-  )
+  // 검색어 없으면 전체, 있으면 필터링
+  const filteredMembers = memberSearch
+    ? members.filter(m => m.name.toLowerCase().includes(memberSearch.toLowerCase()))
+    : members
 
   const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -129,7 +128,7 @@ export default function PaymentPage() {
     setSaving(false)
     if (d.ok) {
       setShowExtra(false)
-      setExtraForm({ member_id: '', member_name: '', coach_id: '', month_id: '', lesson_type: '추가수업', unit_minutes: 60, scheduled_date: '', scheduled_time: '', amount: 0 })
+      setExtraForm({ member_id: '', coach_id: '', month_id: '', lesson_type: '추가수업', unit_minutes: 60, scheduled_date: '', scheduled_time: '', amount: 0 })
       setMemberSearch('')
       load()
     } else {
@@ -153,7 +152,7 @@ export default function PaymentPage() {
         <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
           <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827', flex: 1 }}>납부 관리</h1>
-          <button onClick={() => setShowExtra(true)}
+          <button onClick={() => { setShowExtra(true); setMemberSearch('') }}
             style={{ padding: '0.5rem 1rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.625rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
             + 추가수업
           </button>
@@ -214,7 +213,6 @@ export default function PaymentPage() {
           <div style={{ background: 'white', width: '100%', maxWidth: '480px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>납부 처리</h2>
-
             <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '1rem', marginBottom: '1rem' }}>
               <div style={{ fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{selected.member?.name}</div>
               <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
@@ -224,14 +222,12 @@ export default function PaymentPage() {
                 {fmt(selected.amount)}원
               </div>
             </div>
-
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>금액 수정</label>
               <input type="number" value={selected.amount}
                 onChange={e => setSelected({ ...selected, amount: Number(e.target.value) })}
                 style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', boxSizing: 'border-box' }} />
             </div>
-
             <div style={{ marginBottom: '1.25rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>영수증 첨부 (납부 처리 시)</label>
               <label style={{ display: 'block', border: '2px dashed #e5e7eb', borderRadius: '0.875rem', padding: '1rem', textAlign: 'center', cursor: 'pointer', background: receiptPreview ? '#f0fdf4' : '#fafafa' }}>
@@ -249,7 +245,6 @@ export default function PaymentPage() {
                 )}
               </label>
             </div>
-
             <div style={{ display: 'flex', gap: '0.625rem' }}>
               {selected.payment_status === 'unpaid' ? (
                 <button onClick={handlePay} disabled={saving}
@@ -284,28 +279,28 @@ export default function PaymentPage() {
               <div ref={memberSearchRef} style={{ position: 'relative' }}>
                 <input
                   style={{ ...inputStyle, paddingRight: extraForm.member_id ? '2.5rem' : '0.75rem' }}
-                  placeholder="이름으로 검색..."
+                  placeholder="클릭하면 전체 목록이 표시됩니다"
                   value={memberSearch}
                   onChange={e => {
                     setMemberSearch(e.target.value)
-                    setExtraForm(f => ({ ...f, member_id: '', member_name: '' }))
+                    setExtraForm(f => ({ ...f, member_id: '' }))
                     setShowMemberDrop(true)
                   }}
                   onFocus={() => setShowMemberDrop(true)}
                 />
                 {extraForm.member_id && (
-                  <span style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#16A34A' }}>✓</span>
+                  <span style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#16A34A', fontWeight: 700 }}>✓</span>
                 )}
-                {showMemberDrop && memberSearch && filteredMembers.length > 0 && (
+                {showMemberDrop && (
                   <div style={{
                     position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
                     background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: '180px', overflowY: 'auto', marginTop: '2px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: '200px', overflowY: 'auto', marginTop: '2px',
                   }}>
-                    {filteredMembers.map(m => (
+                    {filteredMembers.length > 0 ? filteredMembers.map(m => (
                       <div key={m.id}
                         onMouseDown={() => {
-                          setExtraForm(f => ({ ...f, member_id: m.id, member_name: m.name }))
+                          setExtraForm(f => ({ ...f, member_id: m.id }))
                           setMemberSearch(m.name)
                           setShowMemberDrop(false)
                         }}
@@ -315,12 +310,11 @@ export default function PaymentPage() {
                       >
                         {m.name}
                       </div>
-                    ))}
-                  </div>
-                )}
-                {showMemberDrop && memberSearch && filteredMembers.length === 0 && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', padding: '0.75rem', fontSize: '0.875rem', color: '#9ca3af', marginTop: '2px' }}>
-                    검색 결과 없음
+                    )) : (
+                      <div style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#9ca3af', textAlign: 'center' }}>
+                        검색 결과 없음
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

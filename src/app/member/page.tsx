@@ -25,6 +25,13 @@ export default async function MemberHomePage() {
     .select('id, payment_status, total_count, completed_count')
     .eq('member_id', session.id)
 
+  // 대기 중인 수업 신청 수
+  const { count: pendingAppCount } = await supabaseAdmin
+    .from('lesson_applications')
+    .select('*', { count: 'exact', head: true })
+    .eq('member_id', session.id)
+    .in('status', ['pending_coach', 'pending_admin'])
+
   const totalLessons     = (plans ?? []).reduce((s: number, p: any) => s + p.total_count, 0)
   const completedLessons = (plans ?? []).reduce((s: number, p: any) => s + p.completed_count, 0)
   const unpaidCount      = (plans ?? []).filter((p: any) => p.payment_status === 'unpaid').length
@@ -39,6 +46,7 @@ export default async function MemberHomePage() {
 
   return (
     <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* 헤더 */}
       <div style={{ background: '#7e22ce', padding: '2rem 1.25rem 1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -55,6 +63,7 @@ export default async function MemberHomePage() {
         </div>
       </div>
 
+      {/* 통계 카드 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.75rem', padding: '1rem 1.25rem 0' }}>
         {[
           { label: '전체 수업', value: totalLessons,     color: '#7e22ce', bg: '#fdf4ff', unit: '회' },
@@ -69,6 +78,24 @@ export default async function MemberHomePage() {
       </div>
 
       <div style={{ padding: '1rem 1.25rem', flex: 1 }}>
+        {/* 수업 신청 배너 */}
+        <Link href="/member/apply" style={{ textDecoration: 'none' }}>
+          <div style={{ marginBottom: '1rem', background: 'linear-gradient(135deg, #7e22ce, #6d28d9)', borderRadius: '0.875rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontSize: '1.5rem' }}>🎾</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'white' }}>수업 신청</div>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,.7)' }}>코치 시간표에서 원하는 시간 선택</div>
+            </div>
+            {(pendingAppCount ?? 0) > 0 && (
+              <span style={{ background: '#fde68a', color: '#854d0e', fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px' }}>
+                처리중 {pendingAppCount}
+              </span>
+            )}
+            <span style={{ color: 'rgba(255,255,255,.6)', fontSize: '1rem' }}>›</span>
+          </div>
+        </Link>
+
+        {/* 오늘 수업 */}
         <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>오늘 수업</div>
         {myToday.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem 0', color: '#9ca3af' }}>
@@ -93,25 +120,43 @@ export default async function MemberHomePage() {
           </div>
         )}
 
+        {/* 미납 배너 */}
         {unpaidCount > 0 && (
           <Link href="/member/payment" style={{ textDecoration: 'none' }}>
             <div style={{ marginTop: '1rem', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.875rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span style={{ fontSize: '1.25rem' }}>⚠️</span>
               <div>
                 <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#b91c1c' }}>미납 {unpaidCount}건</div>
-                <div style={{ fontSize: '0.75rem', color: '#ef4444' }}>납부 현황 확인하기 ›</div>
+                <div style={{ fontSize: '0.75rem', color: '#ef4444' }}>납부 현황 확인하러 가기 →</div>
               </div>
             </div>
           </Link>
         )}
       </div>
 
+      {/* 하단 네비 */}
       <div className="bottom-nav">
-        <Link href="/member" className="bottom-nav-item active"><span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span></Link>
-        <Link href="/member/schedule" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span></Link>
-        <Link href="/member/makeup" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🔁</span><span>보강</span></Link>
-        <Link href="/member/payment" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span></Link>
-        <Link href="/member/family" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>👨‍👩‍👧‍👦</span><span>가족</span></Link>
+        <Link href="/member" className="bottom-nav-item active">
+          <span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span>
+        </Link>
+        <Link href="/member/schedule" className="bottom-nav-item">
+          <span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span>
+        </Link>
+        <Link href="/member/apply" className="bottom-nav-item" style={{ position: 'relative' }}>
+          <span style={{ fontSize: '1.25rem' }}>🎾</span>
+          <span>신청</span>
+          {(pendingAppCount ?? 0) > 0 && (
+            <span style={{ position: 'absolute', top: '4px', right: '8px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: '9999px' }}>
+              {pendingAppCount}
+            </span>
+          )}
+        </Link>
+        <Link href="/member/payment" className="bottom-nav-item">
+          <span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span>
+        </Link>
+        <Link href="/member/family" className="bottom-nav-item">
+          <span style={{ fontSize: '1.25rem' }}>👨‍👩‍👧</span><span>가족</span>
+        </Link>
       </div>
     </div>
   )
