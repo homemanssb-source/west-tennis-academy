@@ -112,10 +112,10 @@ export default async function CoachHomePage() {
       </div>
 
       <div className="bottom-nav">
-        <Link href="/coach" className="bottom-nav-item active"><span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span></Link>
-        <Link href="/coach/applications" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📋</span><span>신청확인</span></Link>
-        <Link href="/coach/blocks" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span></Link>
-        <Link href="/coach/applications" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📋</span><span>신청확인</span></Link><Link href="/coach/blocks" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span></Link>
+  <Link href="/coach" className="bottom-nav-item active"><span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span></Link>
+  <Link href="/coach/applications" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📋</span><span>신청확인</span></Link>
+  <Link href="/coach/blocks" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span></Link>
+  <Link href="/coach/schedule" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span></Link>
       </div>
     </div>
   )
