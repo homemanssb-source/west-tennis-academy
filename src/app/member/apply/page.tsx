@@ -7,6 +7,7 @@ interface Month        { id: string; year: number; month: number }
 interface Program      { id: string; name: string; unit_minutes: number }
 interface FamilyMember { id: string; name: string; birth_date: string | null }
 interface SlotInfo     { scheduled_at: string; status: string }
+interface BlockInfo    { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
 interface MyApp {
   id: string; requested_at: string; duration_minutes: number
   lesson_type: string; status: string; coach_note: string | null; admin_note: string | null
@@ -72,6 +73,7 @@ export default function MemberApplyPage() {
 
   const [weekOffset,    setWeekOffset]    = useState(0)
   const [busySlots,     setBusySlots]     = useState<SlotInfo[]>([])
+  const [coachBlocks,   setCoachBlocks]   = useState<BlockInfo[]>([])
   const [selectedDate,  setSelectedDate]  = useState<Date | null>(null)
   const [selectedTime,  setSelectedTime]  = useState('')
   const [dayTimes, setDayTimes] = useState<Record<number, string>>({})
@@ -139,6 +141,31 @@ export default function MemberApplyPage() {
       return sd.getFullYear() === dt.getFullYear() && sd.getMonth() === dt.getMonth() &&
              sd.getDate() === dt.getDate() && sd.getHours() === dt.getHours() &&
              sd.getMinutes() === dt.getMinutes() && statusList.includes(s.status)
+    })
+  }
+
+  const checkBlock = (date: Date, time: string) => {
+    const [h, min] = time.split(':').map(Number)
+    const dow = date.getDay()
+    return coachBlocks.some(b => {
+      if (b.repeat_weekly && b.day_of_week === dow) {
+        if (!b.block_start && !b.block_end) return true
+        const bStart = b.block_start ? parseInt(b.block_start.replace(':','')) : 0
+        const bEnd   = b.block_end   ? parseInt(b.block_end.replace(':',''))   : 2359
+        const t      = h * 100 + min
+        return t >= bStart && t < bEnd
+      }
+      if (!b.repeat_weekly && b.block_date) {
+        const bd = b.block_date.split('T')[0]
+        const dd = date.toISOString().split('T')[0]
+        if (bd !== dd) return false
+        if (!b.block_start && !b.block_end) return true
+        const bStart = b.block_start ? parseInt(b.block_start.replace(':','')) : 0
+        const bEnd   = b.block_end   ? parseInt(b.block_end.replace(':',''))   : 2359
+        const t      = h * 100 + min
+        return t >= bStart && t < bEnd
+      }
+      return false
     })
   }
 
@@ -331,11 +358,12 @@ export default function MemberApplyPage() {
                           {weekDates.map(d => {
                             const busy    = checkSlot(d, time, ['scheduled','completed'])
                             const pending = checkSlot(d, time, ['pending_coach','pending_admin'])
+                            const blocked = checkBlock(d, time)
                             const isSel   = selectedDate?.toDateString() === d.toDateString() && selectedTime === time
                             const isPast  = d < new Date(new Date().setHours(0,0,0,0))
                             return (
                               <td key={d.toISOString()} style={{ padding: '2px', textAlign: 'center' }}>
-                                <button disabled={busy || isPast} onClick={() => {
+                                <button disabled={busy || isPast || blocked} onClick={() => {
                                     const dow = d.getDay()
                                     setSelectedDate(new Date(d))
                                     setSelectedTime(time)
@@ -343,11 +371,11 @@ export default function MemberApplyPage() {
                                     if (!repeatDays.includes(dow)) setRepeatDays([dow])
                                   }}
                                   style={{ width: '100%', padding: '5px 2px', borderRadius: '4px', border: 'none',
-                                    fontSize: '0.65rem', cursor: busy || isPast ? 'not-allowed' : 'pointer',
-                                    background: isSel ? '#16A34A' : busy ? '#fee2e2' : pending ? '#fef9c3' : isPast ? '#f9fafb' : '#f0fdf4',
-                                    color: isSel ? 'white' : busy ? '#fca5a5' : pending ? '#854d0e' : isPast ? '#d1d5db' : '#15803d',
+                                    fontSize: '0.65rem', cursor: busy || isPast || blocked ? 'not-allowed' : 'pointer',
+                                    background: isSel ? '#16A34A' : busy ? '#fee2e2' : blocked ? '#f3f0ff' : pending ? '#fef9c3' : isPast ? '#f9fafb' : '#f0fdf4',
+                                    color: isSel ? 'white' : busy ? '#fca5a5' : blocked ? '#7c3aed' : pending ? '#854d0e' : isPast ? '#d1d5db' : '#15803d',
                                   }}>
-                                  {isSel ? '✓' : busy ? '✕' : pending ? '…' : '○'}
+                                  {isSel ? '✓' : busy ? '✕' : blocked ? '휴' : pending ? '…' : '○'}
                                 </button>
                               </td>
                             )
@@ -541,6 +569,7 @@ export default function MemberApplyPage() {
     </div>
   )
 }
+
 
 
 
