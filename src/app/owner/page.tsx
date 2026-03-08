@@ -1,4 +1,4 @@
-﻿fhref: '/owner/lesson-plans',import { redirect } from 'next/navigation'
+﻿import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Link from 'next/link'
