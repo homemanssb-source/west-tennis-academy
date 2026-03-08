@@ -115,7 +115,7 @@ export default function LessonPlanDetailPage() {
     setSaving(true)
     await fetch(`/api/lesson-plans/${id}`, { method: 'DELETE' })
     setSaving(false)
-    router.replace('/owner/lesson-plans')
+    router.replace('/owner/lesson-plan-list')
   }
 
   const handleAddSlot = async () => {
@@ -191,7 +191,7 @@ export default function LessonPlanDetailPage() {
       {/* 헤더 */}
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: '700px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Link href="/owner/lesson-plans" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
+          <Link href="/owner/lesson-plan-list" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>
               {plan.member?.name} · {plan.month?.year}년 {plan.month?.month}월
