@@ -114,14 +114,15 @@ export default function MemberApplyPage() {
   }
 
   useEffect(() => {
-    if (!coachId) { setBusySlots([]); return }
+    if (!coachId) { setBusySlots([]); setCoachBlocks([]); return }
     const week = getWeekDates()
     const from = week[0].toISOString().split('T')[0]
     const to   = week[5].toISOString().split('T')[0]
-    fetch(`/api/lesson-slots?coach_id=${coachId}&from=${from}&to=${to}`)
+    fetch('/api/lesson-slots?coach_id='+coachId+'&from='+from+'&to='+to)
       .then(r => r.json()).then(d => setBusySlots(Array.isArray(d) ? d : []))
+    fetch('/api/coach-blocks?coach_id='+coachId)
+      .then(r => r.json()).then(d => setCoachBlocks(Array.isArray(d) ? d : []))
   }, [coachId, weekOffset])
-
   useEffect(() => {
     if (!selectedDate || repeatDays.length === 0) return
     const hasAllTimes = repeatDays.every(dow => dayTimes[dow])

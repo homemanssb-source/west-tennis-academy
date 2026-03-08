@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
@@ -47,5 +47,24 @@ export async function GET(req: NextRequest) {
     ? data.filter((s: any) => s.lesson_plan?.coach?.id === coachId)
     : data
 
-  return NextResponse.json(filtered)
+  // lesson_applications도 함께 조회 (코치 기준)
+  const { data: appData } = await supabaseAdmin
+    .from('lesson_applications')
+    .select('id, requested_at, status, coach_id')
+    .eq('coach_id', coachId ?? '')
+    .gte('requested_at', startStr)
+    .lte('requested_at', endStr)
+    .in('status', ['pending_coach','pending_admin','approved'])
+
+  // slots 형식으로 변환해서 합치기
+  const appSlots = (appData ?? []).map((a: any) => ({
+    id: a.id,
+    scheduled_at: a.requested_at,
+    status: a.status,
+    duration_minutes: 60,
+    slot_type: null,
+    lesson_plan: null,
+  }))
+
+  return NextResponse.json([...filtered, ...appSlots])
 }
