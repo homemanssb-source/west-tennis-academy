@@ -7,7 +7,6 @@ export async function GET(req: Request) {
   if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-
   const { searchParams } = new URL(req.url)
   const month_id  = searchParams.get('month_id')
   const coach_id  = searchParams.get('coach_id')
@@ -21,7 +20,8 @@ export async function GET(req: Request) {
       payment_status, amount, created_at,
       member:profiles!lesson_plans_member_id_fkey(id, name, phone),
       coach:profiles!lesson_plans_coach_id_fkey(id, name),
-      month:months(id, year, month)
+      month:months(id, year, month),
+      slots:lesson_slots(id, status)
     `)
     .order('created_at', { ascending: false })
 
@@ -32,5 +32,13 @@ export async function GET(req: Request) {
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+
+  // total_count를 실제 슬롯 수로 보정
+  const result = (data ?? []).map((p: any) => ({
+    ...p,
+    total_count: p.slots?.length ?? p.total_count,
+    completed_count: p.slots?.filter((s: any) => s.status === 'completed').length ?? p.completed_count,
+  }))
+
+  return NextResponse.json(result)
 }
