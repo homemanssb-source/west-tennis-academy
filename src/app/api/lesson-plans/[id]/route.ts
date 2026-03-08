@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const session = await getSession()
   if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -18,14 +19,15 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       month:months(id, year, month),
       slots:lesson_slots(id, scheduled_at, duration_minutes, status, is_makeup, slot_type, memo)
     `)
-    .eq('id', params.id)
+    .eq('id', id)
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
 
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const session = await getSession()
   if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -45,21 +47,21 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   const { error } = await supabaseAdmin
     .from('lesson_plans')
     .update(updates)
-    .eq('id', params.id)
+    .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const session = await getSession()
   if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // 슬롯 먼저 삭제 후 플랜 삭제
-  await supabaseAdmin.from('lesson_slots').delete().eq('lesson_plan_id', params.id)
-  const { error } = await supabaseAdmin.from('lesson_plans').delete().eq('id', params.id)
+  await supabaseAdmin.from('lesson_slots').delete().eq('lesson_plan_id', id)
+  const { error } = await supabaseAdmin.from('lesson_plans').delete().eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
