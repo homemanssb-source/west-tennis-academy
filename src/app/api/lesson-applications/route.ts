@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
@@ -109,7 +109,10 @@ export async function POST(req: NextRequest) {
       .select()
       .single()
 
-    if (error) errors.push(error.message)
+    if (error) {
+      console.error('INSERT ERROR:', JSON.stringify(error))
+      errors.push(error.message)
+    }
     else created.push(data)
   }
 
@@ -128,3 +131,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ created: created.length, errors })
 }
+
