@@ -131,15 +131,11 @@ export async function POST(req: NextRequest) {
   })
 
   // 핸드폰 푸시 알림
-  await sendPushToUser(
-    coach_id,
-    '🎾 새 수업 신청',
-    \님이 \개 수업을 신청했습니다.,
-    '/coach/applications'
-  )
+  await sendPushToUser(coach_id, '🎾 새 수업 신청', session.name + '님이 ' + created.length + '개 수업을 신청했습니다.', '/coach/applications')
 
   return NextResponse.json({ created: created.length, errors })
 }
+
 
 
 
