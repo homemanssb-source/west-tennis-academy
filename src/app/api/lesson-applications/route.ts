@@ -85,14 +85,24 @@ export async function POST(req: NextRequest) {
 
     if (existing) { errors.push(`${requested_at} 중복`); continue }
 
-    // 슬롯 충돌 확인
+    // 슬롯 충돌 확인 (같은 코치 같은 시간)
     const { data: conflict } = await supabaseAdmin
       .from('lesson_slots')
       .select('id')
       .eq('scheduled_at', requested_at)
       .in('status', ['scheduled', 'completed'])
       .maybeSingle()
+    if (conflict) { errors.push(requested_at + ' 수업 충돌'); continue }
 
+    // 다른 회원 신청 중복 체크 (같은 코치, 같은 시간)
+    const { data: otherApp } = await supabaseAdmin
+      .from('lesson_applications')
+      .select('id')
+      .eq('coach_id', coach_id)
+      .eq('requested_at', requested_at)
+      .in('status', ['pending_coach', 'pending_admin', 'approved'])
+      .maybeSingle()
+    if (otherApp) { errors.push(requested_at + ' 이미 신청된 시간'); continue }
     if (conflict) { errors.push(`${requested_at} 수업 충돌`); continue }
 
     const { data, error } = await supabaseAdmin
@@ -135,6 +145,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ created: created.length, errors })
 }
+
 
 
 

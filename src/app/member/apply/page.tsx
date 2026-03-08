@@ -170,7 +170,9 @@ export default function MemberApplyPage() {
   }
 
   const weekDates   = getWeekDates()
-  const timeSlots   = Array.from({length: 15}, (_, i) => `${String(i+7).padStart(2,'0')}:00`)
+  const slotInterval = duration <= 30 ? 30 : 60
+  const slotCount    = duration <= 30 ? 28 : 14
+  const timeSlots    = Array.from({length: slotCount}, (_, i) => { const totalMin = 7*60 + i*slotInterval; return String(Math.floor(totalMin/60)).padStart(2,'0') + ':' + String(totalMin%60).padStart(2,'0') })
   const finalDates  = generatedDates.slice(0, manualCount)
   const selectedProgram = programs.find(p => p.id === programId)
   const selectedMonth   = months.find(m => m.id === monthId)
@@ -569,6 +571,7 @@ export default function MemberApplyPage() {
     </div>
   )
 }
+
 
 
 
