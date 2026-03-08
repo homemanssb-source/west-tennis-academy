@@ -39,7 +39,7 @@ export default async function OwnerDashboard() {
         { emoji: '📅', label: '스케줄',        sub: '전체 수업 시간표',              href: '/owner/schedule',      badge: 0,                 badgeColor: '',        badgeBg: '' },
         { emoji: '📆', label: '주간 스케줄',   sub: '전체 코치 주간 수업표',         href: '/owner/weekly',        badge: 0,                 badgeColor: '',        badgeBg: '' },
         { emoji: '📝', label: '스케줄 등록',   sub: '레슨 플랜 등록',                href: '/owner/lesson-plan',   badge: 0,                 badgeColor: '',        badgeBg: '' },
-        { emoji: '📋', label: '플랜 목록',     sub: '등록된 레슨플랜 조회·수정',     href: '/owner/lesson-plan-list',  badge: 0,                 badgeColor: '',        badgeBg: '' },
+        { emoji: '📋', label: '플랜 목록',     sub: '등록된 레슨플랜 조회·수정',     href: '/owner/planlist',  badge: 0,                 badgeColor: '',        badgeBg: '' },
         { emoji: '📬', label: '수업 신청',     sub: '회원 신청 승인·거절 관리',      href: '/owner/lesson-applications', badge: 0,           badgeColor: '',        badgeBg: '' },
         { emoji: '📋', label: '플랜 복사',     sub: '지난달 플랜 이번달로 복사',     href: '/owner/lesson-copy',   badge: 0,                 badgeColor: '',        badgeBg: '' },
         { emoji: '🏆', label: '수업 프로그램', sub: '프로그램 종류 관리',            href: '/owner/programs',      badge: programCount ?? 0, badgeColor: '#15803d', badgeBg: '#dcfce7' },

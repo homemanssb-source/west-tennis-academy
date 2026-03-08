@@ -138,7 +138,7 @@ export default function LessonPlansListPage() {
             {filtered.map(p => {
               const pct = p.total_count > 0 ? Math.round(p.completed_count / p.total_count * 100) : 0
               return (
-                <Link key={p.id} href={`/owner/lesson-plan-list/${p.id}`} style={{ textDecoration: 'none' }}>
+                <Link key={p.id} href={`/owner/planlist/${p.id}`} style={{ textDecoration: 'none' }}>
                   <div style={{
                     background: 'white',
                     border: `1.5px solid ${p.payment_status === 'paid' ? '#86efac' : '#fecaca'}`,
