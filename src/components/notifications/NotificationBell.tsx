@@ -1,7 +1,8 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { usePush } from '@/lib/usePush'
 
 interface Notification {
   id: string
@@ -22,6 +23,7 @@ const TYPE_STYLE: Record<string, { bg: string; color: string; emoji: string }> =
 
 export default function NotificationBell() {
   const router = useRouter()
+  const { supported, subscribed, subscribe, unsubscribe } = usePush()
   const [notifs,  setNotifs]  = useState<Notification[]>([])
   const [open,    setOpen]    = useState(false)
   const [loading, setLoading] = useState(false)
@@ -109,3 +111,4 @@ export default function NotificationBell() {
     </div>
   )
 }
+

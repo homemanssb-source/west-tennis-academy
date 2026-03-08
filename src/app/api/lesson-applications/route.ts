@@ -1,4 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
+import { sendPushToUser } from '@/lib/push'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
@@ -129,6 +130,16 @@ export async function POST(req: NextRequest) {
     link: '/coach/applications',
   })
 
+  // 핸드폰 푸시 알림
+  await sendPushToUser(
+    coach_id,
+    '🎾 새 수업 신청',
+    \님이 \개 수업을 신청했습니다.,
+    '/coach/applications'
+  )
+
   return NextResponse.json({ created: created.length, errors })
 }
+
+
 
