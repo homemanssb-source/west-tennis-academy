@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -19,6 +19,10 @@ export default function LessonPlanCreatePage() {
   const [saving,   setSaving]   = useState(false)
 
   const [memberId,    setMemberId]    = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
+  const [showMemberDrop, setShowMemberDrop] = useState(false)
+  const memberRef = useRef<HTMLDivElement>(null)
+
   const [coachId,     setCoachId]     = useState('')
   const [monthId,     setMonthId]     = useState('')
   const [programId,   setProgramId]   = useState('')
@@ -43,6 +47,23 @@ export default function LessonPlanCreatePage() {
       setPrograms(Array.isArray(p) ? p : [])
     })
   }, [])
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (memberRef.current && !memberRef.current.contains(e.target as Node)) {
+        setShowMemberDrop(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filteredMembers = memberSearch
+    ? members.filter(m =>
+        m.name.includes(memberSearch) || m.phone.includes(memberSearch)
+      )
+    : members
 
   const handleProgramSelect = (p: Program) => {
     setProgramId(p.id)
@@ -102,13 +123,53 @@ export default function LessonPlanCreatePage() {
         <div style={s.card}>
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>기본 정보</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+
+            {/* 회원 검색 입력 */}
             <div>
-              <label style={s.label}>회원 선택</label>
-              <select style={s.input} value={memberId} onChange={e => setMemberId(e.target.value)}>
-                <option value="">회원을 선택하세요</option>
-                {members.map(m => <option key={m.id} value={m.id}>{m.name} ({m.phone})</option>)}
-              </select>
+              <label style={s.label}>회원 검색</label>
+              <div ref={memberRef} style={{ position: 'relative' }}>
+                <input
+                  style={{ ...s.input, paddingRight: memberId ? '2.5rem' : '0.75rem' }}
+                  placeholder="이름 또는 전화번호로 검색..."
+                  value={memberSearch}
+                  onChange={e => {
+                    setMemberSearch(e.target.value)
+                    setMemberId('')
+                    setShowMemberDrop(true)
+                  }}
+                  onFocus={() => setShowMemberDrop(true)}
+                />
+                {memberId && (
+                  <span style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#16A34A', fontWeight: 700, fontSize: '1rem' }}>✓</span>
+                )}
+                {showMemberDrop && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+                    background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxHeight: '220px', overflowY: 'auto', marginTop: '2px',
+                  }}>
+                    {filteredMembers.length > 0 ? filteredMembers.map(m => (
+                      <div key={m.id}
+                        onMouseDown={() => {
+                          setMemberId(m.id)
+                          setMemberSearch(`${m.name} (${m.phone})`)
+                          setShowMemberDrop(false)
+                        }}
+                        style={{ padding: '0.625rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', color: '#111827', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#f0fdf4')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'white')}
+                      >
+                        <span style={{ fontWeight: 600 }}>{m.name}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{m.phone}</span>
+                      </div>
+                    )) : (
+                      <div style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#9ca3af', textAlign: 'center' }}>검색 결과 없음</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+
             <div>
               <label style={s.label}>코치 선택</label>
               <select style={s.input} value={coachId} onChange={e => setCoachId(e.target.value)}>
@@ -141,7 +202,7 @@ export default function LessonPlanCreatePage() {
               </div>
             </div>
             <div>
-              <label style={s.label}>수업 유형</label>
+              <label style={s.label}>수업 종류</label>
               <input style={s.input} value={lessonType} onChange={e => setLessonType(e.target.value)} placeholder="개인레슨" />
             </div>
             <div>
@@ -170,7 +231,7 @@ export default function LessonPlanCreatePage() {
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>결제 정보</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
             <div>
-              <label style={s.label}>수업료 (원)</label>
+              <label style={s.label}>수업료(원)</label>
               <input
                 type="number" style={s.input}
                 value={amount || ''}
@@ -182,7 +243,7 @@ export default function LessonPlanCreatePage() {
               <label style={s.label}>결제 상태</label>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button onClick={() => setPayment('unpaid')} style={{ ...(payment === 'unpaid' ? { ...s.btnOn, borderColor: '#fca5a5', background: '#fee2e2', color: '#b91c1c' } : s.btn), flex: 1 }}>미납</button>
-                <button onClick={() => setPayment('paid')}   style={{ ...(payment === 'paid'   ? s.btnOn : s.btn), flex: 1 }}>납부</button>
+                <button onClick={() => setPayment('paid')}   style={{ ...(payment === 'paid' ? s.btnOn : s.btn), flex: 1 }}>납부</button>
               </div>
             </div>
           </div>
