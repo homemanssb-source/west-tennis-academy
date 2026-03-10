@@ -1,23 +1,21 @@
-// src/app/api/applications/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
+import bcrypt from 'bcryptjs'
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const session = await getSession()
   if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
 
+  const { id } = await params  // ← await 추가 (Next.js 16 필수)
   const { action } = await req.json()
-  const { id } = params
 
   if (action === 'approve') {
-    // 임시 PIN 생성 (6자리 숫자)
-    const temp_pin = Math.floor(100000 + Math.random() * 900000).toString()
-    const bcrypt = await import('bcryptjs')
-    const pin_hash = await bcrypt.hash(temp_pin, 10)
-
     // 신청 정보 가져오기
     const { data: app, error: appError } = await supabaseAdmin
       .from('member_applications')
@@ -25,7 +23,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       .eq('id', id)
       .single()
 
-    if (appError || !app) return NextResponse.json({ error: '신청 정보 없음' }, { status: 404 })
+    if (appError || !app) {
+      return NextResponse.json({ error: '신청 정보 없음' }, { status: 404 })
+    }
+
+    // 임시 PIN 생성 (6자리 숫자)
+    const temp_pin = Math.floor(100000 + Math.random() * 900000).toString()
+    const pin_hash = await bcrypt.hash(temp_pin, 10)
 
     // profiles 에 회원 생성
     const { error: profileError } = await supabaseAdmin
@@ -50,7 +54,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     // 신청 상태 승인으로 변경
     await supabaseAdmin
       .from('member_applications')
-      .update({ status: 'approved', reviewed_by: session.id, reviewed_at: new Date().toISOString() })
+      .update({
+        status: 'approved',
+        reviewed_by: session.id,
+        reviewed_at: new Date().toISOString(),
+      })
       .eq('id', id)
 
     return NextResponse.json({ ok: true, temp_pin })
@@ -58,7 +66,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   } else if (action === 'reject') {
     const { error } = await supabaseAdmin
       .from('member_applications')
-      .update({ status: 'rejected', reviewed_by: session.id, reviewed_at: new Date().toISOString() })
+      .update({
+        status: 'rejected',
+        reviewed_by: session.id,
+        reviewed_at: new Date().toISOString(),
+      })
       .eq('id', id)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
