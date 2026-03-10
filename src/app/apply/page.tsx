@@ -117,4 +117,3 @@ export default function ApplyPage() {
     </div>
   )
 }
-'@ | Set-Content -Encoding UTF8 "C:\wta\src\app\apply\page.tsx"
