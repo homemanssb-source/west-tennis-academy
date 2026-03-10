@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 function getWeekOfMonth(date: Date): number {
@@ -6,20 +6,23 @@ function getWeekOfMonth(date: Date): number {
   return Math.ceil((date.getDate() + firstDay) / 7)
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ✅ FIX #2: Cron 인증 추가
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: '인증 실패' }, { status: 401 })
+  }
+
   const now = new Date()
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
 
-  // 월요일(1)이고 3주차인 경우만
   if (kst.getDay() !== 1) return NextResponse.json({ ok: true, skipped: 'not monday' })
   if (getWeekOfMonth(kst) !== 3) return NextResponse.json({ ok: true, skipped: 'not 3rd week' })
 
-  // 다음 달 정보
-  const nextMonth = kst.getMonth() + 2 // 1-based
+  const nextMonth = kst.getMonth() + 2
   const nextYear  = nextMonth > 12 ? kst.getFullYear() + 1 : kst.getFullYear()
   const nm        = nextMonth > 12 ? 1 : nextMonth
 
-  // 활성 회원 전체에게 알림
   const { data: members } = await supabaseAdmin
     .from('profiles')
     .select('id')

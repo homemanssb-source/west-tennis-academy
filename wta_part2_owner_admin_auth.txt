@@ -1,6 +1,5 @@
 ﻿
-
-===== app\owner\applications\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\applications\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -172,8 +171,7 @@ export default function ApplicationsPage() {
     </div>
   )
 }
-
-===== app\owner\coach-stats\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\coach-stats\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -318,8 +316,7 @@ export default function CoachStatsPage() {
   )
 }
 
-
-===== app\owner\coaches\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\coaches\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -528,8 +525,7 @@ export default function CoachesPage() {
   )
 }
 
-
-===== app\owner\dashboard\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\dashboard\page.tsx =====
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -696,8 +692,7 @@ export default function DashboardPage() {
   )
 }
 
-
-===== app\owner\lesson-applications\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\lesson-applications\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -933,8 +928,7 @@ export default function OwnerApplicationsPage() {
     </div>
   )
 }
-
-===== app\owner\lesson-copy\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\lesson-copy\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1065,8 +1059,7 @@ export default function LessonCopyPage() {
   )
 }
 
-
-===== app\owner\lesson-plan\[id]\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\lesson-plan\[id]\page.tsx =====
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -1479,8 +1472,7 @@ export default function LessonPlanDetailPage() {
   )
 }
 
-
-===== app\owner\lesson-plan\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\lesson-plan\page.tsx =====
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
@@ -1749,8 +1741,7 @@ export default function LessonPlanCreatePage() {
     </div>
   )
 }
-
-===== app\owner\members\[id]\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\members\[id]\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1930,8 +1921,7 @@ export default function MemberDetailPage() {
   )
 }
 
-
-===== app\owner\members\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\members\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -2096,8 +2086,7 @@ export default function MembersPage() {
   )
 }
 
-
-===== app\owner\notifications\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\notifications\page.tsx =====
 'use client'
 
 import { useState } from 'react'
@@ -2194,8 +2183,7 @@ export default function NotificationsPage() {
   )
 }
 
-
-===== app\owner\payment\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\payment\page.tsx =====
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
@@ -2739,12 +2727,10 @@ export default function PaymentPage() {
     </div>
   )
 }
-
-===== app\owner\pin-change\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\pin-change\page.tsx =====
 export { default } from '@/app/coach/pin-change/page'
 
-
-===== app\owner\planlist\[id]\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\planlist\[id]\page.tsx =====
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -3157,8 +3143,7 @@ export default function LessonPlanDetailPage() {
   )
 }
 
-
-===== app\owner\planlist\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\planlist\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -3354,8 +3339,7 @@ export default function LessonPlansListPage() {
   )
 }
 
-
-===== app\owner\programs\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\programs\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -3575,8 +3559,7 @@ export default function ProgramsPage() {
   )
 }
 
-
-===== app\owner\reports\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\reports\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -3745,8 +3728,7 @@ export default function ReportsPage() {
   )
 }
 
-
-===== app\owner\revenue\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\revenue\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -3851,8 +3833,7 @@ export default function RevenuePage() {
     </div>
   )
 }
-
-===== app\owner\schedule\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\schedule\page.tsx =====
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -4238,8 +4219,252 @@ export default function SchedulePage() {
   )
 }
 
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\schedule-draft\page.tsx =====
+// ============================================================
+// 저장 위치: app/owner/schedule-draft/page.tsx  (신규 파일)
+// ============================================================
+'use client'
 
-===== app\owner\settings\page.tsx =====
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+
+interface DraftSlot {
+  id: string
+  lesson_plan_id: string
+  scheduled_at: string
+  duration_minutes: number
+  status: 'draft' | 'conflict_pending'
+  has_conflict: boolean
+  member_name: string
+  coach_name: string
+  lesson_type: string
+}
+interface Month { id: string; year: number; month: number }
+
+const DAY_KO = ['일','월','화','수','목','금','토']
+
+function fmtSlot(iso: string) {
+  const [datePart, timePart] = iso.split('T')
+  const [y, mo, d] = datePart.split('-').map(Number)
+  const day = DAY_KO[new Date(y, mo - 1, d).getDay()]
+  const [hh, mm] = timePart.split('+')[0].split(':')
+  return { date: `${mo}/${d}(${day})`, time: `${hh}:${mm}`, full: `${mo}/${d}(${day}) ${hh}:${mm}` }
+}
+
+export default function ScheduleDraftPage() {
+  const [months,   setMonths]   = useState<Month[]>([])
+  const [monthId,  setMonthId]  = useState('')
+  const [drafts,   setDrafts]   = useState<DraftSlot[]>([])
+  const [loading,  setLoading]  = useState(false)
+  const [saving,   setSaving]   = useState(false)
+  const [msg,      setMsg]      = useState('')
+
+  useEffect(() => {
+    fetch('/api/months').then(r => r.json()).then((d: Month[]) => {
+      const list = Array.isArray(d) ? d.sort((a, b) => b.year !== a.year ? b.year - a.year : b.month - a.month) : []
+      setMonths(list)
+      // 현재달+1 (다음달) 자동 선택
+      const now = new Date()
+      const nm = now.getMonth() + 2 > 12 ? 1  : now.getMonth() + 2
+      const ny = now.getMonth() + 2 > 12 ? now.getFullYear() + 1 : now.getFullYear()
+      const nextRec = list.find(m => m.year === ny && m.month === nm)
+      if (nextRec) setMonthId(nextRec.id)
+      else if (list.length > 0) setMonthId(list[0].id)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!monthId) return
+    loadDrafts(monthId)
+  }, [monthId])
+
+  const loadDrafts = async (mid: string) => {
+    setLoading(true)
+    setMsg('')
+    const res  = await fetch(`/api/schedule-draft?month_id=${mid}`)
+    const data = await res.json()
+    setDrafts(Array.isArray(data) ? data : [])
+    setLoading(false)
+  }
+
+  const handleConfirmAll = async () => {
+    if (!monthId) return
+    const conflicts = drafts.filter(d => d.has_conflict)
+    if (conflicts.length > 0) {
+      const ok = confirm(`충돌 ${conflicts.length}건은 제외하고 나머지 ${drafts.length - conflicts.length}건만 확정할까요?`)
+      if (!ok) return
+    }
+    setSaving(true)
+    const res  = await fetch('/api/schedule-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'confirm_all', month_id: monthId, skip_conflicts: true }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) { setMsg('❌ ' + data.error); return }
+    setMsg(`✅ ${data.confirmed}건 확정됨 (충돌 ${data.skipped_conflict}건 보류)`)
+    loadDrafts(monthId)
+  }
+
+  const handleConfirmOne = async (slotId: string) => {
+    setSaving(true)
+    await fetch('/api/schedule-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'confirm_one', slot_id: slotId }),
+    })
+    setSaving(false)
+    loadDrafts(monthId)
+  }
+
+  const handleDeleteOne = async (slotId: string) => {
+    if (!confirm('이 초안 슬롯을 삭제할까요?')) return
+    setSaving(true)
+    await fetch('/api/schedule-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_one', slot_id: slotId }),
+    })
+    setSaving(false)
+    loadDrafts(monthId)
+  }
+
+  const okDrafts       = drafts.filter(d => !d.has_conflict)
+  const conflictDrafts = drafts.filter(d =>  d.has_conflict)
+  const selMonth       = months.find(m => m.id === monthId)
+
+  return (
+    <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
+      {/* 헤더 */}
+      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', position: 'sticky', top: 0, zIndex: 40 }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
+          <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827', flex: 1 }}>
+            수업 초안 확정
+          </h1>
+          <select
+            value={monthId}
+            onChange={e => setMonthId(e.target.value)}
+            style={{ padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white', color: '#374151' }}>
+            {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem' }}>
+
+        {/* 안내 배너 */}
+        <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '1rem', padding: '1rem', marginBottom: '1rem', fontSize: '0.875rem', color: '#1d4ed8' }}>
+          💡 15일에 자동 생성된 수업 초안입니다. 내용 확인 후 <strong>일괄 확정</strong> 또는 개별 조정하세요.
+          충돌 항목(코치 휴무)은 <span style={{ color: '#b91c1c', fontWeight: 700 }}>빨간색</span>으로 표시됩니다.
+        </div>
+
+        {/* 요약 + 일괄 확정 버튼 */}
+        {!loading && drafts.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.75rem', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 700, color: '#15803d' }}>
+              ✅ 확정 대기 {okDrafts.length}건
+            </div>
+            {conflictDrafts.length > 0 && (
+              <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.75rem', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 700, color: '#b91c1c' }}>
+                ⚠️ 충돌 {conflictDrafts.length}건
+              </div>
+            )}
+            <div style={{ marginLeft: 'auto' }}>
+              <button
+                onClick={handleConfirmAll}
+                disabled={saving || okDrafts.length === 0}
+                style={{ padding: '0.625rem 1.25rem', background: okDrafts.length === 0 ? '#e5e7eb' : '#16A34A', color: okDrafts.length === 0 ? '#9ca3af' : 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: okDrafts.length === 0 ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                {saving ? '처리 중...' : `📋 ${okDrafts.length}건 일괄 확정`}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {msg && (
+          <div style={{ background: msg.startsWith('✅') ? '#f0fdf4' : '#fef2f2', border: `1.5px solid ${msg.startsWith('✅') ? '#86efac' : '#fecaca'}`, borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '1rem', fontSize: '0.875rem', color: msg.startsWith('✅') ? '#15803d' : '#b91c1c', fontWeight: 600 }}>
+            {msg}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>불러오는 중...</div>
+        ) : drafts.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📭</div>
+            <p>
+              {selMonth ? `${selMonth.year}년 ${selMonth.month}월 ` : ''}확정 대기 중인 초안이 없습니다
+            </p>
+            <p style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>매월 15일에 자동 생성됩니다</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+
+            {/* 충돌 항목 먼저 */}
+            {conflictDrafts.length > 0 && (
+              <>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b91c1c', marginTop: '0.5rem', marginBottom: '0.25rem' }}>⚠️ 충돌 항목 — 수동 처리 필요</div>
+                {conflictDrafts.map(s => <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving} />)}
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '0.75rem', marginBottom: '0.25rem' }}>✅ 정상 항목</div>
+              </>
+            )}
+
+            {okDrafts.map(s => (
+              <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SlotCard({ slot, onConfirm, onDelete, saving }: {
+  slot: DraftSlot
+  onConfirm: (id: string) => void
+  onDelete:  (id: string) => void
+  saving: boolean
+}) {
+  const { full } = fmtSlot(slot.scheduled_at)
+  const isConflict = slot.has_conflict
+
+  return (
+    <div style={{
+      background: 'white',
+      border: `1.5px solid ${isConflict ? '#fecaca' : '#e5e7eb'}`,
+      borderLeft: `4px solid ${isConflict ? '#b91c1c' : '#16A34A'}`,
+      borderRadius: '0.875rem', padding: '0.875rem 1rem',
+      display: 'flex', alignItems: 'center', gap: '0.875rem',
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px' }}>
+          {isConflict && <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>휴무충돌</span>}
+          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>{slot.member_name}</span>
+          <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{slot.coach_name} 코치</span>
+        </div>
+        <div style={{ fontSize: '0.8rem', color: isConflict ? '#b91c1c' : '#374151', fontWeight: isConflict ? 700 : 400 }}>
+          📅 {full} · {slot.lesson_type} · {slot.duration_minutes}분
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
+        <button
+          onClick={() => onConfirm(slot.id)}
+          disabled={saving}
+          style={{ padding: '0.375rem 0.75rem', background: isConflict ? '#fff7ed' : '#f0fdf4', border: `1.5px solid ${isConflict ? '#fed7aa' : '#86efac'}`, borderRadius: '0.5rem', color: isConflict ? '#c2410c' : '#15803d', fontWeight: 700, fontSize: '0.75rem', cursor: saving ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+          {isConflict ? '강제 확정' : '확정'}
+        </button>
+        <button
+          onClick={() => onDelete(slot.id)}
+          disabled={saving}
+          style={{ padding: '0.375rem 0.75rem', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.5rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: saving ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+          삭제
+        </button>
+      </div>
+    </div>
+  )
+}
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\settings\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -4535,8 +4760,7 @@ export default function SettingsPage() {
   )
 }
 
-
-===== app\owner\stats\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\stats\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -4708,8 +4932,7 @@ export default function StatsPage() {
   )
 }
 
-
-===== app\owner\unregistered\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\unregistered\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -4821,8 +5044,7 @@ export default function UnregisteredPage() {
   )
 }
 
-
-===== app\owner\weekly\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\weekly\page.tsx =====
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -4830,6 +5052,12 @@ import Link from 'next/link'
 interface Slot {
   id: string; scheduled_at: string; duration_minutes: number; status: string; is_makeup: boolean
   lesson_plan: { lesson_type: string; member: { id: string; name: string }; coach: { id: string; name: string } }
+}
+
+// ✅ FIX #7: Block 인터페이스 추가
+interface Block {
+  id: string; coach_id: string; block_date: string | null; block_start: string | null; block_end: string | null
+  reason: string | null; repeat_weekly: boolean; day_of_week: number | null
 }
 
 const DAYS = ['월','화','수','목','금','토','일']
@@ -4851,6 +5079,8 @@ function toYMD(d: Date) { return d.toISOString().split('T')[0] }
 export default function WeeklySchedulePage() {
   const [monday, setMonday] = useState(() => getMonday(new Date()))
   const [slots, setSlots] = useState<Slot[]>([])
+  // ✅ FIX #7: blocks 상태 추가
+  const [blocks, setBlocks] = useState<Block[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'all'|'byCoach'>('all')
   const [selCoach, setSelCoach] = useState<string>('all')
@@ -4860,7 +5090,18 @@ export default function WeeklySchedulePage() {
     setLoading(true)
     fetch('/api/weekly-schedule?week=' + toYMD(monday))
       .then(r => r.json())
-      .then(d => { setSlots(Array.isArray(d) ? d : []); setLoading(false) })
+      .then(d => {
+        // ✅ FIX #7: { slots, blocks } 형태로 변경된 응답 처리
+        if (d && typeof d === 'object' && 'slots' in d) {
+          setSlots(Array.isArray(d.slots) ? d.slots : [])
+          setBlocks(Array.isArray(d.blocks) ? d.blocks : [])
+        } else {
+          // 혹시 이전 형태(배열)로 응답 오면 하위 호환
+          setSlots(Array.isArray(d) ? d : [])
+          setBlocks([])
+        }
+        setLoading(false)
+      })
   }, [monday])
 
   const changeWeek = (dir: number) => {
@@ -4879,7 +5120,17 @@ export default function WeeklySchedulePage() {
   coaches.forEach((c, i) => { coachColorMap[c.id] = COACH_COLORS[i % COACH_COLORS.length] })
   const filteredSlots = selCoach === 'all' ? slots : slots.filter(s => s.lesson_plan?.coach?.id === selCoach)
 
-  function TimeGrid({ slotsForGrid }: { slotsForGrid: Slot[] }) {
+  // ✅ FIX #7: 날짜에 해당하는 blocks 반환 헬퍼
+  function getBlocksForDate(date: Date): Block[] {
+    const ymd = toYMD(date)
+    const dow = date.getDay()
+    return blocks.filter(b => {
+      if (b.repeat_weekly) return b.day_of_week === dow
+      return b.block_date === ymd
+    })
+  }
+
+  function TimeGrid({ slotsForGrid, coachIdFilter }: { slotsForGrid: Slot[], coachIdFilter?: string }) {
     return (
       <div style={{ display:'flex', minWidth:'700px' }}>
         <div style={{ width:'32px', flexShrink:0, marginTop:'40px' }}>
@@ -4896,6 +5147,13 @@ export default function WeeklySchedulePage() {
             const dow = date.getDay()
             const daySlots = slotsForGrid.filter(s => s.scheduled_at.startsWith(ymd))
             const nowMin = isToday ? (now.getHours()-START_HOUR)*60+now.getMinutes() : -1
+
+            // ✅ FIX #7: 해당 날짜 휴무 블록 계산
+            const dayBlocks = getBlocksForDate(date).filter(b => {
+              if (!coachIdFilter) return true
+              return b.coach_id === coachIdFilter
+            })
+
             return (
               <div key={di} style={{ display:'flex', flexDirection:'column' }}>
                 <div style={{ textAlign:'center', height:'40px', background:isToday?'#16A34A':'white', border:'1.5px solid '+(isToday?'#16A34A':'#e5e7eb'), borderRadius:'8px 8px 0 0', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
@@ -4906,6 +5164,35 @@ export default function WeeklySchedulePage() {
                   {Array.from({ length:TOTAL_CELLS }, (_,i) => (
                     <div key={i} style={{ position:'absolute', left:0, right:0, top:i*CELL_H, height:CELL_H, borderBottom:i%6===5?'1px solid #e5e7eb':'1px solid #f3f4f6', background:i%6===0?'#fafafa':'transparent' }} />
                   ))}
+
+                  {/* ✅ FIX #7: 휴무 블록 회색으로 렌더링 */}
+                  {dayBlocks.map(b => {
+                    if (!b.block_start && !b.block_end) {
+                      // 종일 휴무
+                      return (
+                        <div key={b.id} style={{ position:'absolute', top:0, left:0, right:0, bottom:0, background:'rgba(156,163,175,0.25)', borderLeft:'3px solid #9ca3af', zIndex:4, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          <div style={{ fontSize:'9px', color:'#6b7280', fontWeight:700, textAlign:'center', padding:'2px' }}>
+                            🚫 휴무{b.reason ? '\n'+b.reason : ''}
+                          </div>
+                        </div>
+                      )
+                    }
+                    // 시간대 휴무
+                    const [sh, sm] = (b.block_start ?? '00:00').split(':').map(Number)
+                    const [eh, em] = (b.block_end   ?? '23:59').split(':').map(Number)
+                    const startMin = (sh - START_HOUR) * 60 + sm
+                    const endMin   = (eh - START_HOUR) * 60 + em
+                    if (endMin <= 0 || startMin >= (END_HOUR - START_HOUR) * 60) return null
+                    const top    = Math.max(0, (startMin / CELL_MIN) * CELL_H)
+                    const height = Math.max(((endMin - startMin) / CELL_MIN) * CELL_H, CELL_H * 2)
+                    return (
+                      <div key={b.id} style={{ position:'absolute', top:top+1, left:0, right:0, height:height-2, background:'rgba(156,163,175,0.2)', borderLeft:'3px solid #9ca3af', zIndex:4, padding:'2px 3px', overflow:'hidden' }}>
+                        <div style={{ fontSize:'9px', color:'#6b7280', fontWeight:700 }}>🚫 휴무</div>
+                        {b.reason && <div style={{ fontSize:'8px', color:'#9ca3af' }}>{b.reason}</div>}
+                      </div>
+                    )
+                  })}
+
                   {isToday && nowMin>=0 && nowMin<=(END_HOUR-START_HOUR)*60 && (
                     <div style={{ position:'absolute', left:0, right:0, top:(nowMin/CELL_MIN)*CELL_H, borderTop:'2px solid #ef4444', zIndex:10, display:'flex', alignItems:'center' }}>
                       <div style={{ width:6, height:6, borderRadius:'50%', background:'#ef4444', marginTop:-3, marginLeft:-1, flexShrink:0 }} />
@@ -4972,6 +5259,10 @@ export default function WeeklySchedulePage() {
                   <div style={{ width:'10px', height:'10px', background:STATUS_COLOR[k], borderRadius:'2px' }}/>{l}
                 </div>
               ))}
+              {/* ✅ FIX #7: 범례에 휴무 추가 */}
+              <div style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', color:'#6b7280' }}>
+                <div style={{ width:'10px', height:'10px', background:'#9ca3af', borderRadius:'2px' }}/>휴무
+              </div>
             </div>
             <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={filteredSlots} /></div></>
           )}
@@ -4999,7 +5290,8 @@ export default function WeeklySchedulePage() {
                         <span style={{ fontFamily:'Oswald,sans-serif', fontWeight:700, fontSize:'1rem', color:'#111827' }}>{coach.name} 코치</span>
                         <span style={{ marginLeft:'auto', fontSize:'0.75rem', color:'#6b7280' }}>이번 주 {coachSlots.length}건</span>
                       </div>
-                      <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={coachSlots} /></div>
+                      {/* ✅ FIX #7: 코치별 뷰에서 해당 코치 휴무만 표시 */}
+                      <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={coachSlots} coachIdFilter={coach.id} /></div>
                     </div>
                   )
                 })}
@@ -5011,8 +5303,7 @@ export default function WeeklySchedulePage() {
     </div>
   )
 }
-
-===== app\owner\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\owner\page.tsx =====
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -5187,8 +5478,7 @@ export default async function OwnerDashboard() {
     </>
   )
 }
-
-===== app\admin\applications\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\applications\page.tsx =====
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -5332,12 +5622,10 @@ export default function AdminApplicationsPage() {
   )
 }
 
-
-===== app\admin\coaches\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\coaches\page.tsx =====
 export { default } from '@/app/owner/coaches/page'
 
-
-===== app\admin\lesson-plan\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\lesson-plan\page.tsx =====
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
@@ -5722,8 +6010,7 @@ export default function LessonPlanPage() {
     </div>
   )
 }
-
-===== app\admin\members\[id]\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\members\[id]\page.tsx =====
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
@@ -5809,8 +6096,7 @@ export default function AdminMemberDetailPage() {
   )
 }
 
-
-===== app\admin\members\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\members\page.tsx =====
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -5922,20 +6208,16 @@ export default function AdminMembersPage() {
   )
 }
 
-
-===== app\admin\payment\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\payment\page.tsx =====
 export { default } from '@/app/owner/payment/page'
 
-
-===== app\admin\pin-change\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\pin-change\page.tsx =====
 export { default } from '@/app/coach/pin-change/page'
 
-
-===== app\admin\settings\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\settings\page.tsx =====
 export { default } from '@/app/owner/settings/page'
 
-
-===== app\admin\weekly\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\weekly\page.tsx =====
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -6124,8 +6406,7 @@ export default function AdminWeeklyPage() {
     </div>
   )
 }
-
-===== app\admin\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\admin\page.tsx =====
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -6197,37 +6478,512 @@ export default async function AdminDashboard() {
   )
 }
 
-
-===== app\auth\admin\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\auth\admin\page.tsx =====
 import LoginForm from '@/components/LoginForm'
 export default function AdminLoginPage() {
   return <LoginForm role="admin" label="관리자 로그인" color="#15803d" emoji="🛡️" />
 }
 
-
-===== app\auth\coach\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\auth\coach\page.tsx =====
 import LoginForm from '@/components/LoginForm'
 export default function CoachLoginPage() {
   return <LoginForm role="coach" label="코치 로그인" color="#1d4ed8" emoji="🎾" />
 }
 
-
-===== app\auth\member\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\auth\member\page.tsx =====
 import LoginForm from '@/components/LoginForm'
 export default function MemberLoginPage() {
   return <LoginForm role="member" label="회원 로그인" color="#7e22ce" emoji="👤" />
 }
 
-
-===== app\auth\owner\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\auth\owner\page.tsx =====
 import LoginForm from '@/components/LoginForm'
 export default function OwnerLoginPage() {
   return <LoginForm role="owner" label="운영자 로그인" color="#78350f" emoji="👑" />
 }
 
-
-===== app\auth\payment\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\auth\payment\page.tsx =====
 import LoginForm from '@/components/LoginForm'
 export default function PaymentLoginPage() {
   return <LoginForm role="payment" label="결제담당 로그인" color="#92400e" emoji="💳" />
 }
+
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\setup\page.tsx =====
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+export default function SetupPage() {
+  const router = useRouter()
+  const [name, setName]             = useState('')
+  const [phone, setPhone]           = useState('')
+  const [pin, setPin]               = useState('')
+  const [pinConfirm, setPinConfirm] = useState('')
+  const [setupSecret, setSetupSecret] = useState('')
+  const [error, setError]           = useState('')
+  const [loading, setLoading]       = useState(false)
+
+  const handleSubmit = async () => {
+    setError('')
+    if (!name.trim())            return setError('이름을 입력해주세요')
+    if (phone.length < 10)       return setError('전화번호를 정확히 입력해주세요')
+    if (pin.length !== 6)        return setError('PIN은 6자리여야 합니다')
+    if (pin !== pinConfirm)      return setError('PIN이 일치하지 않습니다')
+    if (!setupSecret.trim())     return setError('설정 비밀키를 입력해주세요')
+
+    setLoading(true)
+    try {
+      const res = await fetch('/api/setup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // ✅ FIX #3: SETUP_SECRET 헤더 전달
+          'x-setup-secret': setupSecret,
+        },
+        body: JSON.stringify({ name, phone, pin }),
+      })
+      const data = await res.json()
+      if (!res.ok) return setError(data.error ?? '등록 실패')
+      router.replace('/owner')
+    } catch {
+      setError('서버 오류가 발생했습니다')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePhone = (v: string) => {
+    const num = v.replace(/\D/g, '').slice(0, 11)
+    const fmt = num.length <= 3 ? num
+      : num.length <= 7 ? `${num.slice(0,3)}-${num.slice(3)}`
+      : `${num.slice(0,3)}-${num.slice(3,7)}-${num.slice(7)}`
+    setPhone(fmt)
+  }
+
+  const handlePin = (v: string, type: 'pin' | 'confirm') => {
+    const num = v.replace(/\D/g, '').slice(0, 6)
+    type === 'pin' ? setPin(num) : setPinConfirm(num)
+  }
+
+  return (
+    <div className="mobile-wrap flex flex-col">
+      {/* 헤더 */}
+      <div className="bg-primary-600 px-6 pt-12 pb-8 text-center text-white">
+        <div className="font-title text-4xl font-bold tracking-widest mb-2">WTA</div>
+        <p className="text-sm opacity-80">서부 테니스 아카데미</p>
+      </div>
+
+      {/* 본문 */}
+      <div className="flex-1 px-6 py-6">
+        {/* 안내 뱃지 */}
+        <div className="flex items-start gap-3 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-6">
+          <span className="text-2xl">👑</span>
+          <div>
+            <p className="font-bold text-yellow-800 text-sm">운영자 최초 등록</p>
+            <p className="text-yellow-700 text-xs mt-0.5">이 화면은 최초 1회만 표시됩니다</p>
+          </div>
+        </div>
+
+        {/* 폼 */}
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">이름</label>
+            <input
+              className="input-base"
+              placeholder="홍길동"
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">전화번호</label>
+            <input
+              className="input-base"
+              placeholder="010-0000-0000"
+              value={phone}
+              onChange={e => handlePhone(e.target.value)}
+              inputMode="numeric"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">PIN 6자리 설정</label>
+            <div className="flex gap-2">
+              {Array.from({length: 6}).map((_, i) => (
+                <div key={i} className={`pin-box ${pin.length > i ? 'filled' : ''} ${pin.length === i ? 'active' : ''}`}>
+                  {pin.length > i ? '●' : ''}
+                </div>
+              ))}
+            </div>
+            <input
+              className="input-base mt-2"
+              placeholder="숫자 6자리"
+              value={pin}
+              onChange={e => handlePin(e.target.value, 'pin')}
+              inputMode="numeric"
+              maxLength={6}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">PIN 확인</label>
+            <div className="flex gap-2">
+              {Array.from({length: 6}).map((_, i) => (
+                <div key={i} className={`pin-box ${pinConfirm.length > i ? 'filled' : ''} ${pinConfirm.length === i ? 'active' : ''}`}>
+                  {pinConfirm.length > i ? '●' : ''}
+                </div>
+              ))}
+            </div>
+            <input
+              className="input-base mt-2"
+              placeholder="PIN 한번 더 입력"
+              value={pinConfirm}
+              onChange={e => handlePin(e.target.value, 'confirm')}
+              inputMode="numeric"
+              maxLength={6}
+            />
+          </div>
+
+          {/* ✅ FIX #3: 설정 비밀키 입력 필드 추가 */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">설정 비밀키</label>
+            <input
+              className="input-base"
+              placeholder=".env.local의 SETUP_SECRET 값"
+              value={setupSecret}
+              onChange={e => setSetupSecret(e.target.value)}
+              type="password"
+            />
+            <p className="text-xs text-gray-400 mt-1">관리자에게 문의하세요</p>
+          </div>
+        </div>
+
+        {/* 에러 */}
+        {error && (
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-sm font-semibold">
+            {error}
+          </div>
+        )}
+
+        {/* 버튼 */}
+        <button
+          className="btn-primary w-full mt-6"
+          onClick={handleSubmit}
+          disabled={loading}
+        >
+          {loading ? '등록 중...' : '운영자 등록 완료'}
+        </button>
+
+        <p className="text-center text-xs text-gray-400 mt-4">
+          등록 후 통합 대시보드로 이동합니다
+        </p>
+      </div>
+    </div>
+  )
+}
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\lib\checkCoachBlock.ts =====
+// lib/checkCoachBlock.ts
+// ✅ FIX #13: repeat_weekly 서버 처리 공통 헬퍼
+// 사용처: api/lesson-applications/route.ts, api/makeup/route.ts, api/lesson-plans/route.ts
+import { supabaseAdmin } from '@/lib/supabase-admin'
+
+/**
+ * 코치 휴무 충돌 체크 (repeat_weekly 포함 서버 처리)
+ * @returns 충돌하는 block 객체 또는 null
+ */
+export async function checkCoachBlock(
+  coachId: string,
+  datetimeStr: string,
+  durationMinutes: number
+): Promise<{ reason?: string } | null> {
+  const dt        = new Date(datetimeStr)
+  const dateStr   = dt.toISOString().split('T')[0]
+  const hhmm      = dt.toTimeString().slice(0, 5)       // "HH:MM"
+  const dayOfWeek = dt.getDay()                          // 0=일 ~ 6=토
+  const endDt     = new Date(dt.getTime() + durationMinutes * 60 * 1000)
+  const endHhmm   = endDt.toTimeString().slice(0, 5)
+
+  const { data: blocks } = await supabaseAdmin
+    .from('coach_blocks')
+    .select('*')
+    .eq('coach_id', coachId)
+    .or(
+      `and(repeat_weekly.eq.false,block_date.eq.${dateStr}),` +
+      `and(repeat_weekly.eq.true,day_of_week.eq.${dayOfWeek})`
+    )
+
+  if (!blocks || blocks.length === 0) return null
+
+  for (const b of blocks) {
+    // 종일 휴무
+    if (!b.block_start && !b.block_end) return b
+    // 시간대 겹침 체크
+    const bStart = b.block_start ?? '00:00'
+    const bEnd   = b.block_end   ?? '23:59'
+    if (hhmm < bEnd && endHhmm > bStart) return b
+  }
+
+  return null
+}
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\lib\push.ts =====
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import webpush from 'web-push'
+
+export async function sendPushToUser(
+  profile_id: string,
+  title: string,
+  body: string,
+  link = '/'
+) {
+  try {
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT!,
+      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+      process.env.VAPID_PRIVATE_KEY!
+    )
+
+    const { data: subs } = await supabaseAdmin
+      .from('push_subscriptions')
+      .select('*')
+      .eq('profile_id', profile_id)
+
+    if (!subs || subs.length === 0) return
+
+    const payload = JSON.stringify({ title, body, link })
+    await Promise.allSettled(
+      subs.map(sub =>
+        webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload
+        )
+      )
+    )
+  } catch {}
+}
+
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\lib\session.ts =====
+import { cookies } from 'next/headers'
+import { SessionUser } from './types'
+
+const COOKIE_NAME = 'wta-session'
+
+export async function getSession(): Promise<SessionUser | null> {
+  const cookieStore = await cookies()
+  const raw = cookieStore.get(COOKIE_NAME)?.value
+  if (!raw) return null
+  try {
+    return JSON.parse(Buffer.from(raw, 'base64').toString('utf-8')) as SessionUser
+  } catch {
+    return null
+  }
+}
+
+export function makeSessionCookie(user: SessionUser): string {
+  return Buffer.from(JSON.stringify(user)).toString('base64')
+}
+
+export const SESSION_COOKIE = COOKIE_NAME
+
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\lib\supabase-admin.ts =====
+import { createClient } from '@supabase/supabase-js'
+
+// ⚠️ 절대 클라이언트 컴포넌트에서 import 금지
+// API route 에서만 사용
+export const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\lib\supabase-browser.ts =====
+import { createBrowserClient } from '@supabase/ssr'
+
+export function createClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
+
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\lib\supabase-server.ts =====
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+
+export async function createClient() {
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {}
+        },
+      },
+    }
+  )
+}
+
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\lib\types.ts =====
+export type Role = 'owner' | 'admin' | 'coach' | 'payment' | 'member'
+
+export interface Profile {
+  id: string
+  name: string
+  phone: string
+  role: Role
+  pin_must_change: boolean
+  is_owner: boolean
+  is_active: boolean
+  coach_id: string | null
+  created_at: string
+}
+
+export interface MemberApplication {
+  id: string
+  name: string
+  phone: string
+  birth_date: string | null
+  address: string | null
+  emergency_contact: string | null
+  health_notes: string | null
+  desired_schedule: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+}
+
+export interface Month {
+  id: string
+  year: number
+  month: number
+  start_date: string
+  end_date: string
+}
+
+export interface LessonPlan {
+  id: string
+  member_id: string
+  coach_id: string
+  month_id: string
+  lesson_type: string
+  total_count: number
+  completed_count: number
+  payment_status: 'unpaid' | 'paid'
+  amount: number
+  unit_minutes: number
+  created_at: string
+}
+
+export interface LessonSlot {
+  id: string
+  lesson_plan_id: string
+  scheduled_at: string
+  duration_minutes: number
+  status: 'scheduled' | 'completed' | 'absent' | 'makeup'
+  slot_type: 'lesson' | 'break'
+  is_makeup: boolean
+  memo: string | null
+  created_at: string
+}
+
+export interface CoachBlock {
+  id: string
+  coach_id: string
+  block_date: string
+  block_start: string | null
+  block_end: string | null
+  reason: string | null
+}
+
+// 세션 쿠키에 저장할 유저 정보
+export interface SessionUser {
+  id: string
+  name: string
+  role: Role
+  is_owner: boolean
+}
+
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\lib\usePush.ts =====
+'use client'
+
+import { useEffect, useState } from 'react'
+
+export function usePush() {
+  const [supported, setSupported] = useState(false)
+  const [subscribed, setSubscribed] = useState(false)
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      setSupported(true)
+      checkSubscription()
+    }
+  }, [])
+
+  const checkSubscription = async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.getSubscription()
+      setSubscribed(!!sub)
+    } catch {}
+  }
+
+  const subscribe = async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
+        ),
+      })
+
+      const json = sub.toJSON()
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+      })
+      setSubscribed(true)
+      alert('✅ 알림이 설정되었습니다!')
+    } catch (e) {
+      console.error(e)
+      alert('알림 설정 실패. 브라우저 권한을 확인해주세요.')
+    }
+  }
+
+  const unsubscribe = async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.getSubscription()
+      if (sub) {
+        await fetch('/api/push/subscribe', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        })
+        await sub.unsubscribe()
+      }
+      setSubscribed(false)
+      alert('알림이 해제되었습니다.')
+    } catch {}
+  }
+
+  return { supported, subscribed, subscribe, unsubscribe }
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
+}
+

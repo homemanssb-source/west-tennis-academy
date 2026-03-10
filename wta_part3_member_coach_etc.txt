@@ -1,6 +1,5 @@
 ﻿
-
-===== app\member\apply\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\member\apply\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -581,8 +580,7 @@ export default function MemberApplyPage() {
 
 
 
-
-===== app\member\family\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\member\family\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -766,8 +764,7 @@ export default function FamilyPage() {
   )
 }
 
-
-===== app\member\makeup\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\member\makeup\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -901,8 +898,7 @@ export default function MemberMakeupPage() {
   )
 }
 
-
-===== app\member\payment\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\member\payment\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -987,12 +983,10 @@ export default function MemberPaymentPage() {
   )
 }
 
-
-===== app\member\pin-change\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\member\pin-change\page.tsx =====
 export { default } from '@/app/coach/pin-change/page'
 
-
-===== app\member\schedule\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\member\schedule\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1011,6 +1005,23 @@ interface Slot {
   }
 }
 
+// ✅ FIX #19: 보강 예약 인터페이스 추가
+interface MakeupBooking {
+  id: string
+  status: string
+  created_at: string
+  original_slot: {
+    scheduled_at: string
+    duration_minutes: number
+    lesson_plan: { lesson_type: string; coach: { name: string } }
+  }
+  makeup_slot: {
+    scheduled_at: string
+    duration_minutes: number
+    status: string
+  } | null
+}
+
 const STATUS_STYLE: Record<string, { bg: string; border: string; color: string; label: string }> = {
   scheduled: { bg: '#f0fdf4', border: '#4ade80', color: '#15803d', label: '예정' },
   completed: { bg: '#eff6ff', border: '#60a5fa', color: '#1d4ed8', label: '완료' },
@@ -1018,15 +1029,31 @@ const STATUS_STYLE: Record<string, { bg: string; border: string; color: string; 
   makeup:    { bg: '#fdf4ff', border: '#c084fc', color: '#7e22ce', label: '보강' },
 }
 
+const MAKEUP_STATUS: Record<string, { label: string; color: string; bg: string }> = {
+  confirmed:  { label: '확정', color: '#7e22ce', bg: '#f3e8ff' },
+  cancelled:  { label: '취소', color: '#b91c1c', bg: '#fef2f2' },
+  scheduled:  { label: '예정', color: '#15803d', bg: '#f0fdf4' },
+  completed:  { label: '완료', color: '#1d4ed8', bg: '#eff6ff' },
+}
+
 export default function MemberSchedulePage() {
-  const [slots, setSlots]     = useState<Slot[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter]   = useState<'all'|'scheduled'|'completed'>('all')
+  const [slots, setSlots]           = useState<Slot[]>([])
+  const [makeups, setMakeups]       = useState<MakeupBooking[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [makeupLoading, setMakeupLoading] = useState(true)
+  // ✅ FIX #19: 탭 상태 추가 (schedule | makeup)
+  const [tab, setTab]               = useState<'schedule'|'makeup'>('schedule')
+  const [filter, setFilter]         = useState<'all'|'scheduled'|'completed'>('all')
 
   useEffect(() => {
     fetch('/api/my-schedule').then(r => r.json()).then(d => {
       setSlots(Array.isArray(d) ? d : [])
       setLoading(false)
+    })
+    // ✅ FIX #19: 보강 목록 조회
+    fetch('/api/makeup').then(r => r.json()).then(d => {
+      setMakeups(Array.isArray(d) ? d : [])
+      setMakeupLoading(false)
     })
   }, [])
 
@@ -1041,42 +1068,117 @@ export default function MemberSchedulePage() {
     <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>내 스케줄</div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {(['all','scheduled','completed'] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              style={{ padding: '0.375rem 0.875rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif',
-                background: filter === f ? '#7e22ce' : '#f3f4f6',
-                color: filter === f ? 'white' : '#6b7280' }}>
-              {f === 'all' ? '전체' : f === 'scheduled' ? '예정' : '완료'}
-            </button>
-          ))}
+
+        {/* ✅ FIX #19: 스케줄 / 보강 탭 */}
+        <div style={{ display: 'flex', gap: '0', background: '#f3f4f6', borderRadius: '0.625rem', padding: '3px', marginBottom: '0.75rem' }}>
+          <button onClick={() => setTab('schedule')}
+            style={{ flex: 1, padding: '0.375rem 0', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 700, border: 'none', cursor: 'pointer',
+              background: tab === 'schedule' ? 'white' : 'transparent',
+              color: tab === 'schedule' ? '#111827' : '#9ca3af' }}>
+            📅 수업 일정
+          </button>
+          <button onClick={() => setTab('makeup')}
+            style={{ flex: 1, padding: '0.375rem 0', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 700, border: 'none', cursor: 'pointer',
+              background: tab === 'makeup' ? 'white' : 'transparent',
+              color: tab === 'makeup' ? '#111827' : '#9ca3af' }}>
+            🔄 보강 내역
+            {makeups.filter(m => m.status === 'confirmed').length > 0 && (
+              <span style={{ marginLeft: '4px', background: '#7e22ce', color: 'white', borderRadius: '9999px', fontSize: '0.65rem', padding: '1px 6px' }}>
+                {makeups.filter(m => m.status === 'confirmed').length}
+              </span>
+            )}
+          </button>
         </div>
+
+        {/* 수업 탭 필터 */}
+        {tab === 'schedule' && (
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {(['all','scheduled','completed'] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                style={{ padding: '0.375rem 0.875rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif',
+                  background: filter === f ? '#7e22ce' : '#f3f4f6',
+                  color: filter === f ? 'white' : '#6b7280' }}>
+                {f === 'all' ? '전체' : f === 'scheduled' ? '예정' : '완료'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, padding: '1rem 1.25rem 6rem', overflowY: 'auto' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📅</div>
-            <p style={{ fontSize: '0.875rem' }}>수업 내역이 없습니다</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-            {filtered.map(s => {
-              const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
-              return (
-                <div key={s.id} style={{ background: st.bg, borderLeft: `4px solid ${st.border}`, borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: st.color, fontSize: '0.95rem' }}>{fmtDt(s.scheduled_at)}</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: `${st.border}33`, color: st.color }}>{st.label}</span>
+
+        {/* ── 수업 일정 탭 ── */}
+        {tab === 'schedule' && (
+          loading ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📅</div>
+              <p style={{ fontSize: '0.875rem' }}>수업 내역이 없습니다</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              {filtered.map(s => {
+                const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
+                return (
+                  <div key={s.id} style={{ background: st.bg, borderLeft: `4px solid ${st.border}`, borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: st.color, fontSize: '0.95rem' }}>{fmtDt(s.scheduled_at)}</span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: `${st.border}33`, color: st.color }}>{st.label}</span>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#374151' }}>{s.lesson_plan?.lesson_type} · {s.lesson_plan?.coach?.name} 코치 · {s.duration_minutes}분</div>
+                    {s.memo && <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>📝 {s.memo}</div>}
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: '#374151' }}>{s.lesson_plan?.lesson_type} · {s.lesson_plan?.coach?.name} 코치 · {s.duration_minutes}분</div>
-                  {s.memo && <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>📝 {s.memo}</div>}
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )
+        )}
+
+        {/* ✅ FIX #19: 보강 내역 탭 */}
+        {tab === 'makeup' && (
+          makeupLoading ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
+          ) : makeups.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🔄</div>
+              <p style={{ fontSize: '0.875rem' }}>보강 내역이 없습니다</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {makeups.map(m => {
+                const orig = m.original_slot
+                const makeup = m.makeup_slot
+                const mst = MAKEUP_STATUS[makeup?.status ?? m.status] ?? MAKEUP_STATUS.confirmed
+                return (
+                  <div key={m.id} style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', padding: '0.875rem 1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    {/* 원래 결석 수업 */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.7rem', background: '#fef2f2', color: '#b91c1c', padding: '2px 8px', borderRadius: '9999px', fontWeight: 700 }}>결석</span>
+                      <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{fmtDt(orig.scheduled_at)}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{orig.lesson_plan?.lesson_type} · {orig.lesson_plan?.coach?.name} 코치</span>
+                    </div>
+
+                    {/* 화살표 */}
+                    <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#9ca3af', margin: '0.25rem 0' }}>↓ 보강</div>
+
+                    {/* 보강 수업 */}
+                    {makeup ? (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: mst.color, fontSize: '0.9rem' }}>{fmtDt(makeup.scheduled_at)}</span>
+                          <span style={{ fontSize: '0.75rem', color: '#6b7280', marginLeft: '0.5rem' }}>{makeup.duration_minutes}분</span>
+                        </div>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: mst.bg, color: mst.color }}>{mst.label}</span>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>보강 일정 미정</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
         )}
       </div>
 
@@ -1088,8 +1190,7 @@ export default function MemberSchedulePage() {
     </div>
   )
 }
-
-===== app\member\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\member\page.tsx =====
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -1254,8 +1355,7 @@ export default async function MemberHomePage() {
   )
 }
 
-
-===== app\coach\applications\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\coach\applications\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1534,8 +1634,7 @@ export default function CoachApplicationsPage() {
 }
 
 
-
-===== app\coach\blocks\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\coach\blocks\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1789,8 +1888,7 @@ export default function CoachHolidaysPage() {
 
 
 
-
-===== app\coach\pin-change\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\coach\pin-change\page.tsx =====
 'use client'
 
 import { useState } from 'react'
@@ -1873,8 +1971,7 @@ export default function CoachPinChangePage() {
   )
 }
 
-
-===== app\coach\schedule\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\coach\schedule\page.tsx =====
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
@@ -2100,8 +2197,7 @@ export default function CoachSchedulePage() {
     </div>
   )
 }
-
-===== app\coach\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\coach\page.tsx =====
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -2226,16 +2322,13 @@ export default async function CoachHomePage() {
 }
 
 
-
-===== app\payment\list\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\payment\list\page.tsx =====
 export { default } from '@/app/owner/payment/page'
 
-
-===== app\payment\pin-change\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\payment\pin-change\page.tsx =====
 export { default } from '@/app/coach/pin-change/page'
 
-
-===== app\payment\receipts\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\payment\receipts\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -2411,8 +2504,7 @@ export default function ReceiptsPage() {
   )
 }
 
-
-===== app\payment\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\payment\page.tsx =====
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import Link from 'next/link'
@@ -2466,8 +2558,7 @@ export default async function PaymentHomePage() {
 }
 
 
-
-===== app\apply\page.tsx =====
+===== C:\Users\homem\OneDrive\바탕 화면\wta\wta\src\app\apply\page.tsx =====
 'use client'
 
 import { useState } from 'react'
@@ -2586,686 +2677,4 @@ export default function ApplyPage() {
       </div>
     </div>
   )
-}
-
-===== app\setup\page.tsx =====
-'use client'
-
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-
-export default function SetupPage() {
-  const router = useRouter()
-  const [name, setName]         = useState('')
-  const [phone, setPhone]       = useState('')
-  const [pin, setPin]           = useState('')
-  const [pinConfirm, setPinConfirm] = useState('')
-  const [error, setError]       = useState('')
-  const [loading, setLoading]   = useState(false)
-
-  const handleSubmit = async () => {
-    setError('')
-    if (!name.trim())            return setError('이름을 입력해주세요')
-    if (phone.length < 10)       return setError('전화번호를 정확히 입력해주세요')
-    if (pin.length !== 6)        return setError('PIN은 6자리여야 합니다')
-    if (pin !== pinConfirm)      return setError('PIN이 일치하지 않습니다')
-
-    setLoading(true)
-    try {
-      const res = await fetch('/api/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, pin }),
-      })
-      const data = await res.json()
-      if (!res.ok) return setError(data.error ?? '등록 실패')
-      router.replace('/owner')
-    } catch {
-      setError('서버 오류가 발생했습니다')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handlePhone = (v: string) => {
-    const num = v.replace(/\D/g, '').slice(0, 11)
-    const fmt = num.length <= 3 ? num
-      : num.length <= 7 ? `${num.slice(0,3)}-${num.slice(3)}`
-      : `${num.slice(0,3)}-${num.slice(3,7)}-${num.slice(7)}`
-    setPhone(fmt)
-  }
-
-  const handlePin = (v: string, type: 'pin' | 'confirm') => {
-    const num = v.replace(/\D/g, '').slice(0, 6)
-    type === 'pin' ? setPin(num) : setPinConfirm(num)
-  }
-
-  return (
-    <div className="mobile-wrap flex flex-col">
-      {/* 헤더 */}
-      <div className="bg-primary-600 px-6 pt-12 pb-8 text-center text-white">
-        <div className="font-title text-4xl font-bold tracking-widest mb-2">WTA</div>
-        <p className="text-sm opacity-80">서부 테니스 아카데미</p>
-      </div>
-
-      {/* 본문 */}
-      <div className="flex-1 px-6 py-6">
-        {/* 안내 뱃지 */}
-        <div className="flex items-start gap-3 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-6">
-          <span className="text-2xl">👑</span>
-          <div>
-            <p className="font-bold text-yellow-800 text-sm">운영자 최초 등록</p>
-            <p className="text-yellow-700 text-xs mt-0.5">이 화면은 최초 1회만 표시됩니다</p>
-          </div>
-        </div>
-
-        {/* 폼 */}
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">이름</label>
-            <input
-              className="input-base"
-              placeholder="홍길동"
-              value={name}
-              onChange={e => setName(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">전화번호</label>
-            <input
-              className="input-base"
-              placeholder="010-0000-0000"
-              value={phone}
-              onChange={e => handlePhone(e.target.value)}
-              inputMode="numeric"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">PIN 6자리 설정</label>
-            <div className="flex gap-2">
-              {Array.from({length: 6}).map((_, i) => (
-                <div key={i} className={`pin-box ${pin.length > i ? 'filled' : ''} ${pin.length === i ? 'active' : ''}`}>
-                  {pin.length > i ? '●' : ''}
-                </div>
-              ))}
-            </div>
-            <input
-              className="input-base mt-2"
-              placeholder="숫자 6자리"
-              value={pin}
-              onChange={e => handlePin(e.target.value, 'pin')}
-              inputMode="numeric"
-              maxLength={6}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">PIN 확인</label>
-            <div className="flex gap-2">
-              {Array.from({length: 6}).map((_, i) => (
-                <div key={i} className={`pin-box ${pinConfirm.length > i ? 'filled' : ''} ${pinConfirm.length === i ? 'active' : ''}`}>
-                  {pinConfirm.length > i ? '●' : ''}
-                </div>
-              ))}
-            </div>
-            <input
-              className="input-base mt-2"
-              placeholder="PIN 한번 더 입력"
-              value={pinConfirm}
-              onChange={e => handlePin(e.target.value, 'confirm')}
-              inputMode="numeric"
-              maxLength={6}
-            />
-          </div>
-        </div>
-
-        {/* 에러 */}
-        {error && (
-          <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-sm font-semibold">
-            {error}
-          </div>
-        )}
-
-        {/* 버튼 */}
-        <button
-          className="btn-primary w-full mt-6"
-          onClick={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? '등록 중...' : '운영자 등록 완료'}
-        </button>
-
-        <p className="text-center text-xs text-gray-400 mt-4">
-          등록 후 통합 대시보드로 이동합니다
-        </p>
-      </div>
-    </div>
-  )
-}
-
-
-===== components\notifications\NotificationBell.tsx =====
-'use client'
-
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { usePush } from '@/lib/usePush'
-
-interface Notification {
-  id: string
-  title: string
-  body: string
-  type: string
-  is_read: boolean
-  link: string | null
-  created_at: string
-}
-
-const TYPE_STYLE: Record<string, { bg: string; color: string; emoji: string }> = {
-  info:    { bg: '#eff6ff', color: '#1d4ed8', emoji: 'ℹ️' },
-  success: { bg: '#f0fdf4', color: '#15803d', emoji: '✅' },
-  warning: { bg: '#fef9c3', color: '#854d0e', emoji: '⚠️' },
-  error:   { bg: '#fef2f2', color: '#b91c1c', emoji: '❌' },
-}
-
-export default function NotificationBell() {
-  const router = useRouter()
-  const { supported, subscribed, subscribe, unsubscribe } = usePush()
-  const [notifs,  setNotifs]  = useState<Notification[]>([])
-  const [open,    setOpen]    = useState(false)
-  const [loading, setLoading] = useState(false)
-
-  const unread = notifs.filter(n => !n.is_read).length
-
-  const load = async () => {
-    setLoading(true)
-    const res = await fetch('/api/notifications')
-    const data = await res.json()
-    setNotifs(Array.isArray(data) ? data : [])
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
-
-  const handleRead = async (n: Notification) => {
-    if (!n.is_read) {
-      await fetch(`/api/notifications/${n.id}`, { method: 'PUT' })
-      setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
-    }
-    if (n.link) router.push(n.link)
-    setOpen(false)
-  }
-
-  const fmtDate = (d: string) => {
-    const diff = Date.now() - new Date(d).getTime()
-    const min = Math.floor(diff / 60000)
-    if (min < 1) return '방금'
-    if (min < 60) return `${min}분 전`
-    const hr = Math.floor(min / 60)
-    if (hr < 24) return `${hr}시간 전`
-    return `${Math.floor(hr / 24)}일 전`
-  }
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <button onClick={() => { setOpen(!open); if (!open) load() }}
-        style={{ background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: '0.625rem', padding: '0.5rem', cursor: 'pointer', position: 'relative', fontSize: '1.25rem', lineHeight: 1 }}>
-        🔔
-        {unread > 0 && (
-          <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {unread > 9 ? '9+' : unread}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
-          <div style={{ position: 'absolute', right: 0, top: '110%', width: '320px', background: 'white', borderRadius: '1rem', boxShadow: '0 10px 40px rgba(0,0,0,.15)', zIndex: 50, overflow: 'hidden' }}>
-            <div style={{ padding: '1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#111827' }}>알림</span>
-              {unread > 0 && <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{unread}개 안읽음</span>}
-            </div>
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {loading ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>불러오는 중...</div>
-              ) : notifs.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔔</div>
-                  <p style={{ fontSize: '0.875rem' }}>알림이 없습니다</p>
-                </div>
-              ) : (
-                notifs.map(n => {
-                  const s = TYPE_STYLE[n.type] ?? TYPE_STYLE.info
-                  return (
-                    <div key={n.id} onClick={() => handleRead(n)}
-                      style={{ padding: '0.875rem 1rem', borderBottom: '1px solid #f9fafb', cursor: 'pointer', background: n.is_read ? 'white' : '#f0fdf4', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                      <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>{s.emoji}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: n.is_read ? 500 : 700, fontSize: '0.875rem', color: '#111827' }}>{n.title}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>{n.body}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '4px' }}>{fmtDate(n.created_at)}</div>
-                      </div>
-                      {!n.is_read && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#16A34A', flexShrink: 0, marginTop: '4px' }}></div>}
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-
-
-===== components\LoginForm.tsx =====
-'use client'
-import { useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-
-interface Props {
-  role: string
-  label: string
-  color: string
-  emoji: string
-}
-
-export default function LoginForm({ role, label, color, emoji }: Props) {
-  const router = useRouter()
-  const [phone, setPhone]   = useState('')
-  const [pin, setPin]       = useState('')
-  const [error, setError]   = useState('')
-  const [loading, setLoading] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const handlePhone = (v: string) => {
-    const num = v.replace(/\D/g, '').slice(0, 11)
-    const fmt = num.length <= 3 ? num
-      : num.length <= 7 ? `${num.slice(0,3)}-${num.slice(3)}`
-      : `${num.slice(0,3)}-${num.slice(3,7)}-${num.slice(7)}`
-    setPhone(fmt)
-  }
-
-  const handleSubmit = async () => {
-    setError('')
-    if (phone.replace(/-/g,'').length < 10) return setError('전화번호를 입력해주세요')
-    if (pin.length !== 6) return setError('PIN 6자리를 입력해주세요')
-    setLoading(true)
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, pin, role }),
-      })
-      const data = await res.json()
-      if (!res.ok) return setError(data.error ?? '로그인 실패')
-      router.replace(data.redirect)
-    } catch {
-      setError('서버 오류가 발생했습니다')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="mobile-wrap flex flex-col">
-      {/* 헤더 */}
-      <div style={{ background: color }} className="px-6 pt-14 pb-10 text-center text-white">
-        <div className="text-5xl mb-3">{emoji}</div>
-        <div className="font-title text-3xl font-bold tracking-widest mb-1">WTA</div>
-        <p className="text-sm opacity-80">{label}</p>
-      </div>
-
-      {/* 폼 */}
-      <div className="flex-1 px-6 py-8 flex flex-col gap-5">
-        <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">전화번호</label>
-          <input
-            className="input-base"
-            placeholder="010-0000-0000"
-            value={phone}
-            onChange={e => handlePhone(e.target.value)}
-            inputMode="numeric"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">PIN 6자리</label>
-          {/* PIN 박스 - 클릭하면 숨겨진 input 포커스 */}
-          <div
-            className="flex gap-2 cursor-pointer"
-            onClick={() => inputRef.current?.focus()}
-          >
-            {Array.from({length: 6}).map((_, i) => (
-              <div
-                key={i}
-                className={`pin-box ${pin.length > i ? 'filled' : ''} ${pin.length === i ? 'active' : ''}`}
-              >
-                {pin.length > i ? '●' : ''}
-              </div>
-            ))}
-          </div>
-          {/* 숨겨진 input - 실제 입력 처리 */}
-          <input
-            ref={inputRef}
-            type="password"
-            inputMode="numeric"
-            maxLength={6}
-            value={pin}
-            onChange={e => setPin(e.target.value.replace(/\D/g,'').slice(0,6))}
-            style={{
-              position: 'absolute',
-              opacity: 0,
-              pointerEvents: 'none',
-              width: 1,
-              height: 1,
-            }}
-            autoComplete="off"
-          />
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-sm font-semibold">
-            {error}
-          </div>
-        )}
-
-        <button
-          className="btn-primary mt-2"
-          onClick={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? '로그인 중...' : '로그인'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-===== components\LogoutButton.tsx =====
-'use client'
-export default function LogoutButton() {
-  async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    window.location.href = '/auth/owner'
-  }
-  return (
-    <button
-      onClick={handleLogout}
-      style={{ background: 'transparent', border: '1.5px solid #e5e7eb', borderRadius: '0.75rem', padding: '0.625rem 1.5rem', color: '#9ca3af', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}
-    >
-      로그아웃
-    </button>
-  )
-}
-
-===== lib\push.ts =====
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import webpush from 'web-push'
-
-export async function sendPushToUser(
-  profile_id: string,
-  title: string,
-  body: string,
-  link = '/'
-) {
-  try {
-    webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT!,
-      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-      process.env.VAPID_PRIVATE_KEY!
-    )
-
-    const { data: subs } = await supabaseAdmin
-      .from('push_subscriptions')
-      .select('*')
-      .eq('profile_id', profile_id)
-
-    if (!subs || subs.length === 0) return
-
-    const payload = JSON.stringify({ title, body, link })
-    await Promise.allSettled(
-      subs.map(sub =>
-        webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          payload
-        )
-      )
-    )
-  } catch {}
-}
-
-
-===== lib\session.ts =====
-import { cookies } from 'next/headers'
-import { SessionUser } from './types'
-
-const COOKIE_NAME = 'wta-session'
-
-export async function getSession(): Promise<SessionUser | null> {
-  const cookieStore = await cookies()
-  const raw = cookieStore.get(COOKIE_NAME)?.value
-  if (!raw) return null
-  try {
-    return JSON.parse(Buffer.from(raw, 'base64').toString('utf-8')) as SessionUser
-  } catch {
-    return null
-  }
-}
-
-export function makeSessionCookie(user: SessionUser): string {
-  return Buffer.from(JSON.stringify(user)).toString('base64')
-}
-
-export const SESSION_COOKIE = COOKIE_NAME
-
-
-===== lib\supabase-admin.ts =====
-import { createClient } from '@supabase/supabase-js'
-
-// ⚠️ 절대 클라이언트 컴포넌트에서 import 금지
-// API route 에서만 사용
-export const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-
-===== lib\supabase-browser.ts =====
-import { createBrowserClient } from '@supabase/ssr'
-
-export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
-
-
-===== lib\supabase-server.ts =====
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-
-export async function createClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {}
-        },
-      },
-    }
-  )
-}
-
-
-===== lib\types.ts =====
-export type Role = 'owner' | 'admin' | 'coach' | 'payment' | 'member'
-
-export interface Profile {
-  id: string
-  name: string
-  phone: string
-  role: Role
-  pin_must_change: boolean
-  is_owner: boolean
-  is_active: boolean
-  coach_id: string | null
-  created_at: string
-}
-
-export interface MemberApplication {
-  id: string
-  name: string
-  phone: string
-  birth_date: string | null
-  address: string | null
-  emergency_contact: string | null
-  health_notes: string | null
-  desired_schedule: string | null
-  status: 'pending' | 'approved' | 'rejected'
-  reviewed_by: string | null
-  reviewed_at: string | null
-  created_at: string
-}
-
-export interface Month {
-  id: string
-  year: number
-  month: number
-  start_date: string
-  end_date: string
-}
-
-export interface LessonPlan {
-  id: string
-  member_id: string
-  coach_id: string
-  month_id: string
-  lesson_type: string
-  total_count: number
-  completed_count: number
-  payment_status: 'unpaid' | 'paid'
-  amount: number
-  unit_minutes: number
-  created_at: string
-}
-
-export interface LessonSlot {
-  id: string
-  lesson_plan_id: string
-  scheduled_at: string
-  duration_minutes: number
-  status: 'scheduled' | 'completed' | 'absent' | 'makeup'
-  slot_type: 'lesson' | 'break'
-  is_makeup: boolean
-  memo: string | null
-  created_at: string
-}
-
-export interface CoachBlock {
-  id: string
-  coach_id: string
-  block_date: string
-  block_start: string | null
-  block_end: string | null
-  reason: string | null
-}
-
-// 세션 쿠키에 저장할 유저 정보
-export interface SessionUser {
-  id: string
-  name: string
-  role: Role
-  is_owner: boolean
-}
-
-
-===== lib\usePush.ts =====
-'use client'
-
-import { useEffect, useState } from 'react'
-
-export function usePush() {
-  const [supported, setSupported] = useState(false)
-  const [subscribed, setSubscribed] = useState(false)
-
-  useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      setSupported(true)
-      checkSubscription()
-    }
-  }, [])
-
-  const checkSubscription = async () => {
-    try {
-      const reg = await navigator.serviceWorker.ready
-      const sub = await reg.pushManager.getSubscription()
-      setSubscribed(!!sub)
-    } catch {}
-  }
-
-  const subscribe = async () => {
-    try {
-      const reg = await navigator.serviceWorker.register('/sw.js')
-      await navigator.serviceWorker.ready
-
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(
-          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
-        ),
-      })
-
-      const json = sub.toJSON()
-      await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
-      })
-      setSubscribed(true)
-      alert('✅ 알림이 설정되었습니다!')
-    } catch (e) {
-      console.error(e)
-      alert('알림 설정 실패. 브라우저 권한을 확인해주세요.')
-    }
-  }
-
-  const unsubscribe = async () => {
-    try {
-      const reg = await navigator.serviceWorker.ready
-      const sub = await reg.pushManager.getSubscription()
-      if (sub) {
-        await fetch('/api/push/subscribe', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint: sub.endpoint }),
-        })
-        await sub.unsubscribe()
-      }
-      setSubscribed(false)
-      alert('알림이 해제되었습니다.')
-    } catch {}
-  }
-
-  return { supported, subscribed, subscribe, unsubscribe }
-}
-
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = window.atob(base64)
-  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
 }

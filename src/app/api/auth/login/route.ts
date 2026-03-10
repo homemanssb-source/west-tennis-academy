@@ -15,7 +15,11 @@ const ROLE_HOME: Record<Role, string> = {
 export async function POST(req: NextRequest) {
   try {
     const { phone, pin, role } = await req.json()
-    console.log('=== 로그인 시도 ===', { phone, role, pinLen: pin?.length })
+
+    // ✅ FIX #16: 프로덕션에서 민감 정보(전화번호, PIN) 로그 제거
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('=== 로그인 시도 ===', { role, pinLen: pin?.length })
+    }
 
     const cleanPhone = phone.replace(/-/g, '')
 
@@ -26,8 +30,6 @@ export async function POST(req: NextRequest) {
       .eq('role', role)
       .single()
 
-    console.log('DB 조회 결과:', { user: user?.name, role: user?.role, error })
-
     if (error || !user) {
       return NextResponse.json({ error: '전화번호 또는 PIN이 올바르지 않습니다' }, { status: 401 })
     }
@@ -37,7 +39,6 @@ export async function POST(req: NextRequest) {
     }
 
     const ok = await bcrypt.compare(pin, user.pin_hash)
-    console.log('PIN 검증:', ok)
 
     if (!ok) {
       return NextResponse.json({ error: '전화번호 또는 PIN이 올바르지 않습니다' }, { status: 401 })
@@ -64,7 +65,6 @@ export async function POST(req: NextRequest) {
     })
     return res
   } catch (e) {
-    console.error('/api/auth/login error:', e)
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
 }

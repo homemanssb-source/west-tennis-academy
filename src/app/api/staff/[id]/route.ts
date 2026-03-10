@@ -12,7 +12,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json()
 
   if (body.action === 'reset_pin') {
-    const tempPin = '123456'
+    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
     const { error } = await supabaseAdmin.from('profiles').update({ pin_hash, pin_must_change: true }).eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

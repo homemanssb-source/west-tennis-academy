@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
     const { name, phone, coach_id } = await req.json()
     if (!name || !phone) return NextResponse.json({ error: '이름과 전화번호는 필수입니다' }, { status: 400 })
 
-    const tempPin = '123456'
+    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
 
     const { data, error } = await supabaseAdmin

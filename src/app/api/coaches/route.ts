@@ -28,13 +28,17 @@ export async function POST(req: NextRequest) {
   try {
     const { name, phone } = await req.json()
     if (!name || !phone) return NextResponse.json({ error: '이름과 전화번호는 필수입니다' }, { status: 400 })
-    const tempPin = '123456'
+
+    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
+
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .insert({ name, phone: phone.replace(/-/g, ''), role: 'coach', pin_hash, pin_must_change: true, is_active: true })
       .select()
       .single()
+
     if (error) {
       if (error.code === '23505') return NextResponse.json({ error: '이미 등록된 전화번호입니다' }, { status: 409 })
       return NextResponse.json({ error: error.message }, { status: 500 })

@@ -50,7 +50,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (body.action === 'reset_pin') {
     const bcrypt = await import('bcryptjs')
-    const tempPin = '123456'
+    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
     await supabaseAdmin.from('profiles').update({ pin_hash, pin_must_change: true }).eq('id', id)
     return NextResponse.json({ temp_pin: tempPin })
@@ -63,7 +64,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   const { name, phone } = body
-  const { error } = await supabaseAdmin.from('profiles').update({ name, phone }).eq('id', id)
+  // ✅ FIX #14(버그): PUT 시 phone replace 누락 → 추가
+  const { error } = await supabaseAdmin.from('profiles').update({ name, phone: phone?.replace(/-/g, '') }).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

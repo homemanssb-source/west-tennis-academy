@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation'
 
 export default function SetupPage() {
   const router = useRouter()
-  const [name, setName]         = useState('')
-  const [phone, setPhone]       = useState('')
-  const [pin, setPin]           = useState('')
+  const [name, setName]             = useState('')
+  const [phone, setPhone]           = useState('')
+  const [pin, setPin]               = useState('')
   const [pinConfirm, setPinConfirm] = useState('')
-  const [error, setError]       = useState('')
-  const [loading, setLoading]   = useState(false)
+  const [setupSecret, setSetupSecret] = useState('')
+  const [error, setError]           = useState('')
+  const [loading, setLoading]       = useState(false)
 
   const handleSubmit = async () => {
     setError('')
@@ -18,12 +19,17 @@ export default function SetupPage() {
     if (phone.length < 10)       return setError('전화번호를 정확히 입력해주세요')
     if (pin.length !== 6)        return setError('PIN은 6자리여야 합니다')
     if (pin !== pinConfirm)      return setError('PIN이 일치하지 않습니다')
+    if (!setupSecret.trim())     return setError('설정 비밀키를 입력해주세요')
 
     setLoading(true)
     try {
       const res = await fetch('/api/setup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // ✅ FIX #3: SETUP_SECRET 헤더 전달
+          'x-setup-secret': setupSecret,
+        },
         body: JSON.stringify({ name, phone, pin }),
       })
       const data = await res.json()
@@ -124,6 +130,19 @@ export default function SetupPage() {
               inputMode="numeric"
               maxLength={6}
             />
+          </div>
+
+          {/* ✅ FIX #3: 설정 비밀키 입력 필드 추가 */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">설정 비밀키</label>
+            <input
+              className="input-base"
+              placeholder=".env.local의 SETUP_SECRET 값"
+              value={setupSecret}
+              onChange={e => setSetupSecret(e.target.value)}
+              type="password"
+            />
+            <p className="text-xs text-gray-400 mt-1">관리자에게 문의하세요</p>
           </div>
         </div>
 

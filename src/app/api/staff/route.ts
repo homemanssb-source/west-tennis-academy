@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
     if (!name || !phone || !role) return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
     if (!['admin','coach','payment'].includes(role)) return NextResponse.json({ error: '잘못된 역할' }, { status: 400 })
 
-    const tempPin = '123456'
+    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
 
     const { data, error } = await supabaseAdmin

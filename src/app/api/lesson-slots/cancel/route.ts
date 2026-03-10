@@ -11,7 +11,6 @@ export async function POST(req: NextRequest) {
   const { slot_id, reason } = await req.json()
   if (!slot_id) return NextResponse.json({ error: 'slot_id 필요' }, { status: 400 })
 
-  // 슬롯 정보 조회
   const { data: slot } = await supabaseAdmin
     .from('lesson_slots')
     .select(`
@@ -31,33 +30,18 @@ export async function POST(req: NextRequest) {
 
   const plan = slot.lesson_plan as any
 
-  // 슬롯 삭제 대신 cancelled 상태로 변경 (보강 추적을 위해 유지)
   const { error: updateErr } = await supabaseAdmin
     .from('lesson_slots')
-    .update({
-      status: 'cancelled',
-      memo: reason || null,
-    })
+    .update({ status: 'cancelled', memo: reason || null })
     .eq('id', slot_id)
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
-  // total_count 감소
+  // ✅ FIX #8: Race condition → RPC atomic decrement 사용
   if (plan?.id) {
-    const { data: currentPlan } = await supabaseAdmin
-      .from('lesson_plans')
-      .select('total_count')
-      .eq('id', plan.id)
-      .single()
-    if (currentPlan && currentPlan.total_count > 0) {
-      await supabaseAdmin
-        .from('lesson_plans')
-        .update({ total_count: currentPlan.total_count - 1 })
-        .eq('id', plan.id)
-    }
+    await supabaseAdmin.rpc('decrement_total_count', { plan_id: plan.id })
   }
 
-  // 회원에게 취소 알림 발송
   if (plan?.member_id) {
     const dt = new Date(slot.scheduled_at)
     const timeStr =

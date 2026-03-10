@@ -1,11 +1,16 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ✅ FIX #2: Cron 인증 추가
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: '인증 실패' }, { status: 401 })
+  }
+
   const now = new Date()
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
 
-  // 매월 1일만 실행
   if (kst.getDate() !== 1) return NextResponse.json({ ok: true, skipped: true })
 
   const { data: unpaid } = await supabaseAdmin

@@ -1,7 +1,13 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ✅ FIX #2: Cron 인증 추가
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: '인증 실패' }, { status: 401 })
+  }
+
   // KST 기준 어제 날짜
   const now = new Date()
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
@@ -11,7 +17,6 @@ export async function GET() {
   const start = `${yesterday}T00:00:00+09:00`
   const end   = `${yesterday}T23:59:59+09:00`
 
-  // 어제 scheduled 상태인 슬롯 자동 완료 처리
   const { data: slots, error } = await supabaseAdmin
     .from('lesson_slots')
     .select('id, lesson_plan_id')
@@ -28,22 +33,12 @@ export async function GET() {
     .update({ status: 'completed', auto_completed: true })
     .in('id', ids)
 
-  // completed_count 업데이트
+  // ✅ FIX #8: Race condition → RPC atomic increment 사용
   const planMap: Record<string, number> = {}
   slots.forEach(s => { planMap[s.lesson_plan_id] = (planMap[s.lesson_plan_id] ?? 0) + 1 })
 
   for (const [planId, cnt] of Object.entries(planMap)) {
-    const { data: plan } = await supabaseAdmin
-      .from('lesson_plans')
-      .select('completed_count')
-      .eq('id', planId)
-      .single()
-    if (plan) {
-      await supabaseAdmin
-        .from('lesson_plans')
-        .update({ completed_count: plan.completed_count + cnt })
-        .eq('id', planId)
-    }
+    await supabaseAdmin.rpc('increment_completed_by', { plan_id: planId, amount: cnt })
   }
 
   return NextResponse.json({ ok: true, updated: ids.length })

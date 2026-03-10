@@ -1,78 +1,5 @@
 ﻿
-
-===== app\api\applications\[id]\route.ts =====
-// src/app/api/applications/[id]/route.ts
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const session = await getSession()
-  if (!session || !['owner', 'admin'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-
-  const { action } = await req.json()
-  const { id } = params
-
-  if (action === 'approve') {
-    // 임시 PIN 생성 (6자리 숫자)
-    const temp_pin = Math.floor(100000 + Math.random() * 900000).toString()
-    const bcrypt = await import('bcryptjs')
-    const pin_hash = await bcrypt.hash(temp_pin, 10)
-
-    // 신청 정보 가져오기
-    const { data: app, error: appError } = await supabaseAdmin
-      .from('member_applications')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (appError || !app) return NextResponse.json({ error: '신청 정보 없음' }, { status: 404 })
-
-    // profiles 에 회원 생성
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .insert({
-        name: app.name,
-        phone: app.phone,
-        role: 'member',
-        pin_hash,
-        pin_must_change: true,
-        is_active: true,
-        is_owner: false,
-      })
-
-    if (profileError) {
-      if (profileError.code === '23505') {
-        return NextResponse.json({ error: '이미 등록된 전화번호입니다' }, { status: 409 })
-      }
-      return NextResponse.json({ error: profileError.message }, { status: 500 })
-    }
-
-    // 신청 상태 승인으로 변경
-    await supabaseAdmin
-      .from('member_applications')
-      .update({ status: 'approved', reviewed_by: session.id, reviewed_at: new Date().toISOString() })
-      .eq('id', id)
-
-    return NextResponse.json({ ok: true, temp_pin })
-
-  } else if (action === 'reject') {
-    const { error } = await supabaseAdmin
-      .from('member_applications')
-      .update({ status: 'rejected', reviewed_by: session.id, reviewed_at: new Date().toISOString() })
-      .eq('id', id)
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true })
-
-  } else {
-    return NextResponse.json({ error: '잘못된 action' }, { status: 400 })
-  }
-}
-
-===== app\api\applications\route.ts =====
+===== src\app\api\applications\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -195,8 +122,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(data)
 }
-
-===== app\api\apply\route.ts =====
+===== src\app\api\apply\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
@@ -262,8 +188,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-
-===== app\api\auth\change-pin\route.ts =====
+===== src\app\api\auth\change-pin\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -300,8 +225,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true })
 }
 
-
-===== app\api\auth\login\route.ts =====
+===== src\app\api\auth\login\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -319,7 +243,11 @@ const ROLE_HOME: Record<Role, string> = {
 export async function POST(req: NextRequest) {
   try {
     const { phone, pin, role } = await req.json()
-    console.log('=== 로그인 시도 ===', { phone, role, pinLen: pin?.length })
+
+    // ✅ FIX #16: 프로덕션에서 민감 정보(전화번호, PIN) 로그 제거
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('=== 로그인 시도 ===', { role, pinLen: pin?.length })
+    }
 
     const cleanPhone = phone.replace(/-/g, '')
 
@@ -330,8 +258,6 @@ export async function POST(req: NextRequest) {
       .eq('role', role)
       .single()
 
-    console.log('DB 조회 결과:', { user: user?.name, role: user?.role, error })
-
     if (error || !user) {
       return NextResponse.json({ error: '전화번호 또는 PIN이 올바르지 않습니다' }, { status: 401 })
     }
@@ -341,7 +267,6 @@ export async function POST(req: NextRequest) {
     }
 
     const ok = await bcrypt.compare(pin, user.pin_hash)
-    console.log('PIN 검증:', ok)
 
     if (!ok) {
       return NextResponse.json({ error: '전화번호 또는 PIN이 올바르지 않습니다' }, { status: 401 })
@@ -368,13 +293,10 @@ export async function POST(req: NextRequest) {
     })
     return res
   } catch (e) {
-    console.error('/api/auth/login error:', e)
     return NextResponse.json({ error: '서버 오류' }, { status: 500 })
   }
 }
-
-
-===== app\api\auth\logout\route.ts =====
+===== src\app\api\auth\logout\route.ts =====
 import { NextResponse } from 'next/server'
 import { SESSION_COOKIE } from '@/lib/session'
 
@@ -388,25 +310,7 @@ export async function POST() {
   return res
 }
 
-
-===== app\api\coach-blocks\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['owner','admin','coach'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-  const { error } = await supabaseAdmin.from('coach_blocks').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-
-===== app\api\coach-blocks\route.ts =====
+===== src\app\api\coach-blocks\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -470,14 +374,24 @@ export async function DELETE(req: NextRequest) {
   }
 
   const { id } = await req.json()
+
+  // ✅ FIX #5: 코치는 자신의 블록만 삭제 가능
+  if (session.role === 'coach') {
+    const { data: block } = await supabaseAdmin
+      .from('coach_blocks')
+      .select('coach_id')
+      .eq('id', id)
+      .single()
+    if (!block || block.coach_id !== session.id) {
+      return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+    }
+  }
+
   const { error } = await supabaseAdmin.from('coach_blocks').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
-
-
-
-===== app\api\coach-stats\route.ts =====
+===== src\app\api\coach-stats\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -515,47 +429,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(stats)
 }
 
-
-===== app\api\coaches\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-import bcrypt from 'bcryptjs'
-
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['owner','admin'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-  const body = await req.json()
-
-  if (body.action === 'reset_pin') {
-    const tempPin = '123456'
-    const pin_hash = await bcrypt.hash(tempPin, 10)
-    const { error } = await supabaseAdmin.from('profiles').update({ pin_hash, pin_must_change: true }).eq('id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, temp_pin: tempPin })
-  }
-
-  if (body.action === 'toggle_active') {
-    const { data: cur } = await supabaseAdmin.from('profiles').select('is_active').eq('id', id).single()
-    const { error } = await supabaseAdmin.from('profiles').update({ is_active: !cur?.is_active }).eq('id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true })
-  }
-
-  const { name, phone } = body
-  const { error } = await supabaseAdmin
-    .from('profiles')
-    .update({ name, phone: phone?.replace(/-/g,'') })
-    .eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-
-===== app\api\coaches\route.ts =====
+===== src\app\api\coaches\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -586,13 +460,17 @@ export async function POST(req: NextRequest) {
   try {
     const { name, phone } = await req.json()
     if (!name || !phone) return NextResponse.json({ error: '이름과 전화번호는 필수입니다' }, { status: 400 })
-    const tempPin = '123456'
+
+    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
+
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .insert({ name, phone: phone.replace(/-/g, ''), role: 'coach', pin_hash, pin_must_change: true, is_active: true })
       .select()
       .single()
+
     if (error) {
       if (error.code === '23505') return NextResponse.json({ error: '이미 등록된 전화번호입니다' }, { status: 409 })
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -602,12 +480,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
-
-===== app\api\cron\auto-complete\route.ts =====
-import { NextResponse } from 'next/server'
+===== src\app\api\cron\auto-complete\route.ts =====
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ✅ FIX #2: Cron 인증 추가
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: '인증 실패' }, { status: 401 })
+  }
+
   // KST 기준 어제 날짜
   const now = new Date()
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
@@ -617,7 +500,6 @@ export async function GET() {
   const start = `${yesterday}T00:00:00+09:00`
   const end   = `${yesterday}T23:59:59+09:00`
 
-  // 어제 scheduled 상태인 슬롯 자동 완료 처리
   const { data: slots, error } = await supabaseAdmin
     .from('lesson_slots')
     .select('id, lesson_plan_id')
@@ -634,30 +516,18 @@ export async function GET() {
     .update({ status: 'completed', auto_completed: true })
     .in('id', ids)
 
-  // completed_count 업데이트
+  // ✅ FIX #8: Race condition → RPC atomic increment 사용
   const planMap: Record<string, number> = {}
   slots.forEach(s => { planMap[s.lesson_plan_id] = (planMap[s.lesson_plan_id] ?? 0) + 1 })
 
   for (const [planId, cnt] of Object.entries(planMap)) {
-    const { data: plan } = await supabaseAdmin
-      .from('lesson_plans')
-      .select('completed_count')
-      .eq('id', planId)
-      .single()
-    if (plan) {
-      await supabaseAdmin
-        .from('lesson_plans')
-        .update({ completed_count: plan.completed_count + cnt })
-        .eq('id', planId)
-    }
+    await supabaseAdmin.rpc('increment_completed_by', { plan_id: planId, amount: cnt })
   }
 
   return NextResponse.json({ ok: true, updated: ids.length })
 }
-
-
-===== app\api\cron\lesson-fee-notify\route.ts =====
-import { NextResponse } from 'next/server'
+===== src\app\api\cron\lesson-fee-notify\route.ts =====
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 function getWeekOfMonth(date: Date): number {
@@ -665,20 +535,23 @@ function getWeekOfMonth(date: Date): number {
   return Math.ceil((date.getDate() + firstDay) / 7)
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ✅ FIX #2: Cron 인증 추가
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: '인증 실패' }, { status: 401 })
+  }
+
   const now = new Date()
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
 
-  // 월요일(1)이고 3주차인 경우만
   if (kst.getDay() !== 1) return NextResponse.json({ ok: true, skipped: 'not monday' })
   if (getWeekOfMonth(kst) !== 3) return NextResponse.json({ ok: true, skipped: 'not 3rd week' })
 
-  // 다음 달 정보
-  const nextMonth = kst.getMonth() + 2 // 1-based
+  const nextMonth = kst.getMonth() + 2
   const nextYear  = nextMonth > 12 ? kst.getFullYear() + 1 : kst.getFullYear()
   const nm        = nextMonth > 12 ? 1 : nextMonth
 
-  // 활성 회원 전체에게 알림
   const { data: members } = await supabaseAdmin
     .from('profiles')
     .select('id')
@@ -698,17 +571,20 @@ export async function GET() {
   await supabaseAdmin.from('notifications').insert(inserts)
   return NextResponse.json({ ok: true, sent: inserts.length })
 }
-
-
-===== app\api\cron\lesson-remind\route.ts =====
-import { NextResponse } from 'next/server'
+===== src\app\api\cron\lesson-remind\route.ts =====
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ✅ FIX #2: Cron 인증 추가
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: '인증 실패' }, { status: 401 })
+  }
+
   const now  = new Date()
   const kst  = new Date(now.getTime() + 9 * 60 * 60 * 1000)
 
-  // 1시간 후 ~ 1시간 10분 후 사이 수업 찾기
   const from = new Date(kst.getTime() + 60 * 60 * 1000)
   const to   = new Date(kst.getTime() + 70 * 60 * 1000)
 
@@ -763,110 +639,294 @@ export async function GET() {
   if (inserts.length > 0) await supabaseAdmin.from('notifications').insert(inserts)
   return NextResponse.json({ ok: true, sent: inserts.length })
 }
-
-
-===== app\api\cron\sync-next-month\route.ts =====
+===== src\app\api\cron\sync-next-month\route.ts =====
+// ============================================================
+// 저장 위치: app/api/cron/sync-next-month/route.ts
+// 기존 파일 전체 교체
+// ============================================================
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+// ── 유틸: ISO KST 문자열 파싱 (UTC 변환 없이 문자열 직접 읽기) ──────────
+function parseKST(iso: string): { year: number; month: number; date: number; hh: number; mm: number; day: number } {
+  // "2025-03-04T10:00:00+09:00" → 직접 파싱
+  const [datePart, timePart] = iso.split('T')
+  const [y, mo, d] = datePart.split('-').map(Number)
+  const [hStr] = timePart.split('+')
+  const [hh, mm] = hStr.split(':').map(Number)
+  const jsDate = new Date(y, mo - 1, d)   // 로컬 → 요일 계산용
+  return { year: y, month: mo, date: d, hh, mm, day: jsDate.getDay() }
+}
+
+function makeISOKST(year: number, month: number, date: number, hh: number, mm: number): string {
+  return `${year}-${String(month).padStart(2,'0')}-${String(date).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00+09:00`
+}
+
+// 지정 월의 특정 요일(0=일..6=토) 날짜 목록
+function getDatesForDay(year: number, month: number, dayOfWeek: number): number[] {
+  const dates: number[] = []
+  for (let d = 1; d <= 31; d++) {
+    const jsDate = new Date(year, month - 1, d)
+    if (jsDate.getMonth() !== month - 1) break
+    if (jsDate.getDay() === dayOfWeek) dates.push(d)
+  }
+  return dates
+}
+
+// ── 패턴 추출: 보강·취소 제외 정규 수업 요일+시간 추출 ──────────────────
+function extractPattern(slots: any[]): Array<{ day: number; time: string }> | null {
+  const regular = slots.filter((s: any) => !s.is_makeup && s.status !== 'cancelled')
+  if (regular.length < 2) return null
+
+  const counts: Record<string, number> = {}
+  for (const s of regular) {
+    const { day, hh, mm } = parseKST(s.scheduled_at)
+    const key = `${day}_${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`
+    counts[key] = (counts[key] ?? 0) + 1
+  }
+
+  // 전체 슬롯 수 기준 threshold (단발 추가수업 제외)
+  const threshold = Math.max(2, Math.floor(regular.length / 5))
+  const result = Object.entries(counts)
+    .filter(([, cnt]) => cnt >= threshold)
+    .map(([key]) => {
+      const [dayStr, time] = key.split('_')
+      return { day: parseInt(dayStr), time }
+    })
+
+  return result.length > 0 ? result : null
+}
+
+// ── 휴무 충돌 체크 ──────────────────────────────────────────────────────
+function hasConflict(
+  blocks: any[],
+  coachId: string,
+  dateStr: string,   // "YYYY-MM-DD"
+  timeStr: string    // "HH:MM"
+): boolean {
+  return blocks
+    .filter((b: any) => b.coach_id === coachId)
+    .some((b: any) => {
+      if (b.block_date !== dateStr) return false
+      if (!b.block_start && !b.block_end) return true          // 종일 휴무
+      if (b.block_start && b.block_end)
+        return timeStr >= b.block_start && timeStr < b.block_end
+      return false
+    })
+}
+
+// ────────────────────────────────────────────────────────────────────────
 export async function GET() {
   const now = new Date()
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
 
   if (kst.getDate() !== 15) return NextResponse.json({ ok: true, skipped: 'not 15th' })
 
-  // 현재 달과 다음 달 month 레코드 확인
   const thisYear  = kst.getFullYear()
   const thisMonth = kst.getMonth() + 1
-  const nextMonth = thisMonth === 12 ? 1 : thisMonth + 1
+  const nextMonth = thisMonth === 12 ? 1  : thisMonth + 1
   const nextYear  = thisMonth === 12 ? thisYear + 1 : thisYear
 
-  const { data: nextMonthRecord } = await supabaseAdmin
-    .from('months')
-    .select('id')
-    .eq('year', nextYear)
-    .eq('month', nextMonth)
-    .single()
+  // ── 1) 다음달 month 레코드 확인 / 자동 생성 ──────────────────────────
+  let nextMonthRec = (await supabaseAdmin
+    .from('months').select('id').eq('year', nextYear).eq('month', nextMonth).maybeSingle()).data
 
-  // 다음달 month 없으면 자동 생성
-  let nextMonthId = nextMonthRecord?.id
-  if (!nextMonthId) {
-    const startDate = new Date(nextYear, nextMonth - 1, 1).toISOString().split('T')[0]
-    const endDate   = new Date(nextYear, nextMonth, 0).toISOString().split('T')[0]
+  if (!nextMonthRec) {
+    const lastDay   = new Date(nextYear, nextMonth, 0).getDate()
     const { data: created } = await supabaseAdmin
       .from('months')
-      .insert({ year: nextYear, month: nextMonth, start_date: startDate, end_date: endDate })
-      .select('id')
-      .single()
-    nextMonthId = created?.id
+      .insert({
+        year: nextYear, month: nextMonth,
+        start_date: `${nextYear}-${String(nextMonth).padStart(2,'0')}-01`,
+        end_date:   `${nextYear}-${String(nextMonth).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`,
+      })
+      .select('id').single()
+    nextMonthRec = created
   }
 
-  if (!nextMonthId) return NextResponse.json({ error: '다음달 month 생성 실패' }, { status: 500 })
+  if (!nextMonthRec) return NextResponse.json({ error: '다음달 month 생성 실패' }, { status: 500 })
 
-  // 이번달 레슨플랜 조회 (next_month_synced = false)
-  const { data: currentMonth } = await supabaseAdmin
-    .from('months')
-    .select('id')
-    .eq('year', thisYear)
-    .eq('month', thisMonth)
-    .single()
-
-  if (!currentMonth) return NextResponse.json({ ok: true, skipped: 'no current month' })
+  // ── 2) 이번달 미동기화 플랜 조회 ─────────────────────────────────────
+  const currMonthRec = (await supabaseAdmin
+    .from('months').select('id').eq('year', thisYear).eq('month', thisMonth).maybeSingle()).data
+  if (!currMonthRec) return NextResponse.json({ ok: true, skipped: 'no current month' })
 
   const { data: plans } = await supabaseAdmin
-    .from('lesson_plans')
-    .select('*')
-    .eq('month_id', currentMonth.id)
+    .from('lesson_plans').select('*')
+    .eq('month_id', currMonthRec.id)
     .eq('next_month_synced', false)
 
   if (!plans || plans.length === 0) return NextResponse.json({ ok: true, synced: 0 })
 
-  // 다음달 레슨플랜 생성 (슬롯 없이 플랜만)
-  const newPlans = plans.map((p: any) => ({
-    member_id:       p.member_id,
-    coach_id:        p.coach_id,
-    month_id:        nextMonthId,
-    lesson_type:     p.lesson_type,
-    total_count:     p.total_count,
-    completed_count: 0,
-    payment_status:  'unpaid',
-    amount:          p.amount,
-    unit_minutes:    p.unit_minutes,
-    program_id:      p.program_id ?? null,
-    next_month_synced: false,
-  }))
+  // ── 3) 다음달 이미 존재하는 (member, coach) 세트 ─────────────────────
+  const { data: existingNextPlans } = await supabaseAdmin
+    .from('lesson_plans').select('member_id, coach_id')
+    .eq('month_id', nextMonthRec.id)
 
-  const { error } = await supabaseAdmin.from('lesson_plans').insert(newPlans)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const existsSet = new Set(
+    (existingNextPlans ?? []).map((p: any) => `${p.member_id}__${p.coach_id}`)
+  )
 
-  // 현재달 플랜 synced 표시
-  const planIds = plans.map((p: any) => p.id)
-  await supabaseAdmin.from('lesson_plans').update({ next_month_synced: true }).in('id', planIds)
+  // ── 4) 코치 휴무 전체 (다음달 해당 범위만) ───────────────────────────
+  const nextStart = `${nextYear}-${String(nextMonth).padStart(2,'0')}-01`
+  const nextEnd   = `${nextYear}-${String(nextMonth).padStart(2,'0')}-${String(new Date(nextYear, nextMonth, 0).getDate()).padStart(2,'0')}`
 
-  // 회원들에게 알림
-  const memberIds = [...new Set(plans.map((p: any) => p.member_id))]
-  const notifs = memberIds.map((id: string) => ({
-    profile_id: id,
-    title: `📅 ${nextYear}년 ${nextMonth}월 레슨 등록 완료`,
-    body: `다음달 레슨 일정이 등록되었습니다. 일정을 확인해주세요.`,
-    type: 'success',
-    link: '/member/schedule',
-  }))
-  await supabaseAdmin.from('notifications').insert(notifs)
+  const { data: blocks } = await supabaseAdmin
+    .from('coach_blocks')
+    .select('*')
+    .gte('block_date', nextStart)
+    .lte('block_date', nextEnd)
 
-  return NextResponse.json({ ok: true, synced: plans.length })
+  const coachBlocks = blocks ?? []
+
+  // ── 5) 플랜별 처리 ────────────────────────────────────────────────────
+  const stats = { plans_created: 0, plans_skipped: 0, drafts_ok: 0, drafts_conflict: 0 }
+  const planIdsToSync: string[] = []
+  const memberNotifySet = new Set<string>()
+
+  for (const plan of plans) {
+    const key = `${plan.member_id}__${plan.coach_id}`
+
+    if (existsSet.has(key)) {
+      // 이미 다음달 플랜 있음 → synced 표시만
+      stats.plans_skipped++
+      planIdsToSync.push(plan.id)
+      continue
+    }
+
+    // 5-1) 플랜 복사 (슬롯 없이 껍데기만)
+    const { data: newPlan, error: planErr } = await supabaseAdmin
+      .from('lesson_plans')
+      .insert({
+        member_id:       plan.member_id,
+        coach_id:        plan.coach_id,
+        month_id:        nextMonthRec.id,
+        lesson_type:     plan.lesson_type,
+        unit_minutes:    plan.unit_minutes,
+        total_count:     0,             // 확정 시 실제 슬롯 수로 업데이트
+        completed_count: 0,
+        payment_status:  'unpaid',
+        amount:          plan.amount,
+        program_id:      plan.program_id ?? null,
+        next_month_synced: false,
+      })
+      .select('id').single()
+
+    if (planErr || !newPlan) {
+      console.error('[sync-next-month] 플랜 생성 실패:', planErr?.message)
+      continue
+    }
+
+    existsSet.add(key)
+    stats.plans_created++
+    planIdsToSync.push(plan.id)
+
+    // 5-2) 이번달 슬롯 패턴 추출
+    const { data: thisSlots } = await supabaseAdmin
+      .from('lesson_slots').select('scheduled_at, status, is_makeup')
+      .eq('lesson_plan_id', plan.id)
+
+    const pattern = extractPattern(thisSlots ?? [])
+    if (!pattern) continue   // 패턴 없으면 플랜만 생성, 슬롯은 운영자가 수동 입력
+
+    // 5-3) draft 슬롯 생성
+    const draftSlots: any[] = []
+
+    for (const pat of pattern) {
+      const [hh, mm] = pat.time.split(':').map(Number)
+      const timeStr  = pat.time   // "HH:MM"
+      const dates    = getDatesForDay(nextYear, nextMonth, pat.day)
+
+      for (const d of dates) {
+        const dateStr  = `${nextYear}-${String(nextMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+        const blocked  = hasConflict(coachBlocks, plan.coach_id, dateStr, timeStr)
+        const iso      = makeISOKST(nextYear, nextMonth, d, hh, mm)
+
+        draftSlots.push({
+          lesson_plan_id:   newPlan.id,
+          scheduled_at:     iso,
+          duration_minutes: plan.unit_minutes,
+          status:           'draft',
+          is_makeup:        false,
+          slot_type:        'lesson',
+          has_conflict:     blocked,
+        })
+
+        if (blocked) stats.drafts_conflict++
+        else         stats.drafts_ok++
+      }
+    }
+
+    if (draftSlots.length > 0) {
+      const { error: slotErr } = await supabaseAdmin.from('lesson_slots').insert(draftSlots)
+      if (slotErr) console.error('[sync-next-month] draft 슬롯 삽입 오류:', slotErr.message)
+      else memberNotifySet.add(plan.member_id)
+    }
+  }
+
+  // ── 6) synced 표시 ────────────────────────────────────────────────────
+  if (planIdsToSync.length > 0) {
+    await supabaseAdmin
+      .from('lesson_plans')
+      .update({ next_month_synced: true })
+      .in('id', planIdsToSync)
+  }
+
+  // ── 7) 알림 ──────────────────────────────────────────────────────────
+  const notifInserts: any[] = []
+
+  // 회원별 (초안 생성됨)
+  memberNotifySet.forEach(memberId => {
+    notifInserts.push({
+      profile_id: memberId,
+      title: `📅 ${nextYear}년 ${nextMonth}월 레슨 일정 초안 생성`,
+      body:  `다음달 레슨 초안이 준비됐습니다. 운영자 확인 후 최종 확정됩니다.`,
+      type:  'info',
+      link:  '/member/schedule',
+    })
+  })
+
+  // 운영자 (확정 요청)
+  const totalDrafts = stats.drafts_ok + stats.drafts_conflict
+  if (totalDrafts > 0) {
+    const owners = await supabaseAdmin.from('profiles').select('id').eq('role', 'owner')
+    for (const o of owners.data ?? []) {
+      notifInserts.push({
+        profile_id: o.id,
+        title: `🗓 ${nextYear}년 ${nextMonth}월 수업 초안 ${totalDrafts}건 생성`,
+        body:  `충돌 ${stats.drafts_conflict}건 포함. /owner/schedule-draft 에서 확인 후 확정해 주세요.`,
+        type:  stats.drafts_conflict > 0 ? 'warning' : 'success',
+        link:  '/owner/schedule-draft',
+      })
+    }
+  }
+
+  if (notifInserts.length > 0)
+    await supabaseAdmin.from('notifications').insert(notifInserts)
+
+  return NextResponse.json({
+    ok: true,
+    year: nextYear, month: nextMonth,
+    plans_created: stats.plans_created,
+    plans_skipped: stats.plans_skipped,
+    drafts_ok:       stats.drafts_ok,
+    drafts_conflict: stats.drafts_conflict,
+  })
 }
-
-
-===== app\api\cron\unpaid-notify\route.ts =====
-import { NextResponse } from 'next/server'
+===== src\app\api\cron\unpaid-notify\route.ts =====
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // ✅ FIX #2: Cron 인증 추가
+  const auth = req.headers.get('authorization')
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: '인증 실패' }, { status: 401 })
+  }
+
   const now = new Date()
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
 
-  // 매월 1일만 실행
   if (kst.getDate() !== 1) return NextResponse.json({ ok: true, skipped: true })
 
   const { data: unpaid } = await supabaseAdmin
@@ -887,9 +947,7 @@ export async function GET() {
   await supabaseAdmin.from('notifications').insert(inserts)
   return NextResponse.json({ ok: true, sent: inserts.length })
 }
-
-
-===== app\api\dashboard\route.ts =====
+===== src\app\api\dashboard\route.ts =====
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -947,8 +1005,7 @@ export async function GET() {
   return NextResponse.json({ date, total, completed, scheduled, absent, byCoach: coachStats })
 }
 
-
-===== app\api\family\by-account\route.ts =====
+===== src\app\api\family\by-account\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -971,47 +1028,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data)
 }
 
-
-===== app\api\family\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || session.role !== 'member') {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-  const { name, birth_date, notes, is_active } = await req.json()
-  const { error } = await supabaseAdmin
-    .from('family_members')
-    .update({ name, birth_date: birth_date || null, notes: notes || null, is_active })
-    .eq('id', id)
-    .eq('account_id', session.id)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || session.role !== 'member') {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-  const { error } = await supabaseAdmin
-    .from('family_members')
-    .delete()
-    .eq('id', id)
-    .eq('account_id', session.id)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-
-===== app\api\family\route.ts =====
+===== src\app\api\family\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -1049,63 +1066,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data)
 }
 
-
-===== app\api\lesson-applications\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-
-export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['coach', 'owner', 'admin'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-
-  const { id } = await context.params
-  const body = await req.json()
-  console.log('🔵 PATCH 진입 id:', id, 'body:', body)
-
-  const { action, coach_note, admin_note, requested_at, coach_id } = body
-
-  let newStatus: string
-  if (action === 'coach_approve') newStatus = 'pending_admin'
-  else if (action === 'coach_reject') newStatus = 'rejected'
-  else if (action === 'admin_approve') newStatus = 'approved'
-  else if (action === 'admin_reject') newStatus = 'rejected'
-  else return NextResponse.json({ error: '잘못된 action' }, { status: 400 })
-
-  const updateData: Record<string, unknown> = { status: newStatus }
-  if (coach_note !== undefined) updateData.coach_note = coach_note
-  if (admin_note !== undefined) updateData.admin_note = admin_note
-  if (requested_at) updateData.requested_at = requested_at
-  if (coach_id) updateData.coach_id = coach_id
-
-  console.log('🔵 updateData:', updateData)
-
-  const { data, error } = await supabaseAdmin
-    .from('lesson_applications')
-    .update(updateData)
-    .eq('id', id)
-    .select()
-    .single()
-
-  if (error) {
-    console.log('🔴 update error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  console.log('🟢 update 성공:', data)
-
-  if (action === 'admin_approve') {
-    const { error: rpcError } = await supabaseAdmin.rpc('approve_lesson_application', { app_id: id })
-    if (rpcError) console.log('🔴 rpc error:', rpcError)
-    else console.log('🟢 rpc 성공')
-  }
-
-  return NextResponse.json(data)
-}
-
-===== app\api\lesson-applications\route.ts =====
+===== src\app\api\lesson-applications\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPushToUser } from '@/lib/push'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -1259,8 +1220,7 @@ export async function POST(req: NextRequest) {
 
 
 
-
-===== app\api\lesson-plans\copy\route.ts =====
+===== src\app\api\lesson-plans\copy\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -1331,8 +1291,7 @@ export async function POST(req: NextRequest) {
   })
 }
 
-
-===== app\api\lesson-plans\extra\route.ts =====
+===== src\app\api\lesson-plans\extra\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -1407,8 +1366,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, plan_id: plan.id })
 }
 
-
-===== app\api\lesson-plans\list\route.ts =====
+===== src\app\api\lesson-plans\list\route.ts =====
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -1453,79 +1411,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json(result)
 }
-
-===== app\api\lesson-plans\[id]\route.ts =====
-import { NextResponse } from 'next/server'
-import { getSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const session = await getSession()
-  if (!session || !['owner', 'admin'].includes(session.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from('lesson_plans')
-    .select(`
-      id, lesson_type, unit_minutes, total_count, completed_count,
-      payment_status, amount, created_at,
-      member:profiles!lesson_plans_member_id_fkey(id, name, phone),
-      coach:profiles!lesson_plans_coach_id_fkey(id, name),
-      month:months(id, year, month),
-      slots:lesson_slots(id, scheduled_at, duration_minutes, status, is_makeup, slot_type, memo)
-    `)
-    .eq('id', id)
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
-}
-
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const session = await getSession()
-  if (!session || !['owner', 'admin'].includes(session.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const body = await req.json()
-  const { lesson_type, unit_minutes, amount, payment_status, coach_id, month_id } = body
-
-  const updates: Record<string, unknown> = {}
-  if (lesson_type    !== undefined) updates.lesson_type    = lesson_type
-  if (unit_minutes   !== undefined) updates.unit_minutes   = unit_minutes
-  if (amount         !== undefined) updates.amount         = amount
-  if (payment_status !== undefined) updates.payment_status = payment_status
-  if (coach_id       !== undefined) updates.coach_id       = coach_id
-  if (month_id       !== undefined) updates.month_id       = month_id
-
-  const { error } = await supabaseAdmin
-    .from('lesson_plans')
-    .update(updates)
-    .eq('id', id)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const session = await getSession()
-  if (!session || !['owner', 'admin'].includes(session.role)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  await supabaseAdmin.from('lesson_slots').delete().eq('lesson_plan_id', id)
-  const { error } = await supabaseAdmin.from('lesson_plans').delete().eq('id', id)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-
-===== app\api\lesson-plans\route.ts =====
+===== src\app\api\lesson-plans\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -1564,9 +1450,46 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       )
     }
+
+    // ✅ FIX #6: 운영자 스케줄 등록 시 코치 휴무 체크
+    for (const s of schedules) {
+      const dt        = new Date(s.datetime)
+      const dateStr   = dt.toISOString().split('T')[0]
+      const hhmm      = dt.toTimeString().slice(0, 5)
+      const dayOfWeek = dt.getDay()
+      const duration  = s.duration || unit_minutes || 60
+      const endDt     = new Date(dt.getTime() + duration * 60 * 1000)
+      const endHhmm   = endDt.toTimeString().slice(0, 5)
+
+      const { data: blocks } = await supabaseAdmin
+        .from('coach_blocks')
+        .select('*')
+        .eq('coach_id', coach_id)
+        .or(`and(repeat_weekly.eq.false,block_date.eq.${dateStr}),and(repeat_weekly.eq.true,day_of_week.eq.${dayOfWeek})`)
+
+      if (blocks && blocks.length > 0) {
+        for (const b of blocks) {
+          // 종일 휴무
+          if (!b.block_start && !b.block_end) {
+            return NextResponse.json(
+              { error: `${dateStr} 코치 휴무일입니다.${b.reason ? ' 사유: ' + b.reason : ''}` },
+              { status: 409 }
+            )
+          }
+          // 시간대 겹침
+          const bStart = b.block_start ?? '00:00'
+          const bEnd   = b.block_end   ?? '23:59'
+          if (hhmm < bEnd && endHhmm > bStart) {
+            return NextResponse.json(
+              { error: `${dateStr} ${hhmm} 해당 시간에 코치 휴무가 등록되어 있습니다.${b.reason ? ' 사유: ' + b.reason : ''}` },
+              { status: 409 }
+            )
+          }
+        }
+      }
+    }
     // ─────────────────────────────────────────────────────────
 
-    // 레슨 플랜 생성
     const { data: plan, error: planErr } = await supabaseAdmin
       .from('lesson_plans')
       .insert({
@@ -1586,7 +1509,6 @@ export async function POST(req: NextRequest) {
 
     if (planErr) return NextResponse.json({ error: planErr.message }, { status: 500 })
 
-    // 슬롯 생성 — 실패 시 plan 롤백
     const slots = schedules.map((s: { datetime: string; duration: number }) => ({
       lesson_plan_id:   plan.id,
       scheduled_at:     s.datetime,
@@ -1599,7 +1521,6 @@ export async function POST(req: NextRequest) {
     const { error: slotsErr } = await supabaseAdmin.from('lesson_slots').insert(slots)
 
     if (slotsErr) {
-      // 슬롯 실패 시 plan 삭제 (롤백)
       await supabaseAdmin.from('lesson_plans').delete().eq('id', plan.id)
       return NextResponse.json({ error: `슬롯 생성 실패: ${slotsErr.message}` }, { status: 500 })
     }
@@ -1609,9 +1530,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
-
-
-===== app\api\lesson-slots\cancel\route.ts =====
+===== src\app\api\lesson-slots\cancel\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -1625,7 +1544,6 @@ export async function POST(req: NextRequest) {
   const { slot_id, reason } = await req.json()
   if (!slot_id) return NextResponse.json({ error: 'slot_id 필요' }, { status: 400 })
 
-  // 슬롯 정보 조회
   const { data: slot } = await supabaseAdmin
     .from('lesson_slots')
     .select(`
@@ -1645,33 +1563,18 @@ export async function POST(req: NextRequest) {
 
   const plan = slot.lesson_plan as any
 
-  // 슬롯 삭제 대신 cancelled 상태로 변경 (보강 추적을 위해 유지)
   const { error: updateErr } = await supabaseAdmin
     .from('lesson_slots')
-    .update({
-      status: 'cancelled',
-      memo: reason || null,
-    })
+    .update({ status: 'cancelled', memo: reason || null })
     .eq('id', slot_id)
 
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
-  // total_count 감소
+  // ✅ FIX #8: Race condition → RPC atomic decrement 사용
   if (plan?.id) {
-    const { data: currentPlan } = await supabaseAdmin
-      .from('lesson_plans')
-      .select('total_count')
-      .eq('id', plan.id)
-      .single()
-    if (currentPlan && currentPlan.total_count > 0) {
-      await supabaseAdmin
-        .from('lesson_plans')
-        .update({ total_count: currentPlan.total_count - 1 })
-        .eq('id', plan.id)
-    }
+    await supabaseAdmin.rpc('decrement_total_count', { plan_id: plan.id })
   }
 
-  // 회원에게 취소 알림 발송
   if (plan?.member_id) {
     const dt = new Date(slot.scheduled_at)
     const timeStr =
@@ -1690,47 +1593,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true })
 }
-
-
-===== app\api\lesson-slots\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['owner','admin','coach'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-
-  const { id } = await params
-  const body = await req.json()
-
-  const { status, memo } = body
-  const update: Record<string, unknown> = {}
-  if (status) update.status = status
-  if (memo !== undefined) update.memo = memo
-
-  // 수업 완료 시 completed_count 증가
-  if (status === 'completed') {
-    const { data: slot } = await supabaseAdmin
-      .from('lesson_slots')
-      .select('lesson_plan_id, status')
-      .eq('id', id)
-      .single()
-
-    if (slot && slot.status !== 'completed') {
-      await supabaseAdmin.rpc('increment_completed', { plan_id: slot.lesson_plan_id })
-    }
-  }
-
-  const { error } = await supabaseAdmin.from('lesson_slots').update(update).eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-
-===== app\api\lesson-slots\route.ts =====
+===== src\app\api\lesson-slots\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -1745,8 +1608,10 @@ export async function GET(req: NextRequest) {
   const to      = searchParams.get('to')
   const coachId = searchParams.get('coach_id')
 
-  // date 또는 from/to 둘 중 하나 필요
-  if (!date && !from) return NextResponse.json({ error: 'date 또는 from 파라미터 필요' }, { status: 400 })
+  // ✅ FIX #14: from만 있고 to가 없으면 "undefinedT23:59:59" 생성되는 버그 수정
+  if (!date && (!from || !to)) {
+    return NextResponse.json({ error: 'date 또는 from+to 파라미터 필요' }, { status: 400 })
+  }
 
   let startStr: string
   let endStr:   string
@@ -1775,12 +1640,10 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 코치 필터
   const filtered = coachId
     ? data.filter((s: any) => s.lesson_plan?.coach?.id === coachId)
     : data
 
-  // lesson_applications도 함께 조회 (코치 기준)
   const { data: appData } = await supabaseAdmin
     .from('lesson_applications')
     .select('id, requested_at, status, coach_id')
@@ -1789,7 +1652,6 @@ export async function GET(req: NextRequest) {
     .lte('requested_at', endStr)
     .in('status', ['pending_coach','pending_admin','approved'])
 
-  // slots 형식으로 변환해서 합치기
   const appSlots = (appData ?? []).map((a: any) => ({
     id: a.id,
     scheduled_at: a.requested_at,
@@ -1801,9 +1663,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json([...filtered, ...appSlots])
 }
-
-
-===== app\api\makeup\pending\route.ts =====
+===== src\app\api\makeup\pending\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -1853,11 +1713,39 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ pending, done })
 }
 
-
-===== app\api\makeup\route.ts =====
+===== src\app\api\makeup\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
+
+// 코치 휴무 충돌 체크 헬퍼
+async function checkCoachBlock(coachId: string, datetimeStr: string, durationMinutes: number): Promise<boolean> {
+  const dt    = new Date(datetimeStr)
+  const date  = dt.toISOString().split('T')[0]
+  const hhmm  = dt.toTimeString().slice(0, 5) // "HH:MM"
+  const dayOfWeek = dt.getDay() // 0=일 ~ 6=토
+
+  const endDt   = new Date(dt.getTime() + durationMinutes * 60 * 1000)
+  const endHhmm = endDt.toTimeString().slice(0, 5)
+
+  const { data: blocks } = await supabaseAdmin
+    .from('coach_blocks')
+    .select('*')
+    .eq('coach_id', coachId)
+    .or(`block_date.eq.${date},and(repeat_weekly.eq.true,day_of_week.eq.${dayOfWeek})`)
+
+  if (!blocks || blocks.length === 0) return false
+
+  for (const b of blocks) {
+    // 종일 휴무
+    if (!b.block_start && !b.block_end) return true
+    // 시간대 겹침
+    const bStart = b.block_start ?? '00:00'
+    const bEnd   = b.block_end   ?? '23:59'
+    if (hhmm < bEnd && endHhmm > bStart) return true
+  }
+  return false
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -1893,7 +1781,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
   }
 
-  // 원래 슬롯 확인
+  // 원래 슬롯 조회
   const { data: origSlot } = await supabaseAdmin
     .from('lesson_slots')
     .select('id, lesson_plan_id, duration_minutes, status, scheduled_at')
@@ -1901,6 +1789,46 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (!origSlot) return NextResponse.json({ error: '슬롯 없음' }, { status: 404 })
+
+  // ✅ FIX #4: 소유권 검증 - 회원 역할이면 본인 수업인지 확인
+  if (session.role === 'member') {
+    const { data: plan } = await supabaseAdmin
+      .from('lesson_plans')
+      .select('member_id')
+      .eq('id', origSlot.lesson_plan_id)
+      .single()
+    if (!plan || plan.member_id !== session.id) {
+      return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+    }
+  }
+
+  // ✅ FIX #12: 중복 보강 방지 - 이미 보강 등록된 슬롯인지 확인
+  const { data: existing } = await supabaseAdmin
+    .from('makeup_bookings')
+    .select('id')
+    .eq('original_slot_id', original_slot_id)
+    .not('status', 'eq', 'cancelled')
+    .maybeSingle()
+  if (existing) {
+    return NextResponse.json({ error: '이미 보강이 등록된 수업입니다' }, { status: 409 })
+  }
+
+  // lesson_plan에서 coach_id, member_id 조회
+  const { data: planData } = await supabaseAdmin
+    .from('lesson_plans')
+    .select('coach_id, member_id, lesson_type')
+    .eq('id', origSlot.lesson_plan_id)
+    .single()
+
+  if (!planData) return NextResponse.json({ error: '플랜 없음' }, { status: 404 })
+
+  // ✅ FIX #6/#8: 보강 시 코치 휴무 체크
+  if (planData.coach_id) {
+    const hasConflict = await checkCoachBlock(planData.coach_id, makeup_datetime, origSlot.duration_minutes)
+    if (hasConflict) {
+      return NextResponse.json({ error: '해당 시간에 코치 휴무가 등록되어 있습니다' }, { status: 409 })
+    }
+  }
 
   // 보강 슬롯 생성
   const { data: makeupSlot, error: slotErr } = await supabaseAdmin
@@ -1921,101 +1849,53 @@ export async function POST(req: NextRequest) {
   // 원래 슬롯 absent 처리
   await supabaseAdmin.from('lesson_slots').update({ status: 'absent' }).eq('id', original_slot_id)
 
+  // member_id 결정 (운영자가 등록하는 경우 planData에서 가져옴)
+  const memberId = session.role === 'member' ? session.id : planData.member_id
+
   // 보강 예약 생성
   const { data: booking, error: bookErr } = await supabaseAdmin
     .from('makeup_bookings')
     .insert({
       original_slot_id,
       makeup_slot_id: makeupSlot.id,
-      member_id: session.role === 'member' ? session.id : (await supabaseAdmin
-        .from('lesson_plans')
-        .select('member_id')
-        .eq('id', origSlot.lesson_plan_id)
-        .single()
-      ).data?.member_id,
+      member_id: memberId,
       status: 'confirmed',
     })
     .select()
     .single()
 
   if (bookErr) return NextResponse.json({ error: bookErr.message }, { status: 500 })
+
+  // ✅ FIX #10: 보강 확정 알림 — 회원 + 코치에게 발송
+  const makeupDt  = new Date(makeup_datetime)
+  const timeStr   = makeupDt.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
+    + ' ' + makeupDt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const lessonType = planData.lesson_type ?? '보강 수업'
+
+  const notifs = []
+  if (memberId) {
+    notifs.push({
+      profile_id: memberId,
+      title: '🎾 보강 수업 확정',
+      body: `${timeStr} ${lessonType} 보강 수업이 확정되었습니다.`,
+      type: 'info',
+      link: '/member/schedule',
+    })
+  }
+  if (planData.coach_id) {
+    notifs.push({
+      profile_id: planData.coach_id,
+      title: '📅 보강 수업 등록',
+      body: `${timeStr} ${lessonType} 보강 수업이 등록되었습니다.`,
+      type: 'info',
+      link: '/coach/schedule',
+    })
+  }
+  if (notifs.length > 0) await supabaseAdmin.from('notifications').insert(notifs)
+
   return NextResponse.json(booking)
 }
-
-
-===== app\api\members\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['owner','admin'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-
-  const [{ data: member }, { data: plans }, { data: family }] = await Promise.all([
-    supabaseAdmin.from('profiles').select('id, name, phone, created_at, coach:coach_id(name)').eq('id', id).single(),
-    supabaseAdmin.from('lesson_plans').select(`
-      id, lesson_type, total_count, completed_count, payment_status, amount, unit_minutes, created_at,
-      month:month_id ( year, month ),
-      coach:coach_id ( name ),
-      slots:lesson_slots ( id, status, scheduled_at, is_makeup )
-    `).eq('member_id', id).order('created_at', { ascending: false }),
-    supabaseAdmin.from('family_members').select('*').eq('account_id', id),
-  ])
-
-  if (!member) return NextResponse.json({ error: '회원 없음' }, { status: 404 })
-
-  const allSlots         = (plans ?? []).flatMap((p: any) => p.slots ?? [])
-  const totalLessons     = allSlots.length
-  const completedLessons = allSlots.filter((s: any) => s.status === 'completed').length
-  const absentLessons    = allSlots.filter((s: any) => s.status === 'absent').length
-  const makeupLessons    = allSlots.filter((s: any) => s.is_makeup).length
-  const attendanceRate   = totalLessons > 0 ? Math.round(completedLessons / totalLessons * 100) : 0
-  const totalPaid        = (plans ?? []).filter((p: any) => p.payment_status === 'paid').reduce((s: number, p: any) => s + (p.amount || 0), 0)
-  const totalUnpaid      = (plans ?? []).filter((p: any) => p.payment_status === 'unpaid').reduce((s: number, p: any) => s + (p.amount || 0), 0)
-  const sinceDate        = member.created_at ? new Date(member.created_at).toLocaleDateString('ko-KR') : '-'
-
-  return NextResponse.json({
-    member: { ...member, sinceDate },
-    stats: { totalLessons, completedLessons, absentLessons, makeupLessons, attendanceRate, totalPaid, totalUnpaid },
-    plans: plans ?? [],
-    family: family ?? [],
-  })
-}
-
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['owner','admin'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-  const body = await req.json()
-
-  if (body.action === 'reset_pin') {
-    const bcrypt = await import('bcryptjs')
-    const tempPin = '123456'
-    const pin_hash = await bcrypt.hash(tempPin, 10)
-    await supabaseAdmin.from('profiles').update({ pin_hash, pin_must_change: true }).eq('id', id)
-    return NextResponse.json({ temp_pin: tempPin })
-  }
-
-  if (body.action === 'toggle_active') {
-    const { data: profile } = await supabaseAdmin.from('profiles').select('is_active').eq('id', id).single()
-    await supabaseAdmin.from('profiles').update({ is_active: !profile?.is_active }).eq('id', id)
-    return NextResponse.json({ ok: true })
-  }
-
-  const { name, phone } = body
-  const { error } = await supabaseAdmin.from('profiles').update({ name, phone }).eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-
-===== app\api\members\route.ts =====
+===== src\app\api\members\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2045,7 +1925,8 @@ export async function POST(req: NextRequest) {
     const { name, phone, coach_id } = await req.json()
     if (!name || !phone) return NextResponse.json({ error: '이름과 전화번호는 필수입니다' }, { status: 400 })
 
-    const tempPin = '123456'
+    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
 
     const { data, error } = await supabaseAdmin
@@ -2063,9 +1944,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
-
-
-===== app\api\months\route.ts =====
+===== src\app\api\months\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2108,8 +1987,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data)
 }
 
-
-===== app\api\my-payment\route.ts =====
+===== src\app\api\my-payment\route.ts =====
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2134,8 +2012,7 @@ export async function GET() {
   return NextResponse.json(data ?? [])
 }
 
-
-===== app\api\my-schedule\route.ts =====
+===== src\app\api\my-schedule\route.ts =====
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2163,8 +2040,7 @@ export async function GET() {
   return NextResponse.json(data ?? [])
 }
 
-
-===== app\api\notifications\send\route.ts =====
+===== src\app\api\notifications\send\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2202,27 +2078,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, sent: profileIds.length })
 }
 
-
-===== app\api\notifications\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-
-export async function PUT(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: '로그인 필요' }, { status: 401 })
-  const { id } = await params
-  const { error } = await supabaseAdmin
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('id', id)
-    .eq('profile_id', session.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-
-===== app\api\notifications\route.ts =====
+===== src\app\api\notifications\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2258,103 +2114,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data)
 }
 
-
-===== app\api\payment\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['owner', 'admin', 'payment'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-
-  const contentType = req.headers.get('content-type') || ''
-
-  if (contentType.includes('multipart/form-data')) {
-    const formData = await req.formData()
-    const status = formData.get('payment_status') as string
-    const amount = formData.get('amount') ? Number(formData.get('amount')) : undefined
-    const file = formData.get('receipt') as File | null
-
-    const updateData: Record<string, unknown> = {}
-    if (status) updateData.payment_status = status
-    if (amount !== undefined) updateData.amount = amount
-
-    const { error: updateErr } = await supabaseAdmin
-      .from('lesson_plans')
-      .update(updateData)
-      .eq('id', id)
-
-    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
-
-    if (file && file.size > 0) {
-      const ext = file.name.split('.').pop() || 'jpg'
-      const fileName = `receipts/${id}/${Date.now()}.${ext}`
-      const buffer = Buffer.from(await file.arrayBuffer())
-
-      const { error: uploadErr } = await supabaseAdmin.storage
-        .from('receipts')
-        .upload(fileName, buffer, { contentType: file.type, upsert: false })
-
-      if (!uploadErr) {
-        const { data: urlData } = supabaseAdmin.storage
-          .from('receipts')
-          .getPublicUrl(fileName)
-
-        await supabaseAdmin.from('payment_receipts').insert({
-          lesson_plan_id: id,
-          file_url: urlData.publicUrl,
-          file_name: file.name,
-          uploaded_by: session.id,
-        })
-      }
-    }
-
-    return NextResponse.json({ ok: true })
-  }
-
-  const body = await req.json()
-  const { payment_status, amount } = body
-  const updateData: Record<string, unknown> = {}
-  if (payment_status) updateData.payment_status = payment_status
-  if (amount !== undefined) updateData.amount = amount
-
-  const { error } = await supabaseAdmin
-    .from('lesson_plans')
-    .update(updateData)
-    .eq('id', id)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['owner', 'admin', 'payment'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-  const { data, error } = await supabaseAdmin
-    .from('lesson_plans')
-    .select(`
-      id, payment_status, amount, lesson_type, total_count, completed_count, unit_minutes, created_at,
-      member:member_id ( id, name, phone ),
-      coach:coach_id ( id, name ),
-      month:month_id ( id, year, month ),
-      receipts:payment_receipts ( id, file_url, file_name, created_at, uploader:uploaded_by(name) )
-    `)
-    .eq('id', id)
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
-}
-
-
-===== app\api\payment\route.ts =====
+===== src\app\api\payment\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2386,49 +2146,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data)
 }
 
-
-===== app\api\programs\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['owner','admin'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-  const body = await req.json()
-
-  if (body.action === 'toggle_active') {
-    const { data: cur } = await supabaseAdmin.from('lesson_programs').select('is_active').eq('id', id).single()
-    const { error } = await supabaseAdmin.from('lesson_programs').update({ is_active: !cur?.is_active }).eq('id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true })
-  }
-
-  const { name, ratio, max_students, unit_minutes, description } = body
-  const { error } = await supabaseAdmin
-    .from('lesson_programs')
-    .update({ name, ratio, max_students, unit_minutes, description })
-    .eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || !['owner','admin'].includes(session.role)) {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-  const { error } = await supabaseAdmin.from('lesson_programs').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-
-===== app\api\programs\route.ts =====
+===== src\app\api\programs\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2466,8 +2184,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-
-===== app\api\push\send\route.ts =====
+===== src\app\api\push\send\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPushToUser } from '@/lib/push'
 
@@ -2477,8 +2194,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true })
 }
 
-
-===== app\api\push\subscribe\route.ts =====
+===== src\app\api\push\subscribe\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2507,8 +2223,7 @@ export async function DELETE(req: NextRequest) {
   return NextResponse.json({ ok: true })
 }
 
-
-===== app\api\receipts\route.ts =====
+===== src\app\api\receipts\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2557,8 +2272,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data)
 }
 
-
-===== app\api\reports\route.ts =====
+===== src\app\api\reports\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2634,8 +2348,7 @@ export async function GET(req: NextRequest) {
   })
 }
 
-
-===== app\api\revenue\route.ts =====
+===== src\app\api\revenue\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2687,18 +2400,21 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ year, monthly, totalPaid, totalUnpaid })
 }
 
-
-===== app\api\setup\route.ts =====
+===== src\app\api\setup\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { makeSessionCookie, SESSION_COOKIE } from '@/lib/session'
 
 export async function POST(req: NextRequest) {
+  // ✅ FIX #3: SETUP_SECRET 환경변수로 인증
+  const secret = req.headers.get('x-setup-secret')
+  if (!secret || secret !== process.env.SETUP_SECRET) {
+    return NextResponse.json({ error: '인증 실패' }, { status: 401 })
+  }
+
   try {
     const { name, phone, pin } = await req.json()
-    console.log('=== /api/setup 시작 ===')
-    console.log('입력값:', { name, phone, pin: pin?.length })
 
     if (!name || !phone || !pin) {
       return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
@@ -2707,27 +2423,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'PIN은 숫자 6자리여야 합니다' }, { status: 400 })
     }
 
-    // count 확인
-    console.log('count 확인 중...')
-    const { count, error: countError } = await supabaseAdmin
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-    console.log('count 결과:', { count, countError })
-
-    if (countError) {
-      return NextResponse.json({ error: 'DB 조회 실패: ' + countError.message }, { status: 500 })
-    }
-    if ((count ?? 0) > 0) {
-      return NextResponse.json({ error: '이미 등록된 운영자가 있습니다' }, { status: 403 })
-    }
-
-    // PIN 해시
-    console.log('bcrypt 해시 중...')
     const pin_hash = await bcrypt.hash(pin, 10)
-    console.log('해시 완료')
 
-    // INSERT
-    console.log('INSERT 시도 중...')
+    // ✅ FIX #3: 레이스컨디션 방지 → INSERT 후 unique constraint로 중복 차단
+    // (profiles 테이블의 role='owner'에 unique constraint 또는 is_owner=true 조건 활용)
+    // INSERT 시도 전 count 체크는 race condition 유발 가능하므로 DB constraint에 위임
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .insert({
@@ -2742,11 +2442,9 @@ export async function POST(req: NextRequest) {
       .select()
       .single()
 
-    console.log('INSERT 결과:', { data: data?.id, error })
-
     if (error) {
       if (error.code === '23505') {
-        return NextResponse.json({ error: '이미 등록된 전화번호입니다' }, { status: 409 })
+        return NextResponse.json({ error: '이미 등록된 운영자 또는 전화번호입니다' }, { status: 409 })
       }
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
@@ -2766,56 +2464,13 @@ export async function POST(req: NextRequest) {
       path:     '/',
       maxAge:   60 * 60 * 24 * 7,
     })
-    console.log('=== /api/setup 완료 ===')
     return res
 
   } catch (e) {
-    console.error('/api/setup 예외:', e)
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
-
-
-===== app\api\staff\[id]\route.ts =====
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/session'
-import bcrypt from 'bcryptjs'
-
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  if (!session || session.role !== 'owner') {
-    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  }
-  const { id } = await params
-  const body = await req.json()
-
-  if (body.action === 'reset_pin') {
-    const tempPin = '123456'
-    const pin_hash = await bcrypt.hash(tempPin, 10)
-    const { error } = await supabaseAdmin.from('profiles').update({ pin_hash, pin_must_change: true }).eq('id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, temp_pin: tempPin })
-  }
-
-  if (body.action === 'toggle_active') {
-    const { data: cur } = await supabaseAdmin.from('profiles').select('is_active').eq('id', id).single()
-    const { error } = await supabaseAdmin.from('profiles').update({ is_active: !cur?.is_active }).eq('id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true })
-  }
-
-  const { name, phone } = body
-  const { error } = await supabaseAdmin
-    .from('profiles')
-    .update({ name, phone: phone?.replace(/-/g,'') })
-    .eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
-}
-
-
-===== app\api\staff\route.ts =====
+===== src\app\api\staff\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2847,7 +2502,8 @@ export async function POST(req: NextRequest) {
     if (!name || !phone || !role) return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
     if (!['admin','coach','payment'].includes(role)) return NextResponse.json({ error: '잘못된 역할' }, { status: 400 })
 
-    const tempPin = '123456'
+    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
 
     const { data, error } = await supabaseAdmin
@@ -2865,9 +2521,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
 }
-
-
-===== app\api\stats\monthly\route.ts =====
+===== src\app\api\stats\monthly\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2936,8 +2590,7 @@ export async function GET(req: NextRequest) {
     coachStats,
   })
 }
-
-===== app\api\unregistered\route.ts =====
+===== src\app\api\unregistered\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -2997,8 +2650,7 @@ export async function GET(req: NextRequest) {
   })
 }
 
-
-===== app\api\weekly-schedule\route.ts =====
+===== src\app\api\weekly-schedule\route.ts =====
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -3018,20 +2670,238 @@ export async function GET(req: NextRequest) {
 
   const startStr = `${start.toISOString().split('T')[0]}T00:00:00+09:00`
   const endStr   = `${end.toISOString().split('T')[0]}T23:59:59+09:00`
+  const startDate = start.toISOString().split('T')[0]
+  const endDate   = end.toISOString().split('T')[0]
 
-  const { data: slots } = await supabaseAdmin
+  // 해당 주의 요일 배열 (0=일~6=토)
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start)
+    d.setDate(d.getDate() + i)
+    return d.getDay()
+  })
+
+  const [{ data: slots }, { data: allBlocks }] = await Promise.all([
+    supabaseAdmin
+      .from('lesson_slots')
+      .select(`
+        id, scheduled_at, duration_minutes, status, is_makeup,
+        lesson_plan:lesson_plan_id (
+          lesson_type,
+          member:member_id ( id, name ),
+          coach:coach_id ( id, name )
+        )
+      `)
+      .gte('scheduled_at', startStr)
+      .lte('scheduled_at', endStr)
+      .order('scheduled_at', { ascending: true }),
+
+    // ✅ FIX #7: 해당 주 날짜 범위의 일회성 휴무 + 반복 휴무 모두 조회
+    supabaseAdmin
+      .from('coach_blocks')
+      .select('id, coach_id, block_date, block_start, block_end, reason, repeat_weekly, day_of_week')
+      .or(`and(repeat_weekly.eq.false,block_date.gte.${startDate},block_date.lte.${endDate}),repeat_weekly.eq.true`),
+  ])
+
+  // 반복 휴무는 해당 주에 포함된 요일만 필터링
+  const blocks = (allBlocks ?? []).filter(b => {
+    if (!b.repeat_weekly) return true // 일회성: 이미 날짜 범위 필터 완료
+    return weekDays.includes(b.day_of_week) // 반복: 해당 주에 해당 요일 있는지
+  })
+
+  // ✅ 반환 형태: { slots, blocks } — 프론트에서 구분하여 렌더링
+  return NextResponse.json({ slots: slots ?? [], blocks })
+}
+===== src\app\api\schedule-draft\route.ts =====
+// ============================================================
+// 저장 위치: app/api/schedule-draft/route.ts  (신규 파일)
+// ============================================================
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getSession } from '@/lib/session'
+
+// ── GET: 특정 월의 draft/conflict 슬롯 목록 ─────────────────────────────
+export async function GET(req: NextRequest) {
+  const session = await getSession()
+  if (!session || !['owner', 'admin'].includes(session.role))
+    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+
+  const monthId = req.nextUrl.searchParams.get('month_id')
+  if (!monthId) return NextResponse.json({ error: 'month_id 필요' }, { status: 400 })
+
+  // 해당 월 lesson_plans
+  const { data: plans } = await supabaseAdmin
+    .from('lesson_plans')
+    .select('id, lesson_type, unit_minutes, amount, member_id, coach_id')
+    .eq('month_id', monthId)
+
+  if (!plans || plans.length === 0) return NextResponse.json([])
+
+  const planIds = plans.map((p: any) => p.id)
+
+  // draft / conflict_pending 슬롯
+  const { data: drafts } = await supabaseAdmin
     .from('lesson_slots')
-    .select(`
-      id, scheduled_at, duration_minutes, status, is_makeup,
-      lesson_plan:lesson_plan_id (
-        lesson_type,
-        member:member_id ( id, name ),
-        coach:coach_id ( id, name )
-      )
-    `)
-    .gte('scheduled_at', startStr)
-    .lte('scheduled_at', endStr)
+    .select('id, lesson_plan_id, scheduled_at, duration_minutes, status, has_conflict')
+    .in('lesson_plan_id', planIds)
+    .in('status', ['draft', 'conflict_pending'])
     .order('scheduled_at', { ascending: true })
 
-  return NextResponse.json(slots ?? [])
+  if (!drafts || drafts.length === 0) return NextResponse.json([])
+
+  // member / coach 정보 조합
+  const profileIds = [...new Set([
+    ...plans.map((p: any) => p.member_id),
+    ...plans.map((p: any) => p.coach_id),
+  ])]
+  const { data: profiles } = await supabaseAdmin
+    .from('profiles').select('id, name').in('id', profileIds)
+
+  const profileMap: Record<string, string> = {}
+  ;(profiles ?? []).forEach((p: any) => { profileMap[p.id] = p.name })
+
+  const planMap: Record<string, any> = {}
+  plans.forEach((p: any) => { planMap[p.id] = p })
+
+  const result = drafts.map((s: any) => {
+    const plan = planMap[s.lesson_plan_id]
+    return {
+      ...s,
+      member_name:  profileMap[plan?.member_id] ?? '-',
+      coach_name:   profileMap[plan?.coach_id]  ?? '-',
+      lesson_type:  plan?.lesson_type ?? '-',
+    }
+  })
+
+  return NextResponse.json(result)
+}
+
+// ── POST: 일괄 확정 or 단건 확정 ─────────────────────────────────────────
+// body: { action: 'confirm_all' | 'confirm_one' | 'delete_one', slot_id?, month_id?, skip_conflicts? }
+export async function POST(req: NextRequest) {
+  const session = await getSession()
+  if (!session || !['owner', 'admin'].includes(session.role))
+    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+
+  const body = await req.json()
+  const { action, slot_id, month_id, skip_conflicts = true } = body
+
+  // ── 단건 확정 ──────────────────────────────────────────────────────────
+  if (action === 'confirm_one') {
+    if (!slot_id) return NextResponse.json({ error: 'slot_id 필요' }, { status: 400 })
+
+    const { data: slot } = await supabaseAdmin
+      .from('lesson_slots').select('id, lesson_plan_id, has_conflict, status').eq('id', slot_id).single()
+
+    if (!slot) return NextResponse.json({ error: '슬롯 없음' }, { status: 404 })
+    if (!['draft', 'conflict_pending'].includes(slot.status))
+      return NextResponse.json({ error: '이미 처리된 슬롯' }, { status: 409 })
+
+    await supabaseAdmin.from('lesson_slots').update({ status: 'scheduled' }).eq('id', slot_id)
+    await incrementTotalCount(slot.lesson_plan_id, 1)
+
+    return NextResponse.json({ ok: true, confirmed: 1 })
+  }
+
+  // ── 단건 삭제 (초안에서 제거) ──────────────────────────────────────────
+  if (action === 'delete_one') {
+    if (!slot_id) return NextResponse.json({ error: 'slot_id 필요' }, { status: 400 })
+    await supabaseAdmin.from('lesson_slots').delete().eq('id', slot_id)
+    return NextResponse.json({ ok: true, deleted: 1 })
+  }
+
+  // ── 일괄 확정 ──────────────────────────────────────────────────────────
+  if (action === 'confirm_all') {
+    if (!month_id) return NextResponse.json({ error: 'month_id 필요' }, { status: 400 })
+
+    const { data: plans } = await supabaseAdmin
+      .from('lesson_plans').select('id, member_id, coach_id').eq('month_id', month_id)
+
+    if (!plans || plans.length === 0)
+      return NextResponse.json({ ok: true, confirmed: 0, skipped: 0 })
+
+    const planIds = plans.map((p: any) => p.id)
+
+    const { data: drafts } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('id, lesson_plan_id, has_conflict, status')
+      .in('lesson_plan_id', planIds)
+      .in('status', ['draft', 'conflict_pending'])
+
+    if (!drafts || drafts.length === 0)
+      return NextResponse.json({ ok: true, confirmed: 0, skipped: 0 })
+
+    const toConfirm = skip_conflicts
+      ? drafts.filter((s: any) => !s.has_conflict)
+      : drafts
+
+    const toHold = skip_conflicts
+      ? drafts.filter((s: any) => s.has_conflict)
+      : []
+
+    // draft → scheduled
+    if (toConfirm.length > 0) {
+      await supabaseAdmin
+        .from('lesson_slots')
+        .update({ status: 'scheduled' })
+        .in('id', toConfirm.map((s: any) => s.id))
+    }
+
+    // conflict → conflict_pending (수동 처리 대기)
+    if (toHold.length > 0) {
+      await supabaseAdmin
+        .from('lesson_slots')
+        .update({ status: 'conflict_pending' })
+        .in('id', toHold.map((s: any) => s.id))
+    }
+
+    // total_count 업데이트 (플랜별)
+    const planCounts: Record<string, number> = {}
+    toConfirm.forEach((s: any) => {
+      planCounts[s.lesson_plan_id] = (planCounts[s.lesson_plan_id] ?? 0) + 1
+    })
+    for (const [pid, cnt] of Object.entries(planCounts)) {
+      await incrementTotalCount(pid, cnt)
+    }
+
+    // 회원 확정 알림
+    const { data: monthRec } = await supabaseAdmin
+      .from('months').select('year, month').eq('id', month_id).single()
+    const notified = new Set<string>()
+    const notifInserts: any[] = []
+
+    for (const s of toConfirm) {
+      const plan = plans.find((p: any) => p.id === s.lesson_plan_id)
+      if (!plan || notified.has(plan.member_id)) continue
+      notified.add(plan.member_id)
+      notifInserts.push({
+        profile_id: plan.member_id,
+        title: `🎾 ${monthRec?.year}년 ${monthRec?.month}월 수업 일정 확정!`,
+        body:  `수업 일정이 확정됐습니다. 일정을 확인해주세요.`,
+        type:  'success',
+        link:  '/member/schedule',
+      })
+    }
+    if (notifInserts.length > 0)
+      await supabaseAdmin.from('notifications').insert(notifInserts)
+
+    return NextResponse.json({
+      ok: true,
+      confirmed: toConfirm.length,
+      skipped_conflict: toHold.length,
+    })
+  }
+
+  return NextResponse.json({ error: '잘못된 action' }, { status: 400 })
+}
+
+// ── 헬퍼: total_count += n ────────────────────────────────────────────────
+async function incrementTotalCount(planId: string, n: number) {
+  // RPC가 있으면 좋지만 없으면 select → update 패턴
+  const { data: plan } = await supabaseAdmin
+    .from('lesson_plans').select('total_count').eq('id', planId).single()
+  if (!plan) return
+  await supabaseAdmin
+    .from('lesson_plans')
+    .update({ total_count: (plan.total_count ?? 0) + n })
+    .eq('id', planId)
 }

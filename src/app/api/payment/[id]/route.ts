@@ -29,6 +29,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
     if (file && file.size > 0) {
+      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    return NextResponse.json({ error: '지원하지 않는 파일 형식입니다. (jpg, png, webp만 가능)' }, { status: 400 })
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return NextResponse.json({ error: '파일 크기는 5MB 이하만 가능합니다.' }, { status: 400 })
+  }
       const ext = file.name.split('.').pop() || 'jpg'
       const fileName = `receipts/${id}/${Date.now()}.${ext}`
       const buffer = Buffer.from(await file.arrayBuffer())

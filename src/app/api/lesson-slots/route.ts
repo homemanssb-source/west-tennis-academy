@@ -12,8 +12,10 @@ export async function GET(req: NextRequest) {
   const to      = searchParams.get('to')
   const coachId = searchParams.get('coach_id')
 
-  // date 또는 from/to 둘 중 하나 필요
-  if (!date && !from) return NextResponse.json({ error: 'date 또는 from 파라미터 필요' }, { status: 400 })
+  // ✅ FIX #14: from만 있고 to가 없으면 "undefinedT23:59:59" 생성되는 버그 수정
+  if (!date && (!from || !to)) {
+    return NextResponse.json({ error: 'date 또는 from+to 파라미터 필요' }, { status: 400 })
+  }
 
   let startStr: string
   let endStr:   string
@@ -42,12 +44,10 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 코치 필터
   const filtered = coachId
     ? data.filter((s: any) => s.lesson_plan?.coach?.id === coachId)
     : data
 
-  // lesson_applications도 함께 조회 (코치 기준)
   const { data: appData } = await supabaseAdmin
     .from('lesson_applications')
     .select('id, requested_at, status, coach_id')
@@ -56,7 +56,6 @@ export async function GET(req: NextRequest) {
     .lte('requested_at', endStr)
     .in('status', ['pending_coach','pending_admin','approved'])
 
-  // slots 형식으로 변환해서 합치기
   const appSlots = (appData ?? []).map((a: any) => ({
     id: a.id,
     scheduled_at: a.requested_at,
