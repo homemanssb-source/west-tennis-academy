@@ -3,14 +3,35 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
 // GET - 신청 목록 조회
-// owner/admin: 전체 | coach: 본인 관련 | member: 본인 신청
+// type=member_join  → member_applications (회원 가입 신청) - owner/admin용
+// type=lesson       → lesson_applications (수업 신청) - 기본값
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: '로그인 필요' }, { status: 401 })
 
   const { searchParams } = req.nextUrl
   const status = searchParams.get('status')
+  const type   = searchParams.get('type') // 'member_join' | 'lesson'
 
+  // ── 회원 가입신청 조회 (owner/admin 전용) ──────────────────────────────
+  if (type === 'member_join') {
+    if (!['owner', 'admin'].includes(session.role)) {
+      return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+    }
+
+    let query = supabaseAdmin
+      .from('member_applications')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (status) query = query.eq('status', status)
+
+    const { data, error } = await query
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data ?? [])
+  }
+
+  // ── 수업 신청 조회 (기본값) ────────────────────────────────────────────
   let query = supabaseAdmin
     .from('lesson_applications')
     .select(`
@@ -35,7 +56,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data ?? [])
 }
 
-// POST - 회원이 수업 신청
+// POST - 회원이 수업 신청 (lesson_applications)
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session || session.role !== 'member') {
@@ -47,14 +68,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
   }
 
-  // 중복 신청 확인 (같은 시간대에 이미 신청한 경우)
+  // 중복 신청 확인
   const { data: existing } = await supabaseAdmin
     .from('lesson_applications')
     .select('id')
     .eq('member_id', session.id)
     .eq('requested_at', requested_at)
     .in('status', ['pending_coach', 'pending_admin', 'approved'])
-    .single()
+    .maybeSingle()
 
   if (existing) {
     return NextResponse.json({ error: '해당 시간에 이미 신청이 있습니다' }, { status: 409 })
@@ -66,7 +87,7 @@ export async function POST(req: NextRequest) {
     .select('id')
     .eq('scheduled_at', requested_at)
     .in('status', ['scheduled', 'completed'])
-    .single()
+    .maybeSingle()
 
   if (slotConflict) {
     return NextResponse.json({ error: '해당 시간은 이미 수업이 있습니다' }, { status: 409 })

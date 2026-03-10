@@ -28,7 +28,8 @@ export default function ApplicationsPage() {
 
   const load = async (s: string) => {
     setLoading(true)
-    const res = await fetch(`/api/applications?status=${s}`)
+    // ✅ type=member_join 추가 → member_applications 테이블 조회
+    const res = await fetch(`/api/applications?type=member_join&status=${s}`)
     const data = await res.json()
     setApps(Array.isArray(data) ? data : [])
     setLoading(false)
@@ -116,14 +117,14 @@ export default function ApplicationsPage() {
             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.2rem', fontWeight: 700, color: '#111827', marginBottom: '1.25rem' }}>가입서 상세</h2>
 
             {[
-              { label: '이름',        value: selected.name },
-              { label: '전화번호',    value: selected.phone },
-              { label: '생년월일',    value: selected.birth_date ?? '-' },
-              { label: '주소',        value: selected.address ?? '-' },
-              { label: '비상연락처',  value: selected.emergency_contact ?? '-' },
+              { label: '이름',          value: selected.name },
+              { label: '전화번호',      value: selected.phone },
+              { label: '생년월일',      value: selected.birth_date ?? '-' },
+              { label: '주소',          value: selected.address ?? '-' },
+              { label: '비상연락처',    value: selected.emergency_contact ?? '-' },
               { label: '건강 특이사항', value: selected.health_notes ?? '-' },
               { label: '희망 수업일정', value: selected.desired_schedule ?? '-' },
-              { label: '신청일',      value: fmt(selected.created_at) },
+              { label: '신청일',        value: fmt(selected.created_at) },
             ].map(row => (
               <div key={row.label} style={{ display: 'flex', gap: '0.75rem', padding: '0.625rem 0', borderBottom: '1px solid #f9fafb' }}>
                 <span style={{ width: '90px', flexShrink: 0, fontSize: '0.8rem', fontWeight: 600, color: '#6b7280' }}>{row.label}</span>
