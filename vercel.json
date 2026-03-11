@@ -1,9 +1,0 @@
-﻿{
-  "crons": [
-    { "path": "/api/cron/auto-complete",     "schedule": "0 15 * * *" },
-    { "path": "/api/cron/lesson-remind",     "schedule": "0 8 * * *"  },
-    { "path": "/api/cron/unpaid-notify",     "schedule": "0 9 1 * *"  },
-    { "path": "/api/cron/lesson-fee-notify", "schedule": "0 9 * * 1"  },
-    { "path": "/api/cron/sync-next-month",   "schedule": "0 0 15 * *" }
-  ]
-}
