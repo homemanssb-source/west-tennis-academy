@@ -27,6 +27,7 @@ export default function NotificationBell() {
   const [notifs,  setNotifs]  = useState<Notification[]>([])
   const [open,    setOpen]    = useState(false)
   const [loading, setLoading] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
 
   const unread = notifs.filter(n => !n.is_read).length
 
@@ -40,66 +41,191 @@ export default function NotificationBell() {
 
   useEffect(() => { load() }, [])
 
-  const handleRead = async (n: Notification) => {
-    if (!n.is_read) {
-      await fetch(`/api/notifications/${n.id}`, { method: 'PUT' })
-      setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
-    }
-    if (n.link) router.push(n.link)
-    setOpen(false)
+  const markAllRead = async () => {
+    await fetch('/api/notifications', { method: 'PATCH' })
+    setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
   }
 
-  const fmtDate = (d: string) => {
-    const diff = Date.now() - new Date(d).getTime()
-    const min = Math.floor(diff / 60000)
-    if (min < 1) return '방금'
-    if (min < 60) return `${min}분 전`
-    const hr = Math.floor(min / 60)
-    if (hr < 24) return `${hr}시간 전`
-    return `${Math.floor(hr / 24)}일 전`
+  const handleClick = async (n: Notification) => {
+    if (!n.is_read) {
+      await fetch(`/api/notifications/${n.id}`, { method: 'PATCH' })
+      setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
+    }
+    if (n.link) {
+      setOpen(false)
+      router.push(n.link)
+    }
+  }
+
+  const handlePushToggle = async () => {
+    setPushLoading(true)
+    try {
+      if (subscribed) {
+        await unsubscribe()
+      } else {
+        await subscribe()
+      }
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
+  const fmt = (dt: string) => {
+    const d = new Date(dt)
+    const now = new Date()
+    const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
+    if (diff < 60) return '방금'
+    if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
+    return `${Math.floor(diff / 86400)}일 전`
   }
 
   return (
     <div style={{ position: 'relative' }}>
-      <button onClick={() => { setOpen(!open); if (!open) load() }}
-        style={{ background: 'rgba(255,255,255,.2)', border: 'none', borderRadius: '0.625rem', padding: '0.5rem', cursor: 'pointer', position: 'relative', fontSize: '1.25rem', lineHeight: 1 }}>
-        🔔
-        {unread > 0 && (
-          <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, width: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {unread > 9 ? '9+' : unread}
-          </span>
-        )}
-      </button>
+      {/* 벨 버튼 + 푸시 토글 버튼 묶음 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
 
+        {/* 푸시 알림 구독 버튼 */}
+        {supported && (
+          <button
+            onClick={handlePushToggle}
+            disabled={pushLoading}
+            title={subscribed ? '푸시 알림 끄기' : '푸시 알림 켜기'}
+            style={{
+              background: subscribed ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
+              border: `1.5px solid ${subscribed ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)'}`,
+              borderRadius: '0.625rem',
+              padding: '0.35rem 0.6rem',
+              cursor: pushLoading ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              color: 'white',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ fontSize: '0.85rem' }}>{subscribed ? '🔔' : '🔕'}</span>
+            <span>{pushLoading ? '...' : subscribed ? 'ON' : 'OFF'}</span>
+          </button>
+        )}
+
+        {/* 벨 아이콘 */}
+        <button
+          onClick={() => { setOpen(o => !o); if (!open) load() }}
+          style={{
+            position: 'relative',
+            background: 'rgba(255,255,255,0.15)',
+            border: '1.5px solid rgba(255,255,255,0.3)',
+            borderRadius: '0.75rem',
+            width: '2.5rem',
+            height: '2.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '1.1rem',
+          }}
+        >
+          🔔
+          {unread > 0 && (
+            <span style={{
+              position: 'absolute',
+              top: '-4px',
+              right: '-4px',
+              background: '#ef4444',
+              color: 'white',
+              fontSize: '0.6rem',
+              fontWeight: 700,
+              minWidth: '16px',
+              height: '16px',
+              borderRadius: '9999px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 3px',
+            }}>
+              {unread}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* 드롭다운 알림 목록 */}
       {open && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
-          <div style={{ position: 'absolute', right: 0, top: '110%', width: '320px', background: 'white', borderRadius: '1rem', boxShadow: '0 10px 40px rgba(0,0,0,.15)', zIndex: 50, overflow: 'hidden' }}>
-            <div style={{ padding: '1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#111827' }}>알림</span>
-              {unread > 0 && <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{unread}개 안읽음</span>}
+          {/* 배경 클릭 닫기 */}
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+            onClick={() => setOpen(false)}
+          />
+          <div style={{
+            position: 'absolute',
+            top: 'calc(100% + 8px)',
+            right: 0,
+            width: '320px',
+            maxWidth: 'calc(100vw - 2rem)',
+            background: 'white',
+            borderRadius: '1rem',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+            zIndex: 50,
+            overflow: 'hidden',
+          }}>
+            {/* 헤더 */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.875rem 1rem',
+              borderBottom: '1px solid #f3f4f6',
+            }}>
+              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>
+                알림 {unread > 0 && <span style={{ color: '#ef4444' }}>{unread}개 안읽음</span>}
+              </span>
+              {unread > 0 && (
+                <button
+                  onClick={markAllRead}
+                  style={{ fontSize: '0.75rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  모두 읽음
+                </button>
+              )}
             </div>
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+
+            {/* 알림 목록 */}
+            <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
               {loading ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>불러오는 중...</div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>로딩 중...</div>
               ) : notifs.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔔</div>
-                  <p style={{ fontSize: '0.875rem' }}>알림이 없습니다</p>
-                </div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>알림이 없습니다</div>
               ) : (
                 notifs.map(n => {
-                  const s = TYPE_STYLE[n.type] ?? TYPE_STYLE.info
+                  const st = TYPE_STYLE[n.type] ?? TYPE_STYLE.info
                   return (
-                    <div key={n.id} onClick={() => handleRead(n)}
-                      style={{ padding: '0.875rem 1rem', borderBottom: '1px solid #f9fafb', cursor: 'pointer', background: n.is_read ? 'white' : '#f0fdf4', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-                      <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>{s.emoji}</span>
+                    <div
+                      key={n.id}
+                      onClick={() => handleClick(n)}
+                      style={{
+                        padding: '0.875rem 1rem',
+                        borderBottom: '1px solid #f9fafb',
+                        cursor: n.link ? 'pointer' : 'default',
+                        background: n.is_read ? 'white' : '#f0f9ff',
+                        display: 'flex',
+                        gap: '0.75rem',
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      <span style={{ fontSize: '1rem', flexShrink: 0, marginTop: '1px' }}>{st.emoji}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: n.is_read ? 500 : 700, fontSize: '0.875rem', color: '#111827' }}>{n.title}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>{n.body}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '4px' }}>{fmtDate(n.created_at)}</div>
+                        <div style={{ fontWeight: n.is_read ? 500 : 700, fontSize: '0.8rem', color: '#111827' }}>{n.title}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px', lineHeight: 1.4 }}>{n.body}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '4px' }}>{fmt(n.created_at)}</div>
                       </div>
-                      {!n.is_read && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#16A34A', flexShrink: 0, marginTop: '4px' }}></div>}
+                      {!n.is_read && (
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3b82f6', flexShrink: 0, marginTop: '4px' }} />
+                      )}
                     </div>
                   )
                 })
@@ -111,4 +237,3 @@ export default function NotificationBell() {
     </div>
   )
 }
-
