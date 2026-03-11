@@ -33,3 +33,27 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession()
+  if (!session || !['owner', 'admin'].includes(session.role)) {
+    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+  }
+
+  const { id } = await params
+
+  // 1. lesson_applications.original_slot_id 참조 해제
+  await supabaseAdmin
+    .from('lesson_applications')
+    .update({ original_slot_id: null })
+    .eq('original_slot_id', id)
+
+  // 2. 슬롯 삭제
+  const { error } = await supabaseAdmin
+    .from('lesson_slots')
+    .delete()
+    .eq('id', id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
