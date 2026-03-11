@@ -19,10 +19,11 @@ interface Month { id: string; year: number; month: number }
 interface Coach { id: string; name: string }
 
 export default function LessonPlansListPage() {
-  const [plans,   setPlans]   = useState<Plan[]>([])
-  const [months,  setMonths]  = useState<Month[]>([])
-  const [coaches, setCoaches] = useState<Coach[]>([])
-  const [loading, setLoading] = useState(true)
+  const [plans,      setPlans]      = useState<Plan[]>([])
+  const [months,     setMonths]     = useState<Month[]>([])
+  const [coaches,    setCoaches]    = useState<Coach[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const [monthId, setMonthId] = useState('')
   const [coachId, setCoachId] = useState('')
@@ -54,6 +55,19 @@ export default function LessonPlansListPage() {
     const d = await res.json()
     setPlans(Array.isArray(d) ? d : [])
     setLoading(false)
+  }
+
+  const handleDelete = async (plan: Plan, e: React.MouseEvent) => {
+    e.preventDefault()  // Link 클릭 방지
+    e.stopPropagation()
+    const label = `${plan.member?.name} · ${plan.month?.year}년 ${plan.month?.month}월 · ${plan.lesson_type}`
+    if (!confirm(`[${label}]\n\n이 수업 플랜을 삭제할까요?\n수업 슬롯, 신청 기록이 모두 삭제됩니다.\n되돌릴 수 없습니다.`)) return
+    setDeletingId(plan.id)
+    const res = await fetch(`/api/lesson-plans/${plan.id}`, { method: 'DELETE' })
+    const d = await res.json()
+    setDeletingId(null)
+    if (d.error) { alert('삭제 실패: ' + d.error); return }
+    load()
   }
 
   const filtered = search
@@ -136,54 +150,74 @@ export default function LessonPlansListPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
             {filtered.map(p => {
-              const pct = p.total_count > 0 ? Math.round(p.completed_count / p.total_count * 100) : 0
+              const pct        = p.total_count > 0 ? Math.round(p.completed_count / p.total_count * 100) : 0
+              const isDeleting = deletingId === p.id
               return (
-                <Link key={p.id} href={`/owner/planlist/${p.id}`} style={{ textDecoration: 'none' }}>
-                  <div style={{
-                    background: 'white',
-                    border: `1.5px solid ${p.payment_status === 'paid' ? '#86efac' : '#fecaca'}`,
-                    borderRadius: '1rem', padding: '1rem 1.25rem', cursor: 'pointer',
-                    transition: 'box-shadow .15s',
-                  }}
-                    onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
-                    onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{p.member?.name}</span>
-                          <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px',
-                            background: p.payment_status === 'paid' ? '#dcfce7' : '#fee2e2',
-                            color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
-                            {p.payment_status === 'paid' ? '납부' : '미납'}
-                          </span>
-                          <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
-                            {p.month?.year}년 {p.month?.month}월
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '6px' }}>
-                          {p.coach?.name} 코치 · {p.lesson_type} · {p.unit_minutes}분
-                        </div>
-                        {/* 진도 바 */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                          <div style={{ flex: 1, height: '6px', background: '#f3f4f6', borderRadius: '9999px', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${pct}%`, background: '#3b82f6', borderRadius: '9999px' }} />
+                <div key={p.id} style={{ position: 'relative', opacity: isDeleting ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                  <Link href={`/owner/planlist/${p.id}`} style={{ textDecoration: 'none' }}>
+                    <div style={{
+                      background: 'white',
+                      border: `1.5px solid ${p.payment_status === 'paid' ? '#86efac' : '#fecaca'}`,
+                      borderRadius: '1rem', padding: '1rem 1.25rem', cursor: 'pointer',
+                      transition: 'box-shadow .15s',
+                    }}
+                      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
+                      onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{p.member?.name}</span>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px',
+                              background: p.payment_status === 'paid' ? '#dcfce7' : '#fee2e2',
+                              color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
+                              {p.payment_status === 'paid' ? '납부' : '미납'}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
+                              {p.month?.year}년 {p.month?.month}월
+                            </span>
                           </div>
-                          <span style={{ fontSize: '0.75rem', color: '#6b7280', flexShrink: 0 }}>
-                            {p.completed_count}/{p.total_count}회
-                          </span>
+                          <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '6px' }}>
+                            {p.coach?.name} 코치 · {p.lesson_type} · {p.unit_minutes}분
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                            <div style={{ flex: 1, height: '6px', background: '#f3f4f6', borderRadius: '9999px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${pct}%`, background: '#3b82f6', borderRadius: '9999px' }} />
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: '#6b7280', flexShrink: 0 }}>
+                              {p.completed_count}/{p.total_count}회
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '1.1rem',
-                          color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
-                          {fmt(p.amount)}원
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '1.1rem',
+                            color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
+                            {fmt(p.amount)}원
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '2px' }}>›</div>
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '2px' }}>›</div>
                       </div>
                     </div>
-                  </div>
-                </Link>
+                  </Link>
+
+                  {/* ── 삭제 버튼 (카드 바깥, Link와 분리) ── */}
+                  <button
+                    onClick={(e) => handleDelete(p, e)}
+                    disabled={isDeleting}
+                    style={{
+                      position: 'absolute', top: '50%', right: '3.5rem',
+                      transform: 'translateY(-50%)',
+                      padding: '5px 10px',
+                      background: '#fef2f2', color: '#b91c1c',
+                      border: '1px solid #fecaca', borderRadius: '0.5rem',
+                      fontSize: '0.72rem', fontWeight: 700,
+                      cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      fontFamily: 'Noto Sans KR, sans-serif',
+                      zIndex: 10,
+                    }}>
+                    {isDeleting ? '삭제 중...' : '🗑️ 삭제'}
+                  </button>
+                </div>
               )
             })}
           </div>
