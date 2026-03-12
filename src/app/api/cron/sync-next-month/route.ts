@@ -1,273 +1,282 @@
-// ============================================================
-// 저장 위치: app/api/cron/sync-next-month/route.ts
-// 기존 파일 전체 교체
-// ============================================================
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-// ── 유틸: ISO KST 문자열 파싱 (UTC 변환 없이 문자열 직접 읽기) ──────────
-function parseKST(iso: string): { year: number; month: number; date: number; hh: number; mm: number; day: number } {
-  // "2025-03-04T10:00:00+09:00" → 직접 파싱
-  const [datePart, timePart] = iso.split('T')
-  const [y, mo, d] = datePart.split('-').map(Number)
-  const [hStr] = timePart.split('+')
-  const [hh, mm] = hStr.split(':').map(Number)
-  const jsDate = new Date(y, mo - 1, d)   // 로컬 → 요일 계산용
-  return { year: y, month: mo, date: d, hh, mm, day: jsDate.getDay() }
-}
-
-function makeISOKST(year: number, month: number, date: number, hh: number, mm: number): string {
-  return `${year}-${String(month).padStart(2,'0')}-${String(date).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00+09:00`
-}
-
-// 지정 월의 특정 요일(0=일..6=토) 날짜 목록
-function getDatesForDay(year: number, month: number, dayOfWeek: number): number[] {
-  const dates: number[] = []
-  for (let d = 1; d <= 31; d++) {
-    const jsDate = new Date(year, month - 1, d)
-    if (jsDate.getMonth() !== month - 1) break
-    if (jsDate.getDay() === dayOfWeek) dates.push(d)
-  }
-  return dates
-}
-
-// ── 패턴 추출: 보강·취소 제외 정규 수업 요일+시간 추출 ──────────────────
-function extractPattern(slots: any[]): Array<{ day: number; time: string }> | null {
-  const regular = slots.filter((s: any) => !s.is_makeup && s.status !== 'cancelled')
-  if (regular.length < 2) return null
-
-  const counts: Record<string, number> = {}
-  for (const s of regular) {
-    const { day, hh, mm } = parseKST(s.scheduled_at)
-    const key = `${day}_${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`
-    counts[key] = (counts[key] ?? 0) + 1
-  }
-
-  // 전체 슬롯 수 기준 threshold (단발 추가수업 제외)
-  const threshold = Math.max(2, Math.floor(regular.length / 5))
-  const result = Object.entries(counts)
-    .filter(([, cnt]) => cnt >= threshold)
-    .map(([key]) => {
-      const [dayStr, time] = key.split('_')
-      return { day: parseInt(dayStr), time }
-    })
-
-  return result.length > 0 ? result : null
-}
-
-// ── 휴무 충돌 체크 ──────────────────────────────────────────────────────
-function hasConflict(
-  blocks: any[],
-  coachId: string,
-  dateStr: string,   // "YYYY-MM-DD"
-  timeStr: string    // "HH:MM"
-): boolean {
-  return blocks
-    .filter((b: any) => b.coach_id === coachId)
-    .some((b: any) => {
-      if (b.block_date !== dateStr) return false
-      if (!b.block_start && !b.block_end) return true          // 종일 휴무
-      if (b.block_start && b.block_end)
-        return timeStr >= b.block_start && timeStr < b.block_end
-      return false
-    })
-}
-
-// ────────────────────────────────────────────────────────────────────────
 export async function GET() {
   const now = new Date()
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
 
-  if (kst.getDate() !== 15) return NextResponse.json({ ok: true, skipped: 'not 15th' })
+  // 매월 25일 실행 (15일 → 25일로 변경: 이달 수업 패턴이 충분히 쌓인 후)
+  if (kst.getDate() !== 25) return NextResponse.json({ ok: true, skipped: 'not 25th' })
 
   const thisYear  = kst.getFullYear()
   const thisMonth = kst.getMonth() + 1
-  const nextMonth = thisMonth === 12 ? 1  : thisMonth + 1
+  const nextMonth = thisMonth === 12 ? 1 : thisMonth + 1
   const nextYear  = thisMonth === 12 ? thisYear + 1 : thisYear
 
-  // ── 1) 다음달 month 레코드 확인 / 자동 생성 ──────────────────────────
-  let nextMonthRec = (await supabaseAdmin
-    .from('months').select('id').eq('year', nextYear).eq('month', nextMonth).maybeSingle()).data
+  // ── 다음달 month 레코드 확인 / 자동 생성 ─────────────────────────────
+  const { data: nextMonthRecord } = await supabaseAdmin
+    .from('months')
+    .select('id')
+    .eq('year', nextYear)
+    .eq('month', nextMonth)
+    .single()
 
-  if (!nextMonthRec) {
-    const lastDay   = new Date(nextYear, nextMonth, 0).getDate()
-    const { data: created } = await supabaseAdmin
+  let nextMonthId = nextMonthRecord?.id
+  if (!nextMonthId) {
+    const startDate = new Date(nextYear, nextMonth - 1, 1).toISOString().split('T')[0]
+    const endDate   = new Date(nextYear, nextMonth, 0).toISOString().split('T')[0]
+    const { data: created, error: createErr } = await supabaseAdmin
       .from('months')
-      .insert({
-        year: nextYear, month: nextMonth,
-        start_date: `${nextYear}-${String(nextMonth).padStart(2,'0')}-01`,
-        end_date:   `${nextYear}-${String(nextMonth).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`,
-      })
-      .select('id').single()
-    nextMonthRec = created
+      .insert({ year: nextYear, month: nextMonth, start_date: startDate, end_date: endDate })
+      .select('id')
+      .single()
+    if (createErr) return NextResponse.json({ error: '다음달 month 생성 실패: ' + createErr.message }, { status: 500 })
+    nextMonthId = created?.id
   }
+  if (!nextMonthId) return NextResponse.json({ error: '다음달 month 없음' }, { status: 500 })
 
-  if (!nextMonthRec) return NextResponse.json({ error: '다음달 month 생성 실패' }, { status: 500 })
+  // ── 이번달 month 조회 ────────────────────────────────────────────────
+  const { data: currentMonthRecord } = await supabaseAdmin
+    .from('months')
+    .select('id')
+    .eq('year', thisYear)
+    .eq('month', thisMonth)
+    .single()
 
-  // ── 2) 이번달 미동기화 플랜 조회 ─────────────────────────────────────
-  const currMonthRec = (await supabaseAdmin
-    .from('months').select('id').eq('year', thisYear).eq('month', thisMonth).maybeSingle()).data
-  if (!currMonthRec) return NextResponse.json({ ok: true, skipped: 'no current month' })
+  if (!currentMonthRecord) return NextResponse.json({ ok: true, skipped: 'no current month' })
 
+  // ── 이번달 레슨플랜 조회 (next_month_synced = false) ─────────────────
   const { data: plans } = await supabaseAdmin
-    .from('lesson_plans').select('*')
-    .eq('month_id', currMonthRec.id)
+    .from('lesson_plans')
+    .select('*')
+    .eq('month_id', currentMonthRecord.id)
     .eq('next_month_synced', false)
 
   if (!plans || plans.length === 0) return NextResponse.json({ ok: true, synced: 0 })
 
-  // ── 3) 다음달 이미 존재하는 (member, coach) 세트 ─────────────────────
+  // ── 다음달에 이미 있는 플랜 확인 (중복 방지) ─────────────────────────
   const { data: existingNextPlans } = await supabaseAdmin
-    .from('lesson_plans').select('member_id, coach_id')
-    .eq('month_id', nextMonthRec.id)
+    .from('lesson_plans')
+    .select('member_id, coach_id')
+    .eq('month_id', nextMonthId)
 
-  const existsSet = new Set(
-    (existingNextPlans ?? []).map((p: any) => `${p.member_id}__${p.coach_id}`)
+  const existingSet = new Set(
+    (existingNextPlans ?? []).map((p: any) => `${p.member_id}_${p.coach_id}`)
   )
 
-  // ── 4) 코치 휴무 전체 (다음달 해당 범위만) ───────────────────────────
-  const nextStart = `${nextYear}-${String(nextMonth).padStart(2,'0')}-01`
-  const nextEnd   = `${nextYear}-${String(nextMonth).padStart(2,'0')}-${String(new Date(nextYear, nextMonth, 0).getDate()).padStart(2,'0')}`
-
-  const { data: blocks } = await supabaseAdmin
+  // ── 코치 휴무 조회 (다음달 충돌 체크용) ──────────────────────────────
+  const { data: coachBlocks } = await supabaseAdmin
     .from('coach_blocks')
     .select('*')
-    .gte('block_date', nextStart)
-    .lte('block_date', nextEnd)
 
-  const coachBlocks = blocks ?? []
+  const blocks = coachBlocks ?? []
 
-  // ── 5) 플랜별 처리 ────────────────────────────────────────────────────
-  const stats = { plans_created: 0, plans_skipped: 0, drafts_ok: 0, drafts_conflict: 0 }
-  const planIdsToSync: string[] = []
-  const memberNotifySet = new Set<string>()
+  // ── 이번달 슬롯 조회 (패턴 추출용) ──────────────────────────────────
+  const planIds = plans.map((p: any) => p.id)
+  const { data: thisMonthSlots } = await supabaseAdmin
+    .from('lesson_slots')
+    .select('lesson_plan_id, scheduled_at, duration_minutes, status, is_makeup')
+    .in('lesson_plan_id', planIds)
+    .not('status', 'in', '("cancelled","draft")')
+    .eq('is_makeup', false)
+
+  // plan_id별 슬롯 그룹핑
+  const slotsByPlan: Record<string, any[]> = {}
+  for (const slot of (thisMonthSlots ?? [])) {
+    if (!slotsByPlan[slot.lesson_plan_id]) slotsByPlan[slot.lesson_plan_id] = []
+    slotsByPlan[slot.lesson_plan_id].push(slot)
+  }
+
+  // ── 다음달 날짜별 요일 맵 ──────────────────────────────────────────
+  const nextMonthDates: { date: Date; dayOfWeek: number }[] = []
+  const daysInNextMonth = new Date(nextYear, nextMonth, 0).getDate()
+  for (let d = 1; d <= daysInNextMonth; d++) {
+    const date = new Date(nextYear, nextMonth - 1, d)
+    nextMonthDates.push({ date, dayOfWeek: date.getDay() })
+  }
+
+  // 휴무 충돌 체크 함수
+  const isBlocked = (coachId: string, dateObj: Date, timeStr: string): boolean => {
+    const dateStr = dateObj.toISOString().split('T')[0]
+    const dayOfWeek = dateObj.getDay()
+    return blocks.some((b: any) => {
+      if (b.coach_id !== coachId) return false
+      // 특정 날짜 휴무
+      if (b.block_date && b.block_date === dateStr) {
+        if (!b.block_start) return true // 하루 종일
+        return timeStr >= b.block_start && timeStr <= (b.block_end ?? '23:59')
+      }
+      // 주간 반복 휴무
+      if (b.repeat_weekly && b.day_of_week === dayOfWeek) {
+        if (!b.block_start) return true
+        return timeStr >= b.block_start && timeStr <= (b.block_end ?? '23:59')
+      }
+      return false
+    })
+  }
+
+  let totalSynced = 0
+  let totalConflict = 0
+  const syncedMemberIds: string[] = []
 
   for (const plan of plans) {
-    const key = `${plan.member_id}__${plan.coach_id}`
-
-    if (existsSet.has(key)) {
-      // 이미 다음달 플랜 있음 → synced 표시만
-      stats.plans_skipped++
-      planIdsToSync.push(plan.id)
+    // 이미 다음달에 있으면 synced 표시만
+    if (existingSet.has(`${plan.member_id}_${plan.coach_id}`)) {
+      await supabaseAdmin
+        .from('lesson_plans')
+        .update({ next_month_synced: true })
+        .eq('id', plan.id)
       continue
     }
 
-    // 5-1) 플랜 복사 (슬롯 없이 껍데기만)
-    const { data: newPlan, error: planErr } = await supabaseAdmin
-      .from('lesson_plans')
-      .insert({
-        member_id:       plan.member_id,
-        coach_id:        plan.coach_id,
-        month_id:        nextMonthRec.id,
-        lesson_type:     plan.lesson_type,
-        unit_minutes:    plan.unit_minutes,
-        total_count:     0,             // 확정 시 실제 슬롯 수로 업데이트
-        completed_count: 0,
-        payment_status:  'unpaid',
-        amount:          plan.amount,
-        program_id:      plan.program_id ?? null,
+    // ── 슬롯 패턴 추출 ────────────────────────────────────────────────
+    const slots = slotsByPlan[plan.id] ?? []
+    const patternCount: Record<string, { count: number; duration: number }> = {}
+
+    for (const slot of slots) {
+      const d = new Date(slot.scheduled_at)
+      const dayOfWeek = d.getDay()
+      const hh = String(d.getHours()).padStart(2, '0')
+      const mm = String(d.getMinutes()).padStart(2, '0')
+      const key = `${dayOfWeek}_${hh}:${mm}`
+      if (!patternCount[key]) patternCount[key] = { count: 0, duration: slot.duration_minutes }
+      patternCount[key].count++
+    }
+
+    // threshold: 슬롯이 적을 때는 1회도 패턴으로 인정
+    const threshold = Math.max(1, Math.floor(slots.length / 6))
+    const patterns = Object.entries(patternCount)
+      .filter(([, v]) => v.count >= threshold)
+      .map(([key, v]) => {
+        const [day, time] = key.split('_')
+        return { dayOfWeek: Number(day), time, duration: v.duration }
+      })
+
+    // 패턴이 없으면 플랜 껍데기만 복사
+    if (patterns.length === 0) {
+      await supabaseAdmin.from('lesson_plans').insert({
+        member_id:        plan.member_id,
+        coach_id:         plan.coach_id,
+        month_id:         nextMonthId,
+        lesson_type:      plan.lesson_type,
+        total_count:      0,
+        completed_count:  0,
+        payment_status:   'unpaid',
+        amount:           plan.amount,
+        unit_minutes:     plan.unit_minutes,
+        program_id:       plan.program_id ?? null,
         next_month_synced: false,
       })
-      .select('id').single()
-
-    if (planErr || !newPlan) {
-      console.error('[sync-next-month] 플랜 생성 실패:', planErr?.message)
+      await supabaseAdmin.from('lesson_plans').update({ next_month_synced: true }).eq('id', plan.id)
+      totalSynced++
+      syncedMemberIds.push(plan.member_id)
       continue
     }
 
-    existsSet.add(key)
-    stats.plans_created++
-    planIdsToSync.push(plan.id)
+    // ── 다음달 슬롯 초안 생성 ─────────────────────────────────────────
+    // 패턴별 다음달 날짜 찾기
+    const draftSlotDates: { datetime: string; duration: number; hasConflict: boolean }[] = []
 
-    // 5-2) 이번달 슬롯 패턴 추출
-    const { data: thisSlots } = await supabaseAdmin
-      .from('lesson_slots').select('scheduled_at, status, is_makeup')
-      .eq('lesson_plan_id', plan.id)
+    for (const pattern of patterns) {
+      const matchingDates = nextMonthDates.filter(d => d.dayOfWeek === pattern.dayOfWeek)
+      for (const { date } of matchingDates) {
+        const [hh, mm] = pattern.time.split(':')
+        const slotDate = new Date(nextYear, nextMonth - 1, date.getDate(),
+          Number(hh), Number(mm), 0)
+        const isoStr = slotDate.toISOString()
+        // KST 보정
+        const kstStr = new Date(slotDate.getTime() + 9 * 60 * 60 * 1000)
+          .toISOString().replace('Z', '+09:00')
+          .replace(/\.\d{3}\+09:00$/, '+09:00')
 
-    const pattern = extractPattern(thisSlots ?? [])
-    if (!pattern) continue   // 패턴 없으면 플랜만 생성, 슬롯은 운영자가 수동 입력
+        const blocked = isBlocked(plan.coach_id, date, pattern.time)
+        if (blocked) totalConflict++
 
-    // 5-3) draft 슬롯 생성
-    const draftSlots: any[] = []
-
-    for (const pat of pattern) {
-      const [hh, mm] = pat.time.split(':').map(Number)
-      const timeStr  = pat.time   // "HH:MM"
-      const dates    = getDatesForDay(nextYear, nextMonth, pat.day)
-
-      for (const d of dates) {
-        const dateStr  = `${nextYear}-${String(nextMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-        const blocked  = hasConflict(coachBlocks, plan.coach_id, dateStr, timeStr)
-        const iso      = makeISOKST(nextYear, nextMonth, d, hh, mm)
-
-        draftSlots.push({
-          lesson_plan_id:   newPlan.id,
-          scheduled_at:     iso,
-          duration_minutes: plan.unit_minutes,
-          status:           'draft',
-          is_makeup:        false,
-          slot_type:        'lesson',
-          has_conflict:     blocked,
+        draftSlotDates.push({
+          datetime: isoStr,
+          duration: pattern.duration,
+          hasConflict: blocked,
         })
-
-        if (blocked) stats.drafts_conflict++
-        else         stats.drafts_ok++
       }
     }
 
-    if (draftSlots.length > 0) {
-      const { error: slotErr } = await supabaseAdmin.from('lesson_slots').insert(draftSlots)
-      if (slotErr) console.error('[sync-next-month] draft 슬롯 삽입 오류:', slotErr.message)
-      else memberNotifySet.add(plan.member_id)
-    }
-  }
-
-  // ── 6) synced 표시 ────────────────────────────────────────────────────
-  if (planIdsToSync.length > 0) {
-    await supabaseAdmin
+    // 다음달 플랜 생성
+    const { data: newPlan, error: planErr } = await supabaseAdmin
       .from('lesson_plans')
-      .update({ next_month_synced: true })
-      .in('id', planIdsToSync)
-  }
-
-  // ── 7) 알림 ──────────────────────────────────────────────────────────
-  const notifInserts: any[] = []
-
-  // 회원별 (초안 생성됨)
-  memberNotifySet.forEach(memberId => {
-    notifInserts.push({
-      profile_id: memberId,
-      title: `📅 ${nextYear}년 ${nextMonth}월 레슨 일정 초안 생성`,
-      body:  `다음달 레슨 초안이 준비됐습니다. 운영자 확인 후 최종 확정됩니다.`,
-      type:  'info',
-      link:  '/member/schedule',
-    })
-  })
-
-  // 운영자 (확정 요청)
-  const totalDrafts = stats.drafts_ok + stats.drafts_conflict
-  if (totalDrafts > 0) {
-    const owners = await supabaseAdmin.from('profiles').select('id').eq('role', 'owner')
-    for (const o of owners.data ?? []) {
-      notifInserts.push({
-        profile_id: o.id,
-        title: `🗓 ${nextYear}년 ${nextMonth}월 수업 초안 ${totalDrafts}건 생성`,
-        body:  `충돌 ${stats.drafts_conflict}건 포함. /owner/schedule-draft 에서 확인 후 확정해 주세요.`,
-        type:  stats.drafts_conflict > 0 ? 'warning' : 'success',
-        link:  '/owner/schedule-draft',
+      .insert({
+        member_id:        plan.member_id,
+        coach_id:         plan.coach_id,
+        month_id:         nextMonthId,
+        lesson_type:      plan.lesson_type,
+        total_count:      0, // 확정 시 업데이트
+        completed_count:  0,
+        payment_status:   'unpaid',
+        amount:           plan.amount,
+        unit_minutes:     plan.unit_minutes,
+        program_id:       plan.program_id ?? null,
+        next_month_synced: false,
       })
+      .select('id')
+      .single()
+
+    if (planErr || !newPlan) continue
+
+    // draft 슬롯 생성
+    if (draftSlotDates.length > 0) {
+      const draftSlots = draftSlotDates.map(s => ({
+        lesson_plan_id:   newPlan.id,
+        scheduled_at:     s.datetime,
+        duration_minutes: s.duration,
+        status:           'draft',
+        slot_type:        'lesson',
+        is_makeup:        false,
+        has_conflict:     s.hasConflict,
+      }))
+      await supabaseAdmin.from('lesson_slots').insert(draftSlots)
     }
+
+    // 이번달 플랜 synced 처리
+    await supabaseAdmin.from('lesson_plans').update({ next_month_synced: true }).eq('id', plan.id)
+    totalSynced++
+    syncedMemberIds.push(plan.member_id)
   }
 
-  if (notifInserts.length > 0)
-    await supabaseAdmin.from('notifications').insert(notifInserts)
+  // ── 알림 발송 ────────────────────────────────────────────────────────
+  // 회원 알림
+  const uniqueMemberIds = [...new Set(syncedMemberIds)]
+  if (uniqueMemberIds.length > 0) {
+    const memberNotifs = uniqueMemberIds.map((id: string) => ({
+      profile_id: id,
+      title: `📅 ${nextYear}년 ${nextMonth}월 수업 초안 생성`,
+      body: `다음달 수업 일정 초안이 생성되었습니다. 운영자 확정 후 확인하세요.`,
+      type: 'info',
+      link: '/member/schedule',
+    }))
+    await supabaseAdmin.from('notifications').insert(memberNotifs)
+  }
+
+  // 운영자 알림
+  const { data: owners } = await supabaseAdmin
+    .from('profiles')
+    .select('id')
+    .in('role', ['owner', 'admin'])
+    .eq('is_active', true)
+
+  if (owners && owners.length > 0) {
+    const ownerNotifs = owners.map((o: any) => ({
+      profile_id: o.id,
+      title: `🗓️ ${nextYear}년 ${nextMonth}월 수업 초안 생성 완료`,
+      body: `${totalSynced}개 플랜 초안 생성${totalConflict > 0 ? ` (⚠️ 충돌 ${totalConflict}건 확인 필요)` : ''}`,
+      type: totalConflict > 0 ? 'warning' : 'success',
+      link: '/owner/schedule-draft',
+    }))
+    await supabaseAdmin.from('notifications').insert(ownerNotifs)
+  }
 
   return NextResponse.json({
     ok: true,
-    year: nextYear, month: nextMonth,
-    plans_created: stats.plans_created,
-    plans_skipped: stats.plans_skipped,
-    drafts_ok:       stats.drafts_ok,
-    drafts_conflict: stats.drafts_conflict,
+    synced: totalSynced,
+    conflicts: totalConflict,
+    nextMonth: `${nextYear}년 ${nextMonth}월`,
   })
 }

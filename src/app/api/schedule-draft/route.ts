@@ -1,193 +1,225 @@
-// ============================================================
-// 저장 위치: app/api/schedule-draft/route.ts  (신규 파일)
-// ============================================================
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
-// ── GET: 특정 월의 draft/conflict 슬롯 목록 ─────────────────────────────
+// GET /api/schedule-draft?month_id=xxx
+// 다음달 draft 슬롯 목록 조회
 export async function GET(req: NextRequest) {
   const session = await getSession()
-  if (!session || !['owner', 'admin'].includes(session.role))
+  if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+  }
 
   const monthId = req.nextUrl.searchParams.get('month_id')
   if (!monthId) return NextResponse.json({ error: 'month_id 필요' }, { status: 400 })
 
-  // 해당 월 lesson_plans
-  const { data: plans } = await supabaseAdmin
-    .from('lesson_plans')
-    .select('id, lesson_type, unit_minutes, amount, member_id, coach_id')
-    .eq('month_id', monthId)
-
-  if (!plans || plans.length === 0) return NextResponse.json([])
-
-  const planIds = plans.map((p: any) => p.id)
-
-  // draft / conflict_pending 슬롯
-  const { data: drafts } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('lesson_slots')
-    .select('id, lesson_plan_id, scheduled_at, duration_minutes, status, has_conflict')
-    .in('lesson_plan_id', planIds)
-    .in('status', ['draft', 'conflict_pending'])
+    .select(`
+      id, scheduled_at, duration_minutes, status, has_conflict,
+      lesson_plan:lesson_plan_id (
+        id, lesson_type, unit_minutes, amount,
+        member:member_id ( id, name, phone ),
+        coach:coach_id ( id, name )
+      )
+    `)
+    .eq('status', 'draft')
     .order('scheduled_at', { ascending: true })
 
-  if (!drafts || drafts.length === 0) return NextResponse.json([])
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // member / coach 정보 조합
-  const profileIds = [...new Set([
-    ...plans.map((p: any) => p.member_id),
-    ...plans.map((p: any) => p.coach_id),
-  ])]
-  const { data: profiles } = await supabaseAdmin
-    .from('profiles').select('id, name').in('id', profileIds)
+  // month_id 기준 필터 (lesson_plan의 month_id)
+  const { data: planIds } = await supabaseAdmin
+    .from('lesson_plans')
+    .select('id')
+    .eq('month_id', monthId)
 
-  const profileMap: Record<string, string> = {}
-  ;(profiles ?? []).forEach((p: any) => { profileMap[p.id] = p.name })
+  const validPlanIds = new Set((planIds ?? []).map((p: any) => p.id))
+  const filtered = (data ?? []).filter((s: any) => validPlanIds.has(s.lesson_plan?.id))
 
-  const planMap: Record<string, any> = {}
-  plans.forEach((p: any) => { planMap[p.id] = p })
-
-  const result = drafts.map((s: any) => {
-    const plan = planMap[s.lesson_plan_id]
-    return {
-      ...s,
-      member_name:  profileMap[plan?.member_id] ?? '-',
-      coach_name:   profileMap[plan?.coach_id]  ?? '-',
-      lesson_type:  plan?.lesson_type ?? '-',
-    }
-  })
-
-  return NextResponse.json(result)
+  return NextResponse.json(filtered)
 }
 
-// ── POST: 일괄 확정 or 단건 확정 ─────────────────────────────────────────
-// body: { action: 'confirm_all' | 'confirm_one' | 'delete_one', slot_id?, month_id?, skip_conflicts? }
+// POST /api/schedule-draft
+// action: 'confirm_all' | 'confirm_one' | 'delete_one' | 'delete_all_conflict'
 export async function POST(req: NextRequest) {
   const session = await getSession()
-  if (!session || !['owner', 'admin'].includes(session.role))
+  if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+  }
 
-  const body = await req.json()
-  const { action, slot_id, month_id, skip_conflicts = true } = body
+  const { action, slot_id, month_id } = await req.json()
 
-  // ── 단건 확정 ──────────────────────────────────────────────────────────
+  // ── 단건 확정 ─────────────────────────────────────────────────────────
   if (action === 'confirm_one') {
     if (!slot_id) return NextResponse.json({ error: 'slot_id 필요' }, { status: 400 })
 
+    // 슬롯 정보 조회
     const { data: slot } = await supabaseAdmin
-      .from('lesson_slots').select('id, lesson_plan_id, has_conflict, status').eq('id', slot_id).single()
+      .from('lesson_slots')
+      .select('id, scheduled_at, duration_minutes, lesson_plan_id, has_conflict')
+      .eq('id', slot_id)
+      .single()
 
     if (!slot) return NextResponse.json({ error: '슬롯 없음' }, { status: 404 })
-    if (!['draft', 'conflict_pending'].includes(slot.status))
-      return NextResponse.json({ error: '이미 처리된 슬롯' }, { status: 409 })
 
-    await supabaseAdmin.from('lesson_slots').update({ status: 'scheduled' }).eq('id', slot_id)
-    await incrementTotalCount(slot.lesson_plan_id, 1)
+    // 같은 코치 같은 시간 중복 체크
+    const { data: plan } = await supabaseAdmin
+      .from('lesson_plans')
+      .select('coach_id')
+      .eq('id', slot.lesson_plan_id)
+      .single()
 
-    return NextResponse.json({ ok: true, confirmed: 1 })
+    if (plan) {
+      const { data: conflict } = await supabaseAdmin
+        .from('lesson_slots')
+        .select('id')
+        .eq('scheduled_at', slot.scheduled_at)
+        .eq('status', 'scheduled')
+        .neq('lesson_plan_id', slot.lesson_plan_id)
+        .maybeSingle()
+
+      if (conflict) {
+        return NextResponse.json({ error: '해당 시간에 이미 확정된 수업이 있습니다' }, { status: 409 })
+      }
+    }
+
+    // draft → scheduled
+    const { error } = await supabaseAdmin
+      .from('lesson_slots')
+      .update({ status: 'scheduled', has_conflict: false })
+      .eq('id', slot_id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // lesson_plan total_count 업데이트
+    await updatePlanTotalCount(slot.lesson_plan_id)
+
+    return NextResponse.json({ ok: true })
   }
 
-  // ── 단건 삭제 (초안에서 제거) ──────────────────────────────────────────
-  if (action === 'delete_one') {
-    if (!slot_id) return NextResponse.json({ error: 'slot_id 필요' }, { status: 400 })
-    await supabaseAdmin.from('lesson_slots').delete().eq('id', slot_id)
-    return NextResponse.json({ ok: true, deleted: 1 })
-  }
-
-  // ── 일괄 확정 ──────────────────────────────────────────────────────────
+  // ── 일괄 확정 (충돌 제외) ─────────────────────────────────────────────
   if (action === 'confirm_all') {
     if (!month_id) return NextResponse.json({ error: 'month_id 필요' }, { status: 400 })
 
-    const { data: plans } = await supabaseAdmin
-      .from('lesson_plans').select('id, member_id, coach_id').eq('month_id', month_id)
+    // 해당 월의 draft 슬롯 중 충돌 없는 것만
+    const { data: planIds } = await supabaseAdmin
+      .from('lesson_plans')
+      .select('id')
+      .eq('month_id', month_id)
 
-    if (!plans || plans.length === 0)
-      return NextResponse.json({ ok: true, confirmed: 0, skipped: 0 })
+    const validIds = (planIds ?? []).map((p: any) => p.id)
+    if (validIds.length === 0) return NextResponse.json({ ok: true, confirmed: 0 })
 
-    const planIds = plans.map((p: any) => p.id)
-
-    const { data: drafts } = await supabaseAdmin
+    const { data: draftSlots } = await supabaseAdmin
       .from('lesson_slots')
-      .select('id, lesson_plan_id, has_conflict, status')
-      .in('lesson_plan_id', planIds)
-      .in('status', ['draft', 'conflict_pending'])
+      .select('id, lesson_plan_id')
+      .in('lesson_plan_id', validIds)
+      .eq('status', 'draft')
+      .eq('has_conflict', false)
 
-    if (!drafts || drafts.length === 0)
-      return NextResponse.json({ ok: true, confirmed: 0, skipped: 0 })
-
-    const toConfirm = skip_conflicts
-      ? drafts.filter((s: any) => !s.has_conflict)
-      : drafts
-
-    const toHold = skip_conflicts
-      ? drafts.filter((s: any) => s.has_conflict)
-      : []
-
-    // draft → scheduled
-    if (toConfirm.length > 0) {
-      await supabaseAdmin
-        .from('lesson_slots')
-        .update({ status: 'scheduled' })
-        .in('id', toConfirm.map((s: any) => s.id))
+    if (!draftSlots || draftSlots.length === 0) {
+      return NextResponse.json({ ok: true, confirmed: 0 })
     }
 
-    // conflict → conflict_pending (수동 처리 대기)
-    if (toHold.length > 0) {
-      await supabaseAdmin
-        .from('lesson_slots')
-        .update({ status: 'conflict_pending' })
-        .in('id', toHold.map((s: any) => s.id))
+    const slotIds = draftSlots.map((s: any) => s.id)
+    const { error } = await supabaseAdmin
+      .from('lesson_slots')
+      .update({ status: 'scheduled' })
+      .in('id', slotIds)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // 각 플랜 total_count 업데이트
+    const affectedPlanIds = [...new Set(draftSlots.map((s: any) => s.lesson_plan_id))]
+    for (const planId of affectedPlanIds) {
+      await updatePlanTotalCount(planId)
     }
 
-    // total_count 업데이트 (플랜별)
-    const planCounts: Record<string, number> = {}
-    toConfirm.forEach((s: any) => {
-      planCounts[s.lesson_plan_id] = (planCounts[s.lesson_plan_id] ?? 0) + 1
-    })
-    for (const [pid, cnt] of Object.entries(planCounts)) {
-      await incrementTotalCount(pid, cnt)
+    // 회원 알림
+    const { data: plans } = await supabaseAdmin
+      .from('lesson_plans')
+      .select('member_id, month:month_id(year, month)')
+      .in('id', affectedPlanIds)
+
+    if (plans && plans.length > 0) {
+      const month = (plans[0] as any).month
+      const notifs = [...new Set(plans.map((p: any) => p.member_id))].map((id: string) => ({
+        profile_id: id,
+        title: `✅ ${month?.year}년 ${month?.month}월 수업 확정`,
+        body: `다음달 수업 일정이 확정되었습니다. 일정을 확인하세요!`,
+        type: 'success',
+        link: '/member/schedule',
+      }))
+      await supabaseAdmin.from('notifications').insert(notifs)
     }
 
-    // 회원 확정 알림
-    const { data: monthRec } = await supabaseAdmin
-      .from('months').select('year, month').eq('id', month_id).single()
-    const notified = new Set<string>()
-    const notifInserts: any[] = []
+    return NextResponse.json({ ok: true, confirmed: slotIds.length })
+  }
 
-    for (const s of toConfirm) {
-      const plan = plans.find((p: any) => p.id === s.lesson_plan_id)
-      if (!plan || notified.has(plan.member_id)) continue
-      notified.add(plan.member_id)
-      notifInserts.push({
-        profile_id: plan.member_id,
-        title: `🎾 ${monthRec?.year}년 ${monthRec?.month}월 수업 일정 확정!`,
-        body:  `수업 일정이 확정됐습니다. 일정을 확인해주세요.`,
-        type:  'success',
-        link:  '/member/schedule',
-      })
+  // ── 단건 삭제 ─────────────────────────────────────────────────────────
+  if (action === 'delete_one') {
+    if (!slot_id) return NextResponse.json({ error: 'slot_id 필요' }, { status: 400 })
+
+    const { data: slot } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('lesson_plan_id')
+      .eq('id', slot_id)
+      .single()
+
+    const { error } = await supabaseAdmin
+      .from('lesson_slots')
+      .delete()
+      .eq('id', slot_id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (slot) await updatePlanTotalCount(slot.lesson_plan_id)
+
+    return NextResponse.json({ ok: true })
+  }
+
+  // ── 충돌 슬롯 전체 삭제 ───────────────────────────────────────────────
+  if (action === 'delete_all_conflict') {
+    if (!month_id) return NextResponse.json({ error: 'month_id 필요' }, { status: 400 })
+
+    const { data: planIds } = await supabaseAdmin
+      .from('lesson_plans')
+      .select('id')
+      .eq('month_id', month_id)
+
+    const validIds = (planIds ?? []).map((p: any) => p.id)
+    if (validIds.length === 0) return NextResponse.json({ ok: true, deleted: 0 })
+
+    const { data: conflictSlots } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('id, lesson_plan_id')
+      .in('lesson_plan_id', validIds)
+      .eq('status', 'draft')
+      .eq('has_conflict', true)
+
+    if (!conflictSlots || conflictSlots.length === 0) {
+      return NextResponse.json({ ok: true, deleted: 0 })
     }
-    if (notifInserts.length > 0)
-      await supabaseAdmin.from('notifications').insert(notifInserts)
 
-    return NextResponse.json({
-      ok: true,
-      confirmed: toConfirm.length,
-      skipped_conflict: toHold.length,
-    })
+    const slotIds = conflictSlots.map((s: any) => s.id)
+    await supabaseAdmin.from('lesson_slots').delete().in('id', slotIds)
+
+    return NextResponse.json({ ok: true, deleted: slotIds.length })
   }
 
   return NextResponse.json({ error: '잘못된 action' }, { status: 400 })
 }
 
-// ── 헬퍼: total_count += n ────────────────────────────────────────────────
-async function incrementTotalCount(planId: string, n: number) {
-  // RPC가 있으면 좋지만 없으면 select → update 패턴
-  const { data: plan } = await supabaseAdmin
-    .from('lesson_plans').select('total_count').eq('id', planId).single()
-  if (!plan) return
+// ── 헬퍼: lesson_plan total_count 업데이트 ────────────────────────────
+async function updatePlanTotalCount(planId: string) {
+  const { count } = await supabaseAdmin
+    .from('lesson_slots')
+    .select('*', { count: 'exact', head: true })
+    .eq('lesson_plan_id', planId)
+    .eq('status', 'scheduled')
+
   await supabaseAdmin
     .from('lesson_plans')
-    .update({ total_count: (plan.total_count ?? 0) + n })
+    .update({ total_count: count ?? 0 })
     .eq('id', planId)
 }

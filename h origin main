@@ -1,0 +1,708 @@
+warning: in the working copy of 'src/app/api/programs/[id]/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/api/programs/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/owner/programs/page.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/src/app/api/programs/[id]/route.ts b/src/app/api/programs/[id]/route.ts[m
+[1mindex 7ca5c76..a6ec1b6 100644[m
+[1m--- a/src/app/api/programs/[id]/route.ts[m
+[1m+++ b/src/app/api/programs/[id]/route.ts[m
+[36m@@ -4,35 +4,57 @@[m [mimport { getSession } from '@/lib/session'[m
+ [m
+ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {[m
+   const session = await getSession()[m
+[31m-  if (!session || !['owner','admin'].includes(session.role)) {[m
+[32m+[m[32m  if (!session || !['owner', 'admin'].includes(session.role)) {[m
+     return NextResponse.json({ error: '권한 없음' }, { status: 403 })[m
+   }[m
+   const { id } = await params[m
+   const body = await req.json()[m
+ [m
+[32m+[m[32m  // 활성/비활성 토글[m
+   if (body.action === 'toggle_active') {[m
+[31m-    const { data: cur } = await supabaseAdmin.from('lesson_programs').select('is_active').eq('id', id).single()[m
+[31m-    const { error } = await supabaseAdmin.from('lesson_programs').update({ is_active: !cur?.is_active }).eq('id', id)[m
+[32m+[m[32m    const { data: cur } = await supabaseAdmin[m
+[32m+[m[32m      .from('lesson_programs')[m
+[32m+[m[32m      .select('is_active')[m
+[32m+[m[32m      .eq('id', id)[m
+[32m+[m[32m      .single()[m
+[32m+[m[32m    const { error } = await supabaseAdmin[m
+[32m+[m[32m      .from('lesson_programs')[m
+[32m+[m[32m      .update({ is_active: !cur?.is_active })[m
+[32m+[m[32m      .eq('id', id)[m
+     if (error) return NextResponse.json({ error: error.message }, { status: 500 })[m
+     return NextResponse.json({ ok: true })[m
+   }[m
+ [m
+[31m-  const { name, ratio, max_students, unit_minutes, description } = body[m
+[32m+[m[32m  // 일반 업데이트 (coach_id, default_amount 포함)[m
+[32m+[m[32m  const {[m
+[32m+[m[32m    name, ratio, max_students, unit_minutes, description,[m
+[32m+[m[32m    coach_id, default_amount, sort_order,[m
+[32m+[m[32m  } = body[m
+[32m+[m
+[32m+[m[32m  const updateData: Record<string, unknown> = {[m
+[32m+[m[32m    name, ratio, max_students, unit_minutes, description,[m
+[32m+[m[32m  }[m
+[32m+[m[32m  // coach_id: 명시적으로 넘어온 경우만 업데이트 (null 허용)[m
+[32m+[m[32m  if ('coach_id' in body)       updateData.coach_id       = coach_id ?? null[m
+[32m+[m[32m  if ('default_amount' in body) updateData.default_amount = default_amount ?? 0[m
+[32m+[m[32m  if ('sort_order' in body)     updateData.sort_order     = sort_order ?? 0[m
+[32m+[m
+   const { error } = await supabaseAdmin[m
+     .from('lesson_programs')[m
+[31m-    .update({ name, ratio, max_students, unit_minutes, description })[m
+[32m+[m[32m    .update(updateData)[m
+     .eq('id', id)[m
+[32m+[m
+   if (error) return NextResponse.json({ error: error.message }, { status: 500 })[m
+   return NextResponse.json({ ok: true })[m
+ }[m
+ [m
+ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {[m
+   const session = await getSession()[m
+[31m-  if (!session || !['owner','admin'].includes(session.role)) {[m
+[32m+[m[32m  if (!session || !['owner', 'admin'].includes(session.role)) {[m
+     return NextResponse.json({ error: '권한 없음' }, { status: 403 })[m
+   }[m
+   const { id } = await params[m
+   const { error } = await supabaseAdmin.from('lesson_programs').delete().eq('id', id)[m
+   if (error) return NextResponse.json({ error: error.message }, { status: 500 })[m
+   return NextResponse.json({ ok: true })[m
+[31m-}[m
+[32m+[m[32m}[m
+\ No newline at end of file[m
+[1mdiff --git a/src/app/api/programs/route.ts b/src/app/api/programs/route.ts[m
+[1mindex e653d35..fd1a0f8 100644[m
+[1m--- a/src/app/api/programs/route.ts[m
+[1m+++ b/src/app/api/programs/route.ts[m
+[36m@@ -2,29 +2,75 @@[m [mimport { NextRequest, NextResponse } from 'next/server'[m
+ import { supabaseAdmin } from '@/lib/supabase-admin'[m
+ import { getSession } from '@/lib/session'[m
+ [m
+[31m-export async function GET() {[m
+[31m-  const { data, error } = await supabaseAdmin[m
+[31m-    .from('lesson_programs')[m
+[31m-    .select('*')[m
+[31m-    .order('created_at', { ascending: false })[m
+[32m+[m[32m// GET /api/programs[m
+[32m+[m[32m// ?coach_id=xxx  → 해당 코치 전용 + 공통(NULL) 프로그램 반환[m
+[32m+[m[32m// ?coach_id=none → 공통 프로그램만[m
+[32m+[m[32m// (파라미터 없음) → 전체 (운영자 관리 페이지용)[m
+[32m+[m[32mexport async function GET(req: NextRequest) {[m
+[32m+[m[32m  const coachId = req.nextUrl.searchParams.get('coach_id')[m
+[32m+[m
+[32m+[m[32m  let data, error[m
+[32m+[m
+[32m+[m[32m  if (coachId) {[m
+[32m+[m[32m    // 코치 선택 시: 공통(NULL) + 해당 코치 전용 프로그램 합쳐서 반환[m
+[32m+[m[32m    const res = await supabaseAdmin[m
+[32m+[m[32m      .from('lesson_programs')[m
+[32m+[m[32m      .select('*')[m
+[32m+[m[32m      .eq('is_active', true)[m
+[32m+[m[32m      .or(`coach_id.is.null,coach_id.eq.${coachId}`)[m
+[32m+[m[32m      .order('sort_order', { ascending: true })[m
+[32m+[m[32m      .order('created_at', { ascending: false })[m
+[32m+[m[32m    data = res.data[m
+[32m+[m[32m    error = res.error[m
+[32m+[m[32m  } else {[m
+[32m+[m[32m    // 전체 조회 (운영자 관리용) - 비활성 포함[m
+[32m+[m[32m    const res = await supabaseAdmin[m
+[32m+[m[32m      .from('lesson_programs')[m
+[32m+[m[32m      .select(`[m
+[32m+[m[32m        *,[m
+[32m+[m[32m        coach:coach_id ( id, name )[m
+[32m+[m[32m      `)[m
+[32m+[m[32m      .order('sort_order', { ascending: true })[m
+[32m+[m[32m      .order('created_at', { ascending: false })[m
+[32m+[m[32m    data = res.data[m
+[32m+[m[32m    error = res.error[m
+[32m+[m[32m  }[m
+ [m
+   if (error) return NextResponse.json({ error: error.message }, { status: 500 })[m
+[31m-  return NextResponse.json(data)[m
+[32m+[m[32m  return NextResponse.json(data ?? [])[m
+ }[m
+ [m
+[32m+[m[32m// POST /api/programs[m
+ export async function POST(req: NextRequest) {[m
+   const session = await getSession()[m
+[31m-  if (!session || !['owner','admin'].includes(session.role)) {[m
+[32m+[m[32m  if (!session || !['owner', 'admin'].includes(session.role)) {[m
+     return NextResponse.json({ error: '권한 없음' }, { status: 403 })[m
+   }[m
+   try {[m
+[31m-    const { name, ratio, max_students, unit_minutes, description } = await req.json()[m
+[32m+[m[32m    const {[m
+[32m+[m[32m      name, ratio, max_students, unit_minutes, description,[m
+[32m+[m[32m      coach_id,          // null이면 공통, 값 있으면 특정 코치 전용[m
+[32m+[m[32m      default_amount,    // 기본 수업료[m
+[32m+[m[32m      sort_order,        // 정렬 순서[m
+[32m+[m[32m    } = await req.json()[m
+[32m+[m
+     if (!name || !ratio || !max_students) {[m
+       return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })[m
+     }[m
+[32m+[m
+     const { data, error } = await supabaseAdmin[m
+       .from('lesson_programs')[m
+[31m-      .insert({ name, ratio, max_students, unit_minutes: unit_minutes || 60, description, created_by: session.id })[m
+[32m+[m[32m      .insert({[m
+[32m+[m[32m        name,[m
+[32m+[m[32m        ratio,[m
+[32m+[m[32m        max_students,[m
+[32m+[m[32m        unit_minutes:   unit_minutes   || 60,[m
+[32m+[m[32m        description,[m
+[32m+[m[32m        coach_id:       coach_id       || null,[m
+[32m+[m[32m        default_amount: default_amount || 0,[m
+[32m+[m[32m        sort_order:     sort_order     || 0,[m
+[32m+[m[32m        created_by:     session.id,[m
+[32m+[m[32m      })[m
+       .select()[m
+       .single()[m
+ [m
+[36m@@ -33,4 +79,4 @@[m [mexport async function POST(req: NextRequest) {[m
+   } catch (e) {[m
+     return NextResponse.json({ error: String(e) }, { status: 500 })[m
+   }[m
+[31m-}[m
+[32m+[m[32m}[m
+\ No newline at end of file[m
+[1mdiff --git a/src/app/owner/programs/page.tsx b/src/app/owner/programs/page.tsx[m
+[1mindex 47ca9de..f328cbb 100644[m
+[1m--- a/src/app/owner/programs/page.tsx[m
+[1m+++ b/src/app/owner/programs/page.tsx[m
+[36m@@ -3,6 +3,11 @@[m
+ import { useEffect, useState } from 'react'[m
+ import Link from 'next/link'[m
+ [m
+[32m+[m[32minterface Coach {[m
+[32m+[m[32m  id: string[m
+[32m+[m[32m  name: string[m
+[32m+[m[32m}[m
+[32m+[m
+ interface Program {[m
+   id: string[m
+   name: string[m
+[36m@@ -11,32 +16,59 @@[m [minterface Program {[m
+   unit_minutes: number[m
+   description: string | null[m
+   is_active: boolean[m
+[32m+[m[32m  coach_id: string | null[m
+[32m+[m[32m  coach?: { id: string; name: string } | null[m
+[32m+[m[32m  default_amount: number[m
+[32m+[m[32m  sort_order: number[m
+   created_at: string[m
+ }[m
+ [m
+ const PRESET_RATIOS = ['1:1', '2:1', '3:1', '4:1', '5:1', '6:1', '그룹'][m
+ [m
+ export default function ProgramsPage() {[m
+[31m-  const [programs, setPrograms]   = useState<Program[]>([])[m
+[31m-  const [loading, setLoading]     = useState(true)[m
+[31m-  const [showAdd, setShowAdd]     = useState(false)[m
+[31m-  const [selected, setSelected]   = useState<Program | null>(null)[m
+[31m-  const [saving, setSaving]       = useState(false)[m
+[32m+[m[32m  const [programs, setPrograms] = useState<Program[]>([])[m
+[32m+[m[32m  const [coaches,  setCoaches]  = useState<Coach[]>([])[m
+[32m+[m[32m  const [loading,  setLoading]  = useState(true)[m
+[32m+[m[32m  const [showAdd,  setShowAdd]  = useState(false)[m
+[32m+[m[32m  const [selected, setSelected] = useState<Program | null>(null)[m
+[32m+[m[32m  const [saving,   setSaving]   = useState(false)[m
+[32m+[m[32m  const [filterCoach, setFilterCoach] = useState<string>('all') // 'all' | 'common' | coach.id[m
+[32m+[m
+   const [form, setForm] = useState({[m
+[31m-    name: '', ratio: '1:1', max_students: 1, unit_minutes: 60, description: '', customRatio: ''[m
+[32m+[m[32m    name: '',[m
+[32m+[m[32m    ratio: '1:1',[m
+[32m+[m[32m    max_students: 1,[m
+[32m+[m[32m    unit_minutes: 60,[m
+[32m+[m[32m    description: '',[m
+[32m+[m[32m    customRatio: '',[m
+[32m+[m[32m    coach_id: '',       // '' = 공통 프로그램[m
+[32m+[m[32m    default_amount: 0,[m
+[32m+[m[32m    sort_order: 0,[m
+   })[m
+   const [useCustom, setUseCustom] = useState(false)[m
+ [m
+   const load = async () => {[m
+     setLoading(true)[m
+[31m-    const res = await fetch('/api/programs')[m
+[31m-    const data = await res.json()[m
+[31m-    setPrograms(Array.isArray(data) ? data : [])[m
+[32m+[m[32m    const [pRes, cRes] = await Promise.all([[m
+[32m+[m[32m      fetch('/api/programs'),[m
+[32m+[m[32m      fetch('/api/coaches'),[m
+[32m+[m[32m    ])[m
+[32m+[m[32m    const p = await pRes.json()[m
+[32m+[m[32m    const c = await cRes.json()[m
+[32m+[m[32m    setPrograms(Array.isArray(p) ? p : [])[m
+[32m+[m[32m    setCoaches(Array.isArray(c) ? c : [])[m
+     setLoading(false)[m
+   }[m
+ [m
+   useEffect(() => { load() }, [])[m
+ [m
+[32m+[m[32m  // 필터링된 프로그램 목록[m
+[32m+[m[32m  const filteredPrograms = programs.filter(p => {[m
+[32m+[m[32m    if (filterCoach === 'all')    return true[m
+[32m+[m[32m    if (filterCoach === 'common') return p.coach_id === null[m
+[32m+[m[32m    return p.coach_id === filterCoach[m
+[32m+[m[32m  })[m
+[32m+[m
+   const handleAdd = async () => {[m
+     if (!form.name) return alert('프로그램 이름을 입력해주세요')[m
+     const ratio = useCustom ? form.customRatio : form.ratio[m
+[36m@@ -45,13 +77,23 @@[m [mexport default function ProgramsPage() {[m
+     const res = await fetch('/api/programs', {[m
+       method: 'POST',[m
+       headers: { 'Content-Type': 'application/json' },[m
+[31m-      body: JSON.stringify({ name: form.name, ratio, max_students: form.max_students, unit_minutes: form.unit_minutes, description: form.description }),[m
+[32m+[m[32m      body: JSON.stringify({[m
+[32m+[m[32m        name:           form.name,[m
+[32m+[m[32m        ratio,[m
+[32m+[m[32m        max_students:   form.max_students,[m
+[32m+[m[32m        unit_minutes:   form.unit_minutes,[m
+[32m+[m[32m        description:    form.description,[m
+[32m+[m[32m        coach_id:       form.coach_id || null,   // '' → null (공통)[m
+[32m+[m[32m        default_amount: form.default_amount,[m
+[32m+[m[32m        sort_order:     form.sort_order,[m
+[32m+[m[32m      }),[m
+     })[m
+     const data = await res.json()[m
+     setSaving(false)[m
+     if (!res.ok) return alert(data.error)[m
+     setShowAdd(false)[m
+[31m-    setForm({ name: '', ratio: '1:1', max_students: 1, unit_minutes: 60, description: '', customRatio: '' })[m
+[32m+[m[32m    setForm({ name: '', ratio: '1:1', max_students: 1, unit_minutes: 60, description: '', customRatio: '', coach_id: '', default_amount: 0, sort_order: 0 })[m
+[32m+[m[32m    setUseCustom(false)[m
+     load()[m
+   }[m
+ [m
+[36m@@ -61,7 +103,16 @@[m [mexport default function ProgramsPage() {[m
+     await fetch(`/api/programs/${selected.id}`, {[m
+       method: 'PUT',[m
+       headers: { 'Content-Type': 'application/json' },[m
+[31m-      body: JSON.stringify({ name: selected.name, ratio: selected.ratio, max_students: selected.max_students, unit_minutes: selected.unit_minutes, description: selected.description }),[m
+[32m+[m[32m      body: JSON.stringify({[m
+[32m+[m[32m        name:           selected.name,[m
+[32m+[m[32m        ratio:          selected.ratio,[m
+[32m+[m[32m        max_students:   selected.max_students,[m
+[32m+[m[32m        unit_minutes:   selected.unit_minutes,[m
+[32m+[m[32m        description:    selected.description,[m
+[32m+[m[32m        coach_id:       selected.coach_id,[m
+[32m+[m[32m        default_amount: selected.default_amount,[m
+[32m+[m[32m        sort_order:     selected.sort_order,[m
+[32m+[m[32m      }),[m
+     })[m
+     setSaving(false)[m
+     setSelected(null)[m
+[36m@@ -78,58 +129,169 @@[m [mexport default function ProgramsPage() {[m
+     setSelected(null)[m
+   }[m
+ [m
+[32m+[m[32m  const handleDelete = async (id: string) => {[m
+[32m+[m[32m    if (!confirm('이 프로그램을 삭제할까요?')) return[m
+[32m+[m[32m    await fetch(`/api/programs/${id}`, { method: 'DELETE' })[m
+[32m+[m[32m    load()[m
+[32m+[m[32m    setSelected(null)[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  const inputStyle: React.CSSProperties = {[m
+[32m+[m[32m    width: '100%', padding: '0.625rem 0.875rem',[m
+[32m+[m[32m    borderRadius: '0.625rem', border: '1.5px solid #e5e7eb',[m
+[32m+[m[32m    fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif',[m
+[32m+[m[32m    outline: 'none', boxSizing: 'border-box', color: '#111827',[m
+[32m+[m[32m  }[m
+[32m+[m[32m  const labelStyle: React.CSSProperties = {[m
+[32m+[m[32m    fontSize: '0.75rem', fontWeight: 700, color: '#6b7280',[m
+[32m+[m[32m    display: 'block', marginBottom: '6px',[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  // 코치 이름 찾기[m
+[32m+[m[32m  const coachName = (id: string | null) => {[m
+[32m+[m[32m    if (!id) return null[m
+[32m+[m[32m    return coaches.find(c => c.id === id)?.name ?? null[m
+[32m+[m[32m  }[m
+[32m+[m
+   return ([m
+     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>[m
+[32m+[m[32m      {/* 헤더 */}[m
+       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', position: 'sticky', top: 0, zIndex: 40 }}>[m
+         <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>‹</Link>[m
+         <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>수업 프로그램</h1>[m
+[31m-        <button onClick={() => setShowAdd(true)} style={{ marginLeft: 'auto', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.625rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[32m+[m[32m        <button onClick={() => setShowAdd(true)}[m
+[32m+[m[32m          style={{ marginLeft: 'auto', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.625rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+           + 프로그램 추가[m
+         </button>[m
+       </div>[m
+ [m
+       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem' }}>[m
+[32m+[m
+[32m+[m[32m        {/* 안내 배너 */}[m
+[32m+[m[32m        <div style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', border: '1.5px solid #93c5fd', borderRadius: '1rem', padding: '1rem 1.25rem', marginBottom: '1.25rem' }}>[m
+[32m+[m[32m          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1e40af', marginBottom: '4px' }}>📌 프로그램 구분 방식</div>[m
+[32m+[m[32m          <div style={{ fontSize: '0.8rem', color: '#1d4ed8', lineHeight: 1.7 }}>[m
+[32m+[m[32m            • <strong>공통 프로그램</strong> — 모든 코치에게 표시 (코치 미지정)<br/>[m
+[32m+[m[32m            • <strong>코치 전용 프로그램</strong> — 해당 코치를 선택할 때만 표시<br/>[m
+[32m+[m[32m            • 수업 신청·등록 시 코치 선택 → 해당 코치 전용 + 공통 프로그램이 같이 표시됩니다[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        </div>[m
+[32m+[m
+[32m+[m[32m        {/* 코치 필터 탭 */}[m
+[32m+[m[32m        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>[m
+[32m+[m[32m          {[[m
+[32m+[m[32m            { key: 'all',    label: `전체 (${programs.length})` },[m
+[32m+[m[32m            { key: 'common', label: `공통 (${programs.filter(p => !p.coach_id).length})` },[m
+[32m+[m[32m            ...coaches.map(c => ({[m
+[32m+[m[32m              key: c.id,[m
+[32m+[m[32m              label: `${c.name} (${programs.filter(p => p.coach_id === c.id).length})`,[m
+[32m+[m[32m            })),[m
+[32m+[m[32m          ].map(tab => ([m
+[32m+[m[32m            <button key={tab.key} onClick={() => setFilterCoach(tab.key)}[m
+[32m+[m[32m              style={{[m
+[32m+[m[32m                padding: '0.5rem 1rem', borderRadius: '2rem',[m
+[32m+[m[32m                border: `1.5px solid ${filterCoach === tab.key ? '#16A34A' : '#e5e7eb'}`,[m
+[32m+[m[32m                background: filterCoach === tab.key ? '#f0fdf4' : 'white',[m
+[32m+[m[32m                color: filterCoach === tab.key ? '#16A34A' : '#6b7280',[m
+[32m+[m[32m                fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem',[m
+[32m+[m[32m                fontFamily: 'Noto Sans KR, sans-serif',[m
+[32m+[m[32m              }}>[m
+[32m+[m[32m              {tab.label}[m
+[32m+[m[32m            </button>[m
+[32m+[m[32m          ))}[m
+[32m+[m[32m        </div>[m
+[32m+[m
+         {loading ? ([m
+           <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>불러오는 중...</div>[m
+[31m-        ) : programs.length === 0 ? ([m
+[32m+[m[32m        ) : filteredPrograms.length === 0 ? ([m
+           <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>[m
+[31m-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎾</div>[m
+[31m-            <p>등록된 프로그램이 없습니다</p>[m
+[32m+[m[32m            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎾</div>[m
+[32m+[m[32m            <p style={{ fontSize: '0.9rem' }}>등록된 프로그램이 없습니다</p>[m
+[32m+[m[32m            <button onClick={() => setShowAdd(true)}[m
+[32m+[m[32m              style={{ marginTop: '1rem', padding: '0.625rem 1.25rem', borderRadius: '0.75rem', border: 'none', background: '#16A34A', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[32m+[m[32m              + 첫 프로그램 추가[m
+[32m+[m[32m            </button>[m
+           </div>[m
+         ) : ([m
+[31m-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px,1fr))', gap: '0.75rem' }}>[m
+[31m-            {programs.map(p => ([m
+[31m-              <div key={p.id} onClick={() => setSelected({ ...p })}[m
+[31m-                style={{ background: 'white', border: `1.5px solid ${p.is_active ? '#f3f4f6' : '#fee2e2'}`, borderRadius: '1rem', padding: '1.25rem', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.05)', opacity: p.is_active ? 1 : 0.6 }}>[m
+[31m-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>[m
+[32m+[m[32m          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.875rem' }}>[m
+[32m+[m[32m            {filteredPrograms.map(p => ([m
+[32m+[m[32m              <div key={p.id} onClick={() => setSelected(p)}[m
+[32m+[m[32m                style={{ background: 'white', borderRadius: '1rem', border: `1.5px solid ${p.is_active ? '#e5e7eb' : '#f3f4f6'}`, padding: '1.25rem', cursor: 'pointer', opacity: p.is_active ? 1 : 0.55, transition: 'box-shadow .15s' }}[m
+[32m+[m[32m                onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}[m
+[32m+[m[32m                onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>[m
+[32m+[m
+[32m+[m[32m                {/* 상단: 비율 + 상태 + 코치 배지 */}[m
+[32m+[m[32m                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem' }}>[m
+                   <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: '#16A34A' }}>{p.ratio}</span>[m
+[31m-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: p.is_active ? '#dcfce7' : '#fee2e2', color: p.is_active ? '#15803d' : '#b91c1c' }}>[m
+[31m-                    {p.is_active ? '운영중' : '중단'}[m
+[31m-                  </span>[m
+[32m+[m[32m                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>[m
+[32m+[m[32m                    <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: p.is_active ? '#dcfce7' : '#fee2e2', color: p.is_active ? '#15803d' : '#b91c1c' }}>[m
+[32m+[m[32m                      {p.is_active ? '운영중' : '중단'}[m
+[32m+[m[32m                    </span>[m
+[32m+[m[32m                    {/* 코치 배지 */}[m
+[32m+[m[32m                    {p.coach_id ? ([m
+[32m+[m[32m                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>[m
+[32m+[m[32m                        🎾 {coachName(p.coach_id) ?? '코치'}[m
+[32m+[m[32m                      </span>[m
+[32m+[m[32m                    ) : ([m
+[32m+[m[32m                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#f3f4f6', color: '#6b7280' }}>[m
+[32m+[m[32m                        공통[m
+[32m+[m[32m                      </span>[m
+[32m+[m[32m                    )}[m
+[32m+[m[32m                  </div>[m
+                 </div>[m
+[32m+[m
+                 <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827', marginBottom: '4px' }}>{p.name}</div>[m
+[31m-                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>최대 {p.max_students}명 · {p.unit_minutes}분</div>[m
+[31m-                {p.description && <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>{p.description}</div>}[m
+[32m+[m[32m                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>[m
+[32m+[m[32m                  최대 {p.max_students}명 · {p.unit_minutes}분[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m                {p.default_amount > 0 && ([m
+[32m+[m[32m                  <div style={{ fontSize: '0.75rem', color: '#16A34A', fontWeight: 700, marginTop: '4px' }}>[m
+[32m+[m[32m                    기본 수업료: {p.default_amount.toLocaleString()}원[m
+[32m+[m[32m                  </div>[m
+[32m+[m[32m                )}[m
+[32m+[m[32m                {p.description && ([m
+[32m+[m[32m                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>{p.description}</div>[m
+[32m+[m[32m                )}[m
+               </div>[m
+             ))}[m
+           </div>[m
+         )}[m
+       </div>[m
+ [m
+[31m-      {/* 추가 모달 */}[m
+[32m+[m[32m      {/* ── 추가 모달 ── */}[m
+       {showAdd && ([m
+[31m-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}[m
+[32m+[m[32m        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}[m
+           onClick={e => { if (e.target === e.currentTarget) setShowAdd(false) }}>[m
+[31m-          <div style={{ background: 'white', width: '100%', maxWidth: '480px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>[m
+[31m-            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>[m
+[32m+[m[32m          <div style={{ background: 'white', width: '100%', maxWidth: '520px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', maxHeight: '92vh', overflowY: 'auto' }}>[m
+[32m+[m[32m            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }} />[m
+             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem' }}>프로그램 추가</h2>[m
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>[m
+[32m+[m
+[32m+[m[32m              {/* 프로그램 이름 */}[m
+[32m+[m[32m              <div>[m
+[32m+[m[32m                <label style={labelStyle}>프로그램 이름 <span style={{ color: '#ef4444' }}>*</span></label>[m
+[32m+[m[32m                <input style={inputStyle} placeholder="예) 개인레슨, 패밀리레슨, VIP레슨" value={form.name}[m
+[32m+[m[32m                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />[m
+[32m+[m[32m              </div>[m
+[32m+[m
+[32m+[m[32m              {/* 코치 지정 (핵심 추가!) */}[m
+               <div>[m
+[31m-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>프로그램 이름</label>[m
+[31m-                <input className="input-base" placeholder="예) 개인레슨, 패밀리레슨" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />[m
+[32m+[m[32m                <label style={labelStyle}>적용 대상</label>[m
+[32m+[m[32m                <select style={inputStyle} value={form.coach_id}[m
+[32m+[m[32m                  onChange={e => setForm(f => ({ ...f, coach_id: e.target.value }))}>[m
+[32m+[m[32m                  <option value="">🌐 공통 프로그램 (전체 코치)</option>[m
+[32m+[m[32m                  {coaches.map(c => ([m
+[32m+[m[32m                    <option key={c.id} value={c.id}>🎾 {c.name} 코치 전용</option>[m
+[32m+[m[32m                  ))}[m
+[32m+[m[32m                </select>[m
+[32m+[m[32m                <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '4px' }}>[m
+[32m+[m[32m                  공통: 모든 코치에게 표시 / 코치 전용: 해당 코치 선택 시에만 표시[m
+[32m+[m[32m                </div>[m
+               </div>[m
+[32m+[m
+[32m+[m[32m              {/* 수업 비율 */}[m
+               <div>[m
+[31m-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '8px' }}>수업 비율 (코치:학생)</label>[m
+[32m+[m[32m                <label style={labelStyle}>수업 비율 (코치:학생)</label>[m
+                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>[m
+                   {PRESET_RATIOS.map(r => ([m
+                     <button key={r} onClick={() => { setUseCustom(false); setForm(f => ({ ...f, ratio: r })) }}[m
+[36m@@ -143,76 +305,174 @@[m [mexport default function ProgramsPage() {[m
+                   </button>[m
+                 </div>[m
+                 {useCustom && ([m
+[31m-                  <input className="input-base" placeholder="예) 7:1, 8:1" value={form.customRatio} onChange={e => setForm(f => ({ ...f, customRatio: e.target.value }))} />[m
+[32m+[m[32m                  <input style={inputStyle} placeholder="예: 2:3" value={form.customRatio}[m
+[32m+[m[32m                    onChange={e => setForm(f => ({ ...f, customRatio: e.target.value }))} />[m
+                 )}[m
+               </div>[m
+[31m-              <div style={{ display: 'flex', gap: '0.75rem' }}>[m
+[31m-                <div style={{ flex: 1 }}>[m
+[31m-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>최대 학생 수</label>[m
+[31m-                  <input type="number" className="input-base" value={form.max_students} min={1} max={50} onChange={e => setForm(f => ({ ...f, max_students: Number(e.target.value) }))} />[m
+[32m+[m
+[32m+[m[32m              {/* 최대 인원 */}[m
+[32m+[m[32m              <div>[m
+[32m+[m[32m                <label style={labelStyle}>최대 학생 수</label>[m
+[32m+[m[32m                <div style={{ display: 'flex', gap: '0.375rem' }}>[m
+[32m+[m[32m                  {[1,2,3,4,5,6].map(n => ([m
+[32m+[m[32m                    <button key={n} onClick={() => setForm(f => ({ ...f, max_students: n }))}[m
+[32m+[m[32m                      style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: `1.5px solid ${form.max_students === n ? '#16A34A' : '#e5e7eb'}`, background: form.max_students === n ? '#f0fdf4' : 'white', color: form.max_students === n ? '#16A34A' : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}>[m
+[32m+[m[32m                      {n}명[m
+[32m+[m[32m                    </button>[m
+[32m+[m[32m                  ))}[m
+                 </div>[m
+[31m-                <div style={{ flex: 1 }}>[m
+[31m-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>수업 시간 (분)</label>[m
+[31m-                  <input type="number" className="input-base" value={form.unit_minutes} min={30} step={15} onChange={e => setForm(f => ({ ...f, unit_minutes: Number(e.target.value) }))} />[m
+[32m+[m[32m              </div>[m
+[32m+[m
+[32m+[m[32m              {/* 회당 시간 */}[m
+[32m+[m[32m              <div>[m
+[32m+[m[32m                <label style={labelStyle}>회당 수업 시간</label>[m
+[32m+[m[32m                <div style={{ display: 'flex', gap: '0.375rem' }}>[m
+[32m+[m[32m                  {[30, 45, 60, 90, 120].map(u => ([m
+[32m+[m[32m                    <button key={u} onClick={() => setForm(f => ({ ...f, unit_minutes: u }))}[m
+[32m+[m[32m                      style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: `1.5px solid ${form.unit_minutes === u ? '#16A34A' : '#e5e7eb'}`, background: form.unit_minutes === u ? '#f0fdf4' : 'white', color: form.unit_minutes === u ? '#16A34A' : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}>[m
+[32m+[m[32m                      {u}분[m
+[32m+[m[32m                    </button>[m
+[32m+[m[32m                  ))}[m
+                 </div>[m
+               </div>[m
+[32m+[m
+[32m+[m[32m              {/* 기본 수업료 */}[m
+[32m+[m[32m              <div>[m
+[32m+[m[32m                <label style={labelStyle}>기본 수업료 (원) — 수업 등록 시 자동 입력</label>[m
+[32m+[m[32m                <input type="number" style={inputStyle} placeholder="0 (수동 입력 원하면 0으로 두세요)"[m
+[32m+[m[32m                  value={form.default_amount || ''}[m
+[32m+[m[32m                  onChange={e => setForm(f => ({ ...f, default_amount: Number(e.target.value) }))} />[m
+[32m+[m[32m              </div>[m
+[32m+[m
+[32m+[m[32m              {/* 정렬 순서 */}[m
+               <div>[m
+[31m-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>설명 (선택)</label>[m
+[31m-                <textarea className="input-base" placeholder="프로그램 설명" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ resize: 'none' }} />[m
+[32m+[m[32m                <label style={labelStyle}>표시 순서 (숫자 작을수록 위에 표시)</label>[m
+[32m+[m[32m                <input type="number" style={inputStyle} placeholder="0" min="0"[m
+[32m+[m[32m                  value={form.sort_order || ''}[m
+[32m+[m[32m                  onChange={e => setForm(f => ({ ...f, sort_order: Number(e.target.value) }))} />[m
+[32m+[m[32m              </div>[m
+[32m+[m
+[32m+[m[32m              {/* 설명 */}[m
+[32m+[m[32m              <div>[m
+[32m+[m[32m                <label style={labelStyle}>설명 (선택)</label>[m
+[32m+[m[32m                <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '70px' }}[m
+[32m+[m[32m                  placeholder="프로그램 특징, 대상, 주의사항 등" value={form.description}[m
+[32m+[m[32m                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />[m
+[32m+[m[32m              </div>[m
+[32m+[m
+[32m+[m[32m              {/* 버튼 */}[m
+[32m+[m[32m              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>[m
+[32m+[m[32m                <button onClick={() => setShowAdd(false)}[m
+[32m+[m[32m                  style={{ flex: 1, padding: '0.875rem', borderRadius: '0.875rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#374151', cursor: 'pointer', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[32m+[m[32m                  취소[m
+[32m+[m[32m                </button>[m
+[32m+[m[32m                <button onClick={handleAdd} disabled={saving}[m
+[32m+[m[32m                  style={{ flex: 2, padding: '0.875rem', borderRadius: '0.875rem', border: 'none', background: saving ? '#e5e7eb' : '#16A34A', color: saving ? '#9ca3af' : 'white', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[32m+[m[32m                  {saving ? '저장 중...' : '+ 프로그램 추가'}[m
+[32m+[m[32m                </button>[m
+               </div>[m
+[31m-            </div>[m
+[31m-            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>[m
+[31m-              <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>취소</button>[m
+[31m-              <button onClick={handleAdd} disabled={saving} style={{ flex: 2, padding: '0.75rem', borderRadius: '0.75rem', border: 'none', background: '#16A34A', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[31m-                {saving ? '추가 중...' : '추가'}[m
+[31m-              </button>[m
+             </div>[m
+           </div>[m
+         </div>[m
+       )}[m
+ [m
+[31m-      {/* 수정 모달 */}[m
+[32m+[m[32m      {/* ── 수정 모달 ── */}[m
+       {selected && ([m
+[31m-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}[m
+[32m+[m[32m        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}[m
+           onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>[m
+[31m-          <div style={{ background: 'white', width: '100%', maxWidth: '480px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>[m
+[31m-            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>[m
+[31m-            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem' }}>프로그램 수정</h2>[m
+[32m+[m[32m          <div style={{ background: 'white', width: '100%', maxWidth: '520px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', maxHeight: '92vh', overflowY: 'auto' }}>[m
+[32m+[m[32m            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }} />[m
+[32m+[m[32m            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>[m
+[32m+[m[32m              <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700 }}>프로그램 수정</h2>[m
+[32m+[m[32m              <div style={{ display: 'flex', gap: '0.5rem' }}>[m
+[32m+[m[32m                <button onClick={() => handleToggle(selected.id)}[m
+[32m+[m[32m                  style={{ padding: '0.375rem 0.875rem', borderRadius: '0.625rem', border: `1.5px solid ${selected.is_active ? '#fca5a5' : '#86efac'}`, background: selected.is_active ? '#fef2f2' : '#f0fdf4', color: selected.is_active ? '#b91c1c' : '#15803d', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[32m+[m[32m                  {selected.is_active ? '중단' : '운영 재개'}[m
+[32m+[m[32m                </button>[m
+[32m+[m[32m                <button onClick={() => handleDelete(selected.id)}[m
+[32m+[m[32m                  style={{ padding: '0.375rem 0.875rem', borderRadius: '0.625rem', border: '1.5px solid #fca5a5', background: '#fef2f2', color: '#b91c1c', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[32m+[m[32m                  삭제[m
+[32m+[m[32m                </button>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m            </div>[m
+[32m+[m
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>[m
+               <div>[m
+[31m-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>프로그램 이름</label>[m
+[31m-                <input className="input-base" value={selected.name} onChange={e => setSelected(s => s ? { ...s, name: e.target.value } : s)} />[m
+[32m+[m[32m                <label style={labelStyle}>프로그램 이름</label>[m
+[32m+[m[32m                <input style={inputStyle} value={selected.name}[m
+[32m+[m[32m                  onChange={e => setSelected(s => s ? { ...s, name: e.target.value } : s)} />[m
+               </div>[m
+[32m+[m
+[32m+[m[32m              {/* 코치 지정 수정 */}[m
+               <div>[m
+[31m-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>비율</label>[m
+[31m-                <input className="input-base" value={selected.ratio} onChange={e => setSelected(s => s ? { ...s, ratio: e.target.value } : s)} />[m
+[32m+[m[32m                <label style={labelStyle}>적용 대상</label>[m
+[32m+[m[32m                <select style={inputStyle} value={selected.coach_id ?? ''}[m
+[32m+[m[32m                  onChange={e => setSelected(s => s ? { ...s, coach_id: e.target.value || null } : s)}>[m
+[32m+[m[32m                  <option value="">🌐 공통 프로그램 (전체 코치)</option>[m
+[32m+[m[32m                  {coaches.map(c => ([m
+[32m+[m[32m                    <option key={c.id} value={c.id}>🎾 {c.name} 코치 전용</option>[m
+[32m+[m[32m                  ))}[m
+[32m+[m[32m                </select>[m
+               </div>[m
+[31m-              <div style={{ display: 'flex', gap: '0.75rem' }}>[m
+[31m-                <div style={{ flex: 1 }}>[m
+[31m-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>최대 학생 수</label>[m
+[31m-                  <input type="number" className="input-base" value={selected.max_students} min={1} onChange={e => setSelected(s => s ? { ...s, max_students: Number(e.target.value) } : s)} />[m
+[32m+[m
+[32m+[m[32m              <div>[m
+[32m+[m[32m                <label style={labelStyle}>수업 비율</label>[m
+[32m+[m[32m                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>[m
+[32m+[m[32m                  {PRESET_RATIOS.map(r => ([m
+[32m+[m[32m                    <button key={r} onClick={() => setSelected(s => s ? { ...s, ratio: r } : s)}[m
+[32m+[m[32m                      style={{ padding: '0.5rem 0.875rem', borderRadius: '0.625rem', border: `1.5px solid ${selected.ratio === r ? '#16A34A' : '#e5e7eb'}`, background: selected.ratio === r ? '#f0fdf4' : 'white', color: selected.ratio === r ? '#16A34A' : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[32m+[m[32m                      {r}[m
+[32m+[m[32m                    </button>[m
+[32m+[m[32m                  ))}[m
+                 </div>[m
+[31m-                <div style={{ flex: 1 }}>[m
+[31m-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>수업 시간 (분)</label>[m
+[31m-                  <input type="number" className="input-base" value={selected.unit_minutes} min={30} step={15} onChange={e => setSelected(s => s ? { ...s, unit_minutes: Number(e.target.value) } : s)} />[m
+[32m+[m[32m              </div>[m
+[32m+[m
+[32m+[m[32m              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>[m
+[32m+[m[32m                <div>[m
+[32m+[m[32m                  <label style={labelStyle}>최대 인원</label>[m
+[32m+[m[32m                  <input type="number" style={inputStyle} min="1" value={selected.max_students}[m
+[32m+[m[32m                    onChange={e => setSelected(s => s ? { ...s, max_students: Number(e.target.value) } : s)} />[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m                <div>[m
+[32m+[m[32m                  <label style={labelStyle}>회당 시간(분)</label>[m
+[32m+[m[32m                  <input type="number" style={inputStyle} min="30" step="15" value={selected.unit_minutes}[m
+[32m+[m[32m                    onChange={e => setSelected(s => s ? { ...s, unit_minutes: Number(e.target.value) } : s)} />[m
+                 </div>[m
+               </div>[m
+[32m+[m
+               <div>[m
+[31m-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>설명</label>[m
+[31m-                <textarea className="input-base" value={selected.description ?? ''} onChange={e => setSelected(s => s ? { ...s, description: e.target.value } : s)} rows={2} style={{ resize: 'none' }} />[m
+[32m+[m[32m                <label style={labelStyle}>기본 수업료 (원)</label>[m
+[32m+[m[32m                <input type="number" style={inputStyle} min="0" value={selected.default_amount ?? 0}[m
+[32m+[m[32m                  onChange={e => setSelected(s => s ? { ...s, default_amount: Number(e.target.value) } : s)} />[m
+[32m+[m[32m              </div>[m
+[32m+[m
+[32m+[m[32m              <div>[m
+[32m+[m[32m                <label style={labelStyle}>표시 순서</label>[m
+[32m+[m[32m                <input type="number" style={inputStyle} min="0" value={selected.sort_order ?? 0}[m
+[32m+[m[32m                  onChange={e => setSelected(s => s ? { ...s, sort_order: Number(e.target.value) } : s)} />[m
+[32m+[m[32m              </div>[m
+[32m+[m
+[32m+[m[32m              <div>[m
+[32m+[m[32m                <label style={labelStyle}>설명</label>[m
+[32m+[m[32m                <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: '70px' }}[m
+[32m+[m[32m                  value={selected.description ?? ''}[m
+[32m+[m[32m                  onChange={e => setSelected(s => s ? { ...s, description: e.target.value } : s)} />[m
+[32m+[m[32m              </div>[m
+[32m+[m
+[32m+[m[32m              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>[m
+[32m+[m[32m                <button onClick={() => setSelected(null)}[m
+[32m+[m[32m                  style={{ flex: 1, padding: '0.875rem', borderRadius: '0.875rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#374151', cursor: 'pointer', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[32m+[m[32m                  취소[m
+[32m+[m[32m                </button>[m
+[32m+[m[32m                <button onClick={handleSave} disabled={saving}[m
+[32m+[m[32m                  style={{ flex: 2, padding: '0.875rem', borderRadius: '0.875rem', border: 'none', background: saving ? '#e5e7eb' : '#16A34A', color: saving ? '#9ca3af' : 'white', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[32m+[m[32m                  {saving ? '저장 중...' : '저장'}[m
+[32m+[m[32m                </button>[m
+               </div>[m
+[31m-            </div>[m
+[31m-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginTop: '1.5rem' }}>[m
+[31m-              <button onClick={handleSave} disabled={saving} style={{ padding: '0.75rem', borderRadius: '0.75rem', border: 'none', background: '#16A34A', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[31m-                {saving ? '저장 중...' : '저장'}[m
+[31m-              </button>[m
+[31m-              <button onClick={() => handleToggle(selected.id)} style={{ padding: '0.75rem', borderRadius: '0.75rem', border: `1.5px solid ${selected.is_active ? '#fecaca' : '#86efac'}`, background: selected.is_active ? '#fef2f2' : '#f0fdf4', color: selected.is_active ? '#b91c1c' : '#15803d', fontWeight: 600, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>[m
+[31m-                {selected.is_active ? '🚫 프로그램 중단' : '✅ 프로그램 재개'}[m
+[31m-              </button>[m
+             </div>[m
+           </div>[m
+         </div>[m
+       )}[m
+     </div>[m
+   )[m
+[31m-}[m
+[32m+[m[32m}[m
+\ No newline at end of file[m
