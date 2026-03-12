@@ -7,7 +7,13 @@ import Link from 'next/link'
 interface Coach   { id: string; name: string }
 interface Month   { id: string; year: number; month: number }
 interface Member  { id: string; name: string; phone: string }
-interface Program { id: string; name: string; unit_minutes: number }
+interface Program {
+  id: string
+  name: string
+  unit_minutes: number
+  default_amount: number  // 기본 수업료 자동 입력
+  coach_id: string | null // null=공통, 값=특정코치전용
+}
 interface Schedule { datetime: string; duration: number }
 
 const DAYS = ['일','월','화','수','목','금','토']
@@ -15,12 +21,13 @@ const DAYS = ['일','월','화','수','목','금','토']
 export default function LessonPlanCreatePage() {
   const router = useRouter()
 
-  const [coaches,  setCoaches]  = useState<Coach[]>([])
-  const [months,   setMonths]   = useState<Month[]>([])
-  const [members,  setMembers]  = useState<Member[]>([])
-  const [programs, setPrograms] = useState<Program[]>([])
-  const [saving,   setSaving]   = useState(false)
-  const [error,    setError]    = useState('')
+  const [coaches,     setCoaches]     = useState<Coach[]>([])
+  const [months,      setMonths]      = useState<Month[]>([])
+  const [members,     setMembers]     = useState<Member[]>([])
+  const [allPrograms, setAllPrograms] = useState<Program[]>([])  // 전체 보관
+  const [programs,    setPrograms]    = useState<Program[]>([])  // 코치 선택 후 표시용
+  const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState('')
 
   const [memberId,       setMemberId]       = useState('')
   const [memberSearch,   setMemberSearch]   = useState('')
@@ -49,6 +56,7 @@ export default function LessonPlanCreatePage() {
       fetch('/api/coaches').then(r => r.json()),
       fetch('/api/months').then(r => r.json()),
       fetch('/api/members').then(r => r.json()),
+      // 전체 프로그램 가져오기 (코치 선택 전엔 공통만 표시)
       fetch('/api/programs').then(r => r.json()),
     ]).then(([c, m, mem, p]) => {
       setCoaches(Array.isArray(c) ? c : [])
@@ -56,9 +64,29 @@ export default function LessonPlanCreatePage() {
       setMonths(mList)
       if (mList.length > 0) setMonthId(mList[0].id)
       setMembers(Array.isArray(mem) ? mem : [])
-      setPrograms(Array.isArray(p) ? p : [])
+      const pList = Array.isArray(p) ? p : []
+      setAllPrograms(pList)
+      // 초기: 공통 프로그램만 표시 (coach_id === null)
+      setPrograms(pList.filter((x: Program) => x.coach_id === null && x.is_active !== false))
     })
   }, [])
+
+  // ── 코치 변경 시 → 해당 코치 프로그램 API 재호출 ──────────────
+  useEffect(() => {
+    if (!coachId) {
+      // 코치 미선택: 공통 프로그램만
+      setPrograms(allPrograms.filter(x => x.coach_id === null))
+      setProgramId('')
+      return
+    }
+    // 코치 선택: 공통 + 해당 코치 전용 (is_active 필터는 API에서 처리)
+    fetch(`/api/programs?coach_id=${coachId}`)
+      .then(r => r.json())
+      .then(d => setPrograms(Array.isArray(d) ? d : []))
+    // 프로그램 선택 초기화
+    setProgramId('')
+    setLessonType('')
+  }, [coachId])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -78,6 +106,8 @@ export default function LessonPlanCreatePage() {
     setProgramId(p.id)
     setLessonType(p.name)
     setUnitMinutes(p.unit_minutes || 60)
+    // ✅ 기본 수업료가 있으면 자동 입력
+    if (p.default_amount > 0) setAmount(p.default_amount)
   }
 
   const toggleDay = (d: number) =>
@@ -137,14 +167,15 @@ export default function LessonPlanCreatePage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        member_id: memberId,
-        coach_id: coachId,
-        month_id: monthId,
-        lesson_type: lessonType || '개인레슨',
+        member_id:    memberId,
+        coach_id:     coachId,
+        month_id:     monthId,
+        lesson_type:  lessonType || '개인레슨',
         unit_minutes: unitMinutes,
         schedules,
         amount,
         payment_status: payment,
+        program_id:   programId || undefined,
       }),
     })
     const d = await res.json()
@@ -167,6 +198,9 @@ export default function LessonPlanCreatePage() {
     fontSize: '0.75rem', fontWeight: 700, color: '#6b7280',
     display: 'block', marginBottom: '6px',
   }
+
+  // 선택된 코치 이름
+  const selectedCoachName = coaches.find(c => c.id === coachId)?.name
 
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
@@ -243,26 +277,68 @@ export default function LessonPlanCreatePage() {
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>수업 설정</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
 
-            {/* 프로그램 */}
-            {programs.length > 0 && (
-              <div>
-                <label style={labelStyle}>프로그램</label>
+            {/* ✅ 프로그램 선택 - 코치 기반 필터링 */}
+            <div>
+              <label style={labelStyle}>
+                프로그램
+                {coachId && selectedCoachName && (
+                  <span style={{ fontWeight: 400, color: '#3b82f6', marginLeft: '6px' }}>
+                    — {selectedCoachName} 코치 기준
+                  </span>
+                )}
+              </label>
+
+              {!coachId ? (
+                // 코치 미선택 상태
+                <div style={{ padding: '0.75rem 1rem', background: '#f9fafb', borderRadius: '0.625rem', border: '1.5px dashed #e5e7eb', fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center' }}>
+                  👆 먼저 코치를 선택하면 해당 코치의 수업 프로그램이 표시됩니다
+                </div>
+              ) : programs.length === 0 ? (
+                // 코치 선택했는데 프로그램 없음
+                <div style={{ padding: '0.75rem 1rem', background: '#fef9c3', borderRadius: '0.625rem', border: '1.5px solid #fde68a', fontSize: '0.8rem', color: '#854d0e' }}>
+                  ⚠️ 등록된 프로그램이 없습니다. <Link href="/owner/programs" style={{ color: '#1d4ed8', fontWeight: 700 }}>프로그램 관리</Link>에서 추가해주세요.
+                </div>
+              ) : (
+                // 프로그램 버튼 목록
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   {programs.map(p => (
                     <button key={p.id} onClick={() => handleProgramSelect(p)}
-                      style={{ padding: '0.5rem 1rem', borderRadius: '0.625rem', border: `1.5px solid ${programId === p.id ? '#16A34A' : '#e5e7eb'}`, background: programId === p.id ? '#f0fdf4' : 'white', color: programId === p.id ? '#16A34A' : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                      style={{
+                        padding: '0.5rem 1rem', borderRadius: '0.625rem', cursor: 'pointer',
+                        border: `1.5px solid ${programId === p.id ? '#16A34A' : p.coach_id ? '#3b82f6' : '#e5e7eb'}`,
+                        background: programId === p.id ? '#f0fdf4' : p.coach_id ? '#eff6ff' : 'white',
+                        color: programId === p.id ? '#16A34A' : p.coach_id ? '#1d4ed8' : '#6b7280',
+                        fontWeight: 700, fontSize: '0.85rem', fontFamily: 'Noto Sans KR, sans-serif',
+                        position: 'relative',
+                      }}>
                       {p.name}
+                      {/* 코치 전용 표시 */}
+                      {p.coach_id && (
+                        <span style={{ fontSize: '0.6rem', position: 'absolute', top: '-6px', right: '-4px', background: '#1d4ed8', color: 'white', borderRadius: '9999px', padding: '1px 5px', fontWeight: 700 }}>
+                          전용
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* 선택된 프로그램 정보 */}
+              {programId && (
+                <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f0fdf4', borderRadius: '0.5rem', fontSize: '0.75rem', color: '#15803d', display: 'flex', gap: '1rem' }}>
+                  {programs.find(p => p.id === programId)?.unit_minutes}분 수업
+                  {(programs.find(p => p.id === programId)?.default_amount ?? 0) > 0 && (
+                    <span>· 기본 수업료 {programs.find(p => p.id === programId)!.default_amount.toLocaleString()}원 자동 입력됨</span>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* 수업 종류 직접입력 */}
             <div>
               <label style={labelStyle}>수업 종류</label>
               <input type="text" value={lessonType} onChange={e => setLessonType(e.target.value)}
-                placeholder="개인레슨, 그룹레슨 등" style={inputStyle} />
+                placeholder="개인레슨, 그룹레슨 등 (프로그램 선택 시 자동입력)" style={inputStyle} />
             </div>
 
             {/* 회당 시간 */}
@@ -285,13 +361,11 @@ export default function LessonPlanCreatePage() {
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>수업 일정 생성</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
 
-            {/* 시작 날짜 */}
             <div>
               <label style={labelStyle}>시작 날짜</label>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inputStyle} />
             </div>
 
-            {/* 수업 요일 */}
             <div>
               <label style={labelStyle}>수업 요일</label>
               <div style={{ display: 'flex', gap: '0.375rem' }}>
@@ -304,7 +378,6 @@ export default function LessonPlanCreatePage() {
               </div>
             </div>
 
-            {/* 수업 시간 + 총 횟수 */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div>
                 <label style={labelStyle}>수업 시간</label>
@@ -323,13 +396,11 @@ export default function LessonPlanCreatePage() {
               </div>
             </div>
 
-            {/* 자동 생성 버튼 */}
             <button onClick={generateSchedules} disabled={!startDate || !selectedDays.length}
               style={{ padding: '0.75rem', borderRadius: '0.75rem', border: 'none', fontWeight: 700, fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif', cursor: (!startDate || !selectedDays.length) ? 'not-allowed' : 'pointer', background: (!startDate || !selectedDays.length) ? '#e5e7eb' : '#1d4ed8', color: (!startDate || !selectedDays.length) ? '#9ca3af' : 'white' }}>
               📅 일정 자동 생성
             </button>
 
-            {/* 생성된 일정 목록 */}
             {schedules.length > 0 && (
               <div>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>
@@ -340,7 +411,6 @@ export default function LessonPlanCreatePage() {
                   {schedules.map((s, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.5rem', border: '1px solid #f3f4f6' }}>
                       <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16A34A', minWidth: '28px' }}>{i+1}회</span>
-
                       {editIdx === i ? (
                         <>
                           <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)}
@@ -373,7 +443,12 @@ export default function LessonPlanCreatePage() {
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>결제 정보</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
             <div>
-              <label style={labelStyle}>수업료 (원)</label>
+              <label style={labelStyle}>
+                수업료 (원)
+                {programId && (programs.find(p => p.id === programId)?.default_amount ?? 0) > 0 && (
+                  <span style={{ fontWeight: 400, color: '#16A34A', marginLeft: '6px' }}>← 프로그램 기본값 자동 입력됨</span>
+                )}
+              </label>
               <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))}
                 placeholder="0" style={inputStyle} />
             </div>

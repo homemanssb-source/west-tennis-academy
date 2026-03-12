@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import MemberBottomNav from '@/components/MemberBottomNav'
 
 interface Coach        { id: string; name: string }
 interface Month        { id: string; year: number; month: number }
-interface Program      { id: string; name: string; unit_minutes: number }
+interface Program      { id: string; name: string; unit_minutes: number; coach_id: string | null; default_amount: number }
 interface FamilyMember { id: string; name: string; birth_date: string | null }
 interface SlotInfo     { scheduled_at: string; status: string }
 interface BlockInfo    { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
@@ -57,12 +58,13 @@ export default function MemberApplyPage() {
   const [tab,  setTab]  = useState<'new'|'list'>('new')
   const [step, setStep] = useState(1)
 
-  const [coaches,  setCoaches]  = useState<Coach[]>([])
-  const [months,   setMonths]   = useState<Month[]>([])
-  const [programs, setPrograms] = useState<Program[]>([])
-  const [family,   setFamily]   = useState<FamilyMember[]>([])
-  const [myApps,   setMyApps]   = useState<MyApp[]>([])
-  const [loading,  setLoading]  = useState(true)
+  const [coaches,     setCoaches]     = useState<Coach[]>([])
+  const [months,      setMonths]      = useState<Month[]>([])
+  const [allPrograms, setAllPrograms] = useState<Program[]>([])  // 전체 보관
+  const [programs,    setPrograms]    = useState<Program[]>([])  // 코치 선택 후 표시용
+  const [family,      setFamily]      = useState<FamilyMember[]>([])
+  const [myApps,      setMyApps]      = useState<MyApp[]>([])
+  const [loading,     setLoading]     = useState(true)
 
   const [applicantType, setApplicantType] = useState<'self'|'family'>('self')
   const [familyId,  setFamilyId]  = useState('')
@@ -96,7 +98,10 @@ export default function MemberApplyPage() {
       const mList = Array.isArray(m) ? m : []
       setMonths(mList)
       if (mList.length > 0) setMonthId(mList[0].id)
-      setPrograms(Array.isArray(p) ? p : [])
+      const pList = Array.isArray(p) ? p : []
+      setAllPrograms(pList)
+      // 초기: 공통 프로그램만 표시 (코치 선택 전)
+      setPrograms(pList.filter((x: Program) => x.coach_id === null))
       setFamily(Array.isArray(f) ? f : [])
     })
     loadMyApps()
@@ -133,6 +138,21 @@ export default function MemberApplyPage() {
     '11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30',
     '15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30',
     '19:00','19:30','20:00','20:30','21:00']
+
+  // ── 코치 변경 시 → 해당 코치 프로그램 필터링 ──────────────
+  useEffect(() => {
+    if (!coachId) {
+      // 코치 미선택: 공통 프로그램만
+      setPrograms(allPrograms.filter(x => x.coach_id === null))
+      setProgramId('')
+      return
+    }
+    // 코치 선택: API에서 공통 + 해당 코치 전용 합쳐서 가져옴
+    fetch(`/api/programs?coach_id=${coachId}`)
+      .then(r => r.json())
+      .then(d => setPrograms(Array.isArray(d) ? d : []))
+    setProgramId('') // 코치 바뀌면 선택 초기화
+  }, [coachId])
 
   useEffect(() => {
     if (!coachId || !monthId) return
@@ -320,17 +340,48 @@ export default function MemberApplyPage() {
                       {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
                     </select>
                   </div>
-                  {programs.length > 0 && (
-                    <div>
-                      <label style={s.label}>프로그램</label>
+                  {/* 프로그램 (코치 선택 후 필터링) */}
+                  <div>
+                    <label style={s.label}>
+                      레슨 유형
+                      {coachId && coaches.find(c => c.id === coachId) && (
+                        <span style={{ fontWeight: 400, color: '#3b82f6', marginLeft: '6px' }}>
+                          — {coaches.find(c => c.id === coachId)!.name} 코치 기준
+                        </span>
+                      )}
+                    </label>
+
+                    {!coachId ? (
+                      <div style={{ padding: '0.625rem 0.875rem', background: '#f9fafb', borderRadius: '0.625rem', border: '1.5px dashed #e5e7eb', fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center' }}>
+                        👆 먼저 코치를 선택하면 수업 프로그램이 표시됩니다
+                      </div>
+                    ) : programs.length === 0 ? (
+                      <div style={{ padding: '0.625rem 0.875rem', background: '#fef9c3', borderRadius: '0.625rem', border: '1.5px solid #fde68a', fontSize: '0.8rem', color: '#854d0e' }}>
+                        ⚠️ 등록된 수업 프로그램이 없습니다
+                      </div>
+                    ) : (
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {programs.map(p => (
-                          <button key={p.id} onClick={() => { setProgramId(p.id); setDuration(p.unit_minutes || 60) }}
-                            style={programId === p.id ? s.btnOn : s.btn}>{p.name}</button>
+                          <button key={p.id}
+                            onClick={() => { setProgramId(p.id); setDuration(p.unit_minutes || 60) }}
+                            style={{
+                              ...( programId === p.id ? s.btnOn : s.btn ),
+                              border: `1.5px solid ${programId === p.id ? '#16A34A' : p.coach_id ? '#3b82f6' : '#e5e7eb'}`,
+                              background: programId === p.id ? '#f0fdf4' : p.coach_id ? '#eff6ff' : 'white',
+                              color: programId === p.id ? '#15803d' : p.coach_id ? '#1d4ed8' : '#6b7280',
+                              position: 'relative',
+                            }}>
+                            {p.name}
+                            {p.coach_id && (
+                              <span style={{ fontSize: '0.55rem', position: 'absolute', top: '-5px', right: '-4px', background: '#1d4ed8', color: 'white', borderRadius: '9999px', padding: '1px 4px', fontWeight: 700 }}>
+                                전용
+                              </span>
+                            )}
+                          </button>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                   <div>
                     <label style={s.label}>수업 시간</label>
                     <div style={{ display: 'flex', gap: '0.375rem' }}>
@@ -612,20 +663,7 @@ export default function MemberApplyPage() {
       )}
 
       {/* 하단 네비 */}
-      <div className="bottom-nav">
-        <Link href="/member" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span></Link>
-        <Link href="/member/schedule" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span></Link>
-        <Link href="/member/apply" className="bottom-nav-item active" style={{ position: 'relative' }}>
-          <span style={{ fontSize: '1.25rem' }}>🎾</span><span>신청</span>
-          {pendingAppCount > 0 && (
-            <span style={{ position: 'absolute', top: '4px', right: '8px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: '9999px' }}>
-              {pendingAppCount}
-            </span>
-          )}
-        </Link>
-        <Link href="/member/payment" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span></Link>
-        <Link href="/member/family" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>👨‍👩‍👧</span><span>가족</span></Link>
-      </div>
+      <MemberBottomNav />
     </div>
   )
 }
