@@ -150,7 +150,6 @@ export default function CoachApplicationsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
             {current.map(a => (
               <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }}>
-                {/* 체크박스 (대기 탭만) */}
                 {tab === 'pending' && (
                   <div style={{ paddingTop: '1rem' }}>
                     <input type="checkbox" checked={checkedIds.has(a.id)} onChange={() => toggleCheck(a.id)}
@@ -256,22 +255,30 @@ export default function CoachApplicationsPage() {
         </div>
       )}
 
-      {/* 하단 네비 */}
+      {/* 하단 네비 - 버그 수정 + 납부 추가 */}
       <div className="bottom-nav">
         <Link href="/coach" className="bottom-nav-item">
           <span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span>
         </Link>
+        <Link href="/coach/applications" className="bottom-nav-item active" style={{ position: 'relative' }}>
+          <span style={{ fontSize: '1.25rem' }}>📋</span>
+          <span>신청확인</span>
+          {pending.length > 0 && (
+            <span style={{ position: 'absolute', top: '4px', right: '8px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: '9999px' }}>
+              {pending.length}
+            </span>
+          )}
+        </Link>
+        <Link href="/coach/payment" className="bottom-nav-item">
+          <span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span>
+        </Link>
+        <Link href="/coach/blocks" className="bottom-nav-item">
+          <span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span>
+        </Link>
         <Link href="/coach/schedule" className="bottom-nav-item">
           <span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span>
-        </Link>
-        <Link href="/coach/applications" className="bottom-nav-item active">
-          <span style={{ fontSize: '1.25rem' }}>🎾</span>
-          <span>신청</span>
-          {pending.length > 0 && <span style={{ position: 'absolute', top: '4px', right: '12px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: '9999px' }}>{pending.length}</span>}
-        <Link href="/coach/blocks" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span></Link>
         </Link>
       </div>
     </div>
   )
 }
-

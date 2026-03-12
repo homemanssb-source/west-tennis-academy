@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import MemberBottomNav from '@/components/MemberBottomNav'
 
 interface Plan {
   id: string
@@ -73,11 +73,7 @@ export default function MemberPaymentPage() {
         )}
       </div>
 
-      <div className="bottom-nav" style={{ paddingBottom: '0.5rem' }}>
-        <Link href="/member" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span></Link>
-        <Link href="/member/schedule" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span></Link>
-        <Link href="/member/payment" className="bottom-nav-item active"><span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span></Link>
-      </div>
+      <MemberBottomNav />
     </div>
   )
 }

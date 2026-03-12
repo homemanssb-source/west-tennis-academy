@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import Link from 'next/link'
+import CoachBottomNav from '@/components/CoachBottomNav'
 
 interface Slot {
   id: string
@@ -108,7 +108,6 @@ export default function CoachSchedulePage() {
 
   return (
     <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* 헤더 */}
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>스케줄</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -119,7 +118,6 @@ export default function CoachSchedulePage() {
         </div>
       </div>
 
-      {/* 슬롯 목록 */}
       <div style={{ flex: 1, padding: '1rem 1.25rem 6rem', overflowY: 'auto' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
@@ -149,19 +147,8 @@ export default function CoachSchedulePage() {
         )}
       </div>
 
-      {/* 하단 탭바 */}
-      <div className="bottom-nav">
-        <Link href="/coach" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>🏠</span>
-          <span>홈</span>
-        </Link>
-        <Link href="/coach/schedule" className="bottom-nav-item active">
-          <span style={{ fontSize: '1.25rem' }}>📅</span>
-          <span>스케줄</span>
-        </Link>
-      </div>
+      <CoachBottomNav />
 
-      {/* 수업 처리 모달 */}
       {selected && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
           onClick={e => { if (e.target === e.currentTarget) { setSelected(null); setMemo(''); setShowMakeup(false) } }}>
@@ -189,8 +176,6 @@ export default function CoachSchedulePage() {
                 </button>
               ))}
             </div>
-
-            {/* 보강 날짜 선택 UI */}
             {showMakeup && (
               <div style={{ marginTop: '1rem', background: '#fdf4ff', border: '1.5px solid #c084fc', borderRadius: '0.875rem', padding: '1rem' }}>
                 <div style={{ fontWeight: 700, color: '#7e22ce', marginBottom: '0.75rem', fontSize: '0.875rem' }}>📅 보강 날짜 선택</div>
@@ -199,10 +184,7 @@ export default function CoachSchedulePage() {
                 <input type="time" value={makeupTime} onChange={e => setMakeupTime(e.target.value)}
                   style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #e9d5ff', borderRadius: '0.5rem', marginBottom: '0.75rem', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', boxSizing: 'border-box' }} />
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => setShowMakeup(false)}
-                    style={{ flex: 1, padding: '0.625rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', background: 'white', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>
-                    취소
-                  </button>
+                  <button onClick={() => setShowMakeup(false)} style={{ flex: 1, padding: '0.625rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', background: 'white', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>취소</button>
                   <button onClick={handleMakeupSubmit} disabled={!makeupDate || !makeupTime || saving}
                     style={{ flex: 1, padding: '0.625rem', border: 'none', borderRadius: '0.625rem', background: (!makeupDate || !makeupTime || saving) ? '#d1d5db' : '#7e22ce', color: 'white', cursor: (!makeupDate || !makeupTime || saving) ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>
                     보강 확정
@@ -210,7 +192,6 @@ export default function CoachSchedulePage() {
                 </div>
               </div>
             )}
-
             {selected.status !== 'completed' && (
               <button onClick={handleCancel} disabled={saving}
                 style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>

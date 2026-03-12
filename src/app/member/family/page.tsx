@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import MemberBottomNav from '@/components/MemberBottomNav'
 
 interface FamilyMember {
   id: string
@@ -107,14 +108,8 @@ export default function FamilyPage() {
         )}
       </div>
 
-      <div className="bottom-nav">
-        <Link href="/member" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span></Link>
-        <Link href="/member/schedule" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span></Link>
-        <Link href="/member/payment" className="bottom-nav-item"><span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span></Link>
-        <Link href="/member/family" className="bottom-nav-item active"><span style={{ fontSize: '1.25rem' }}>👨‍👩‍👧‍👦</span><span>가족</span></Link>
-      </div>
+      <MemberBottomNav />
 
-      {/* 추가 모달 */}
       {showAdd && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
           onClick={e => { if (e.target === e.currentTarget) setShowAdd(false) }}>
@@ -145,7 +140,6 @@ export default function FamilyPage() {
         </div>
       )}
 
-      {/* 수정 모달 */}
       {selected && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
           onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>

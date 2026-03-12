@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import CoachBottomNav from '@/components/CoachBottomNav'
 
 interface Block {
   id: string
@@ -97,8 +98,6 @@ export default function CoachHolidaysPage() {
       </div>
 
       <div style={{ padding: '1.25rem', paddingBottom: '6rem' }}>
-
-        {/* 매주 반복 휴무 */}
         <div style={{ marginBottom: '1.25rem' }}>
           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', marginBottom: '0.5rem' }}>🔁 매주 반복 휴무</div>
           {loading ? (
@@ -112,12 +111,9 @@ export default function CoachHolidaysPage() {
               {weekly.map(b => (
                 <div key={b.id} style={{ background: 'white', border: '1.5px solid #fde68a', borderRadius: '1rem', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, color: '#111827', marginBottom: '2px' }}>
-                      매주 {DAYS[b.day_of_week!]}요일
-                    </div>
+                    <div style={{ fontWeight: 700, color: '#111827', marginBottom: '2px' }}>매주 {DAYS[b.day_of_week!]}요일</div>
                     <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                      {b.block_start ?? '종일'}{b.block_end ? ` ~ ${b.block_end}` : ''}
-                      {b.reason && ` · ${b.reason}`}
+                      {b.block_start ?? '종일'}{b.block_end ? ` ~ ${b.block_end}` : ''}{b.reason && ` · ${b.reason}`}
                     </div>
                   </div>
                   <button onClick={() => handleDelete(b.id)}
@@ -130,7 +126,6 @@ export default function CoachHolidaysPage() {
           )}
         </div>
 
-        {/* 특정 날짜 휴무 */}
         <div>
           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', marginBottom: '0.5rem' }}>📅 특정 날짜 휴무</div>
           {!loading && single.length === 0 ? (
@@ -142,12 +137,9 @@ export default function CoachHolidaysPage() {
               {single.map(b => (
                 <div key={b.id} style={{ background: 'white', border: '1.5px solid #f3f4f6', borderRadius: '1rem', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, color: '#111827', marginBottom: '2px' }}>
-                      {b.block_date}
-                    </div>
+                    <div style={{ fontWeight: 700, color: '#111827', marginBottom: '2px' }}>{b.block_date}</div>
                     <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                      {b.block_start ?? '종일'}{b.block_end ? ` ~ ${b.block_end}` : ''}
-                      {b.reason && ` · ${b.reason}`}
+                      {b.block_start ?? '종일'}{b.block_end ? ` ~ ${b.block_end}` : ''}{b.reason && ` · ${b.reason}`}
                     </div>
                   </div>
                   <button onClick={() => handleDelete(b.id)}
@@ -161,20 +153,16 @@ export default function CoachHolidaysPage() {
         </div>
       </div>
 
-      {/* 추가 모달 */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
           onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', paddingBottom: '5rem' }}>
             <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>휴무 추가</h2>
-
-            {/* 모드 선택 */}
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
               <button onClick={() => setMode('weekly')} style={{ ...(mode === 'weekly' ? s.btnOn : s.btn), flex: 1 }}>🔁 매주 반복</button>
               <button onClick={() => setMode('date')}   style={{ ...(mode === 'date'   ? s.btnOn : s.btn), flex: 1 }}>📅 특정 날짜</button>
             </div>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
               {mode === 'weekly' ? (
                 <div>
@@ -194,7 +182,6 @@ export default function CoachHolidaysPage() {
                   <input type="date" style={s.input} value={blockDate} onChange={e => setBlockDate(e.target.value)} />
                 </div>
               )}
-
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <div style={{ flex: 1 }}>
                   <label style={s.label}>시작 시간</label>
@@ -211,13 +198,11 @@ export default function CoachHolidaysPage() {
                   </select>
                 </div>
               </div>
-
               <div>
                 <label style={s.label}>사유 (선택)</label>
                 <input style={s.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="예: 개인 사정, 연수 등" />
               </div>
             </div>
-
             <div style={{ display: 'flex', gap: '0.625rem', marginTop: '1.25rem' }}>
               <button onClick={() => setShowForm(false)}
                 style={{ flex: 1, padding: '0.875rem', background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
@@ -232,21 +217,7 @@ export default function CoachHolidaysPage() {
         </div>
       )}
 
-      {/* 하단 네비 */}
-      <div className="bottom-nav">
-        <Link href="/coach" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span>
-        </Link>
-        <Link href="/coach/schedule" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span>
-        </Link>
-        <Link href="/coach/applications" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>🎾</span><span>신청</span>
-        </Link>
-      </div>
+      <CoachBottomNav />
     </div>
   )
 }
-
-
-
