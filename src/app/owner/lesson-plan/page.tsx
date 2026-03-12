@@ -305,14 +305,22 @@ export default function LessonPlanCreatePage() {
                   {programs.map(p => (
                     <button key={p.id} onClick={() => handleProgramSelect(p)}
                       style={{
-                        padding: '0.5rem 1rem', borderRadius: '0.625rem', cursor: 'pointer',
+                        padding: '0.5rem 0.875rem', borderRadius: '0.625rem', cursor: 'pointer',
                         border: `1.5px solid ${programId === p.id ? '#16A34A' : p.coach_id ? '#3b82f6' : '#e5e7eb'}`,
                         background: programId === p.id ? '#f0fdf4' : p.coach_id ? '#eff6ff' : 'white',
                         color: programId === p.id ? '#16A34A' : p.coach_id ? '#1d4ed8' : '#6b7280',
                         fontWeight: 700, fontSize: '0.85rem', fontFamily: 'Noto Sans KR, sans-serif',
                         position: 'relative',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+                        minWidth: '68px',
                       }}>
-                      {p.name}
+                      <span>{p.name}</span>
+                      <span style={{
+                        fontSize: '0.68rem', fontWeight: 700,
+                        color: programId === p.id ? '#15803d' : p.coach_id ? '#1d4ed8' : '#9ca3af',
+                        background: programId === p.id ? '#dcfce7' : p.coach_id ? '#dbeafe' : '#f3f4f6',
+                        padding: '1px 7px', borderRadius: '9999px', lineHeight: 1.4,
+                      }}>{p.unit_minutes}분</span>
                       {/* 코치 전용 표시 */}
                       {p.coach_id && (
                         <span style={{ fontSize: '0.6rem', position: 'absolute', top: '-6px', right: '-4px', background: '#1d4ed8', color: 'white', borderRadius: '9999px', padding: '1px 5px', fontWeight: 700 }}>
@@ -344,15 +352,37 @@ export default function LessonPlanCreatePage() {
 
             {/* 회당 시간 */}
             <div>
-              <label style={labelStyle}>회당 시간</label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>회당 시간</label>
+                {programId && (
+                  <span style={{ fontSize: '0.68rem', color: '#15803d', fontWeight: 700, background: '#dcfce7', padding: '2px 8px', borderRadius: '9999px' }}>
+                    ✓ 프로그램 자동 설정
+                  </span>
+                )}
+              </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 {[30, 45, 60, 90].map(u => (
-                  <button key={u} onClick={() => setUnitMinutes(u)}
-                    style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: `1.5px solid ${unitMinutes === u ? '#16A34A' : '#e5e7eb'}`, background: unitMinutes === u ? '#f0fdf4' : 'white', color: unitMinutes === u ? '#16A34A' : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}>
+                  <button key={u}
+                    onClick={() => { if (!programId) setUnitMinutes(u) }}
+                    style={{
+                      flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem',
+                      border: `1.5px solid ${unitMinutes === u ? '#16A34A' : '#e5e7eb'}`,
+                      background: unitMinutes === u ? '#f0fdf4' : 'white',
+                      color: unitMinutes === u ? '#16A34A' : '#6b7280',
+                      fontWeight: 700, fontSize: '0.85rem',
+                      cursor: programId ? 'default' : 'pointer',
+                      opacity: programId && unitMinutes !== u ? 0.35 : 1,
+                      transition: 'opacity 0.2s',
+                    }}>
                     {u}분
                   </button>
                 ))}
               </div>
+              {programId && (
+                <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '5px' }}>
+                  💡 시간 변경이 필요하면 프로그램 선택을 해제하세요
+                </div>
+              )}
             </div>
           </div>
         </div>

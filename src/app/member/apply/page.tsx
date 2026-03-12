@@ -370,8 +370,16 @@ export default function MemberApplyPage() {
                               background: programId === p.id ? '#f0fdf4' : p.coach_id ? '#eff6ff' : 'white',
                               color: programId === p.id ? '#15803d' : p.coach_id ? '#1d4ed8' : '#6b7280',
                               position: 'relative',
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+                              padding: '0.5rem 0.875rem', minWidth: '68px',
                             }}>
-                            {p.name}
+                            <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{p.name}</span>
+                            <span style={{
+                              fontSize: '0.68rem', fontWeight: 700,
+                              color: programId === p.id ? '#15803d' : p.coach_id ? '#1d4ed8' : '#9ca3af',
+                              background: programId === p.id ? '#dcfce7' : p.coach_id ? '#dbeafe' : '#f3f4f6',
+                              padding: '1px 7px', borderRadius: '9999px', lineHeight: 1.4,
+                            }}>{p.unit_minutes}분</span>
                             {p.coach_id && (
                               <span style={{ fontSize: '0.55rem', position: 'absolute', top: '-5px', right: '-4px', background: '#1d4ed8', color: 'white', borderRadius: '9999px', padding: '1px 4px', fontWeight: 700 }}>
                                 전용
@@ -383,12 +391,31 @@ export default function MemberApplyPage() {
                     )}
                   </div>
                   <div>
-                    <label style={s.label}>수업 시간</label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <label style={{ ...s.label, marginBottom: 0 }}>수업 시간</label>
+                      {programId && (
+                        <span style={{ fontSize: '0.68rem', color: '#15803d', fontWeight: 700, background: '#dcfce7', padding: '2px 8px', borderRadius: '9999px' }}>
+                          ✓ 프로그램 자동 설정
+                        </span>
+                      )}
+                    </div>
                     <div style={{ display: 'flex', gap: '0.375rem' }}>
                       {[30,45,60,90].map(u => (
-                        <button key={u} onClick={() => setDuration(u)} style={{ ...(duration === u ? s.btnOn : s.btn), flex: 1 }}>{u}분</button>
+                        <button key={u}
+                          onClick={() => { if (!programId) setDuration(u) }}
+                          style={{
+                            ...(duration === u ? s.btnOn : s.btn), flex: 1,
+                            opacity: programId && duration !== u ? 0.35 : 1,
+                            cursor: programId ? 'default' : 'pointer',
+                            transition: 'opacity 0.2s',
+                          }}>{u}분</button>
                       ))}
                     </div>
+                    {programId && (
+                      <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '4px' }}>
+                        💡 시간 변경이 필요하면 다른 프로그램을 선택하세요
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
