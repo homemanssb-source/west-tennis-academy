@@ -16,10 +16,23 @@ export default function MemberDetailPage() {
   const [data,    setData]    = useState<MemberDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab,     setTab]     = useState<'history'|'plans'>('history')
+  const [tempPin, setTempPin] = useState('')
 
   useEffect(() => {
     fetch(`/api/members/${id}`).then(r => r.json()).then(d => { setData(d); setLoading(false) })
   }, [id])
+
+  const handleResetPin = async () => {
+    if (!confirm('PIN을 123456으로 초기화할까요?\n회원이 로그인 후 새 PIN으로 변경해야 합니다.')) return
+    const res = await fetch(`/api/members/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reset_pin' }),
+    })
+    const result = await res.json()
+    if (result.temp_pin) setTempPin(result.temp_pin)
+    else alert(result.error ?? '초기화 실패')
+  }
 
   const fmt = (n: number) => n?.toLocaleString('ko-KR')
 
@@ -91,6 +104,18 @@ export default function MemberDetailPage() {
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c', marginBottom: '4px' }}>미납액</div>
             <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#b91c1c' }}>{fmt(stats.totalUnpaid)}원</div>
           </div>
+        </div>
+
+        {/* ── PIN 초기화 카드 ── */}
+        <div style={{ background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', padding: '1.25rem', marginBottom: '1rem' }}>
+          <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '0.875rem', color: '#111827' }}>계정 관리</div>
+          <button onClick={handleResetPin}
+            style={{ width: '100%', padding: '0.875rem', borderRadius: '0.875rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#374151', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', textAlign: 'left', fontSize: '0.875rem' }}>
+            🔑 PIN 초기화 (임시 PIN 발급)
+          </button>
+          <p style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '6px', marginLeft: '2px' }}>
+            회원이 PIN을 분실한 경우 임시 PIN(123456)으로 초기화합니다. 회원은 로그인 후 새 PIN으로 변경해야 합니다.
+          </p>
         </div>
 
         {/* 가족 구성원 */}
@@ -173,6 +198,27 @@ export default function MemberDetailPage() {
           </div>
         )}
       </div>
+
+      {/* PIN 초기화 완료 모달 */}
+      {tempPin && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+          <div style={{ background: 'white', borderRadius: '1.5rem', padding: '2rem', maxWidth: '320px', width: '100%', textAlign: 'center' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔑</div>
+            <h3 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.2rem', fontWeight: 700, color: '#111827', marginBottom: '0.5rem' }}>PIN 초기화 완료</h3>
+            <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '1.25rem' }}>
+              회원이 아래 임시 PIN으로 로그인 후<br/>새 PIN으로 변경해야 합니다.
+            </p>
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '1rem', padding: '1rem', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '4px' }}>임시 PIN</div>
+              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '2.5rem', fontWeight: 700, color: '#16A34A', letterSpacing: '8px' }}>{tempPin}</div>
+            </div>
+            <button onClick={() => setTempPin('')}
+              style={{ width: '100%', padding: '0.875rem', borderRadius: '0.875rem', border: 'none', background: '#16A34A', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+              확인
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
