@@ -340,10 +340,10 @@ export default function MemberApplyPage() {
                       {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
                     </select>
                   </div>
-                  {/* 프로그램 (코치 선택 후 필터링) */}
+                  {/* 프로그램 선택 - 드롭다운 */}
                   <div>
                     <label style={s.label}>
-                      레슨 유형
+                      프로그램
                       {coachId && coaches.find(c => c.id === coachId) && (
                         <span style={{ fontWeight: 400, color: '#3b82f6', marginLeft: '6px' }}>
                           — {coaches.find(c => c.id === coachId)!.name} 코치 기준
@@ -360,54 +360,34 @@ export default function MemberApplyPage() {
                         ⚠️ 등록된 수업 프로그램이 없습니다
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <select
+                        style={s.input}
+                        value={programId}
+                        onChange={e => {
+                          const p = programs.find(x => x.id === e.target.value)
+                          if (p) { setProgramId(p.id); setDuration(p.unit_minutes || 60) }
+                          else { setProgramId(''); setDuration(60) }
+                        }}>
+                        <option value="">프로그램을 선택하세요</option>
                         {programs.map(p => (
-                          <button key={p.id}
-                            onClick={() => { setProgramId(p.id); setDuration(p.unit_minutes || 60) }}
-                            style={{
-                              ...( programId === p.id ? s.btnOn : s.btn ),
-                              border: `1.5px solid ${programId === p.id ? '#16A34A' : p.coach_id ? '#3b82f6' : '#e5e7eb'}`,
-                              background: programId === p.id ? '#f0fdf4' : p.coach_id ? '#eff6ff' : 'white',
-                              color: programId === p.id ? '#15803d' : p.coach_id ? '#1d4ed8' : '#6b7280',
-                              position: 'relative',
-                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
-                              padding: '0.5rem 0.875rem', minWidth: '68px',
-                            }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{p.name}</span>
-                            <span style={{
-                              fontSize: '0.68rem', fontWeight: 700,
-                              color: programId === p.id ? '#15803d' : p.coach_id ? '#1d4ed8' : '#9ca3af',
-                              background: programId === p.id ? '#dcfce7' : p.coach_id ? '#dbeafe' : '#f3f4f6',
-                              padding: '1px 7px', borderRadius: '9999px', lineHeight: 1.4,
-                            }}>{p.unit_minutes}분</span>
-                            {p.coach_id && (
-                              <span style={{ fontSize: '0.55rem', position: 'absolute', top: '-5px', right: '-4px', background: '#1d4ed8', color: 'white', borderRadius: '9999px', padding: '1px 4px', fontWeight: 700 }}>
-                                전용
-                              </span>
-                            )}
-                          </button>
+                          <option key={p.id} value={p.id}>
+                            {p.coach_id ? '★ ' : ''}{p.name} ({p.unit_minutes}분)
+                          </option>
                         ))}
+                      </select>
+                    )}
+
+                    {/* 선택된 프로그램 정보 배너 */}
+                    {programId && (
+                      <div style={{ marginTop: '0.5rem', padding: '0.625rem 0.875rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.625rem', fontSize: '0.78rem', color: '#15803d', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>✅</span>
+                        <span>
+                          <strong>{programs.find(p => p.id === programId)?.name}</strong>
+                          {' · '}{programs.find(p => p.id === programId)?.unit_minutes}분 수업
+                        </span>
                       </div>
                     )}
                   </div>
-                  {/* 수업 시간 - 프로그램 선택 시 자동 설정이라 숨김 */}
-                  {!programId ? (
-                    <div>
-                      <label style={s.label}>수업 시간</label>
-                      <div style={{ display: 'flex', gap: '0.375rem' }}>
-                        {[20,30,45,60,90].map(u => (
-                          <button key={u}
-                            onClick={() => setDuration(u)}
-                            style={{ ...(duration === u ? s.btnOn : s.btn), flex: 1, fontSize: '0.78rem' }}>{u}분</button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.75rem', padding: '0.75rem 1rem', fontSize: '0.82rem', color: '#15803d', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '1rem' }}>✅</span>
-                      수업 시간 <strong>{duration}분</strong> — 프로그램에서 자동 설정됨
-                    </div>
-                  )}
                 </div>
               </div>
               <button onClick={() => setStep(2)}

@@ -278,7 +278,7 @@ export default function LessonPlanCreatePage() {
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>수업 설정</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
 
-            {/* ✅ 프로그램 선택 - 코치 기반 필터링 */}
+            {/* ✅ 프로그램 선택 - 드롭다운 */}
             <div>
               <label style={labelStyle}>
                 프로그램
@@ -290,86 +290,44 @@ export default function LessonPlanCreatePage() {
               </label>
 
               {!coachId ? (
-                // 코치 미선택 상태
                 <div style={{ padding: '0.75rem 1rem', background: '#f9fafb', borderRadius: '0.625rem', border: '1.5px dashed #e5e7eb', fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center' }}>
                   👆 먼저 코치를 선택하면 해당 코치의 수업 프로그램이 표시됩니다
                 </div>
               ) : programs.length === 0 ? (
-                // 코치 선택했는데 프로그램 없음
                 <div style={{ padding: '0.75rem 1rem', background: '#fef9c3', borderRadius: '0.625rem', border: '1.5px solid #fde68a', fontSize: '0.8rem', color: '#854d0e' }}>
                   ⚠️ 등록된 프로그램이 없습니다. <Link href="/owner/programs" style={{ color: '#1d4ed8', fontWeight: 700 }}>프로그램 관리</Link>에서 추가해주세요.
                 </div>
               ) : (
-                // 프로그램 버튼 목록
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <select
+                  style={inputStyle}
+                  value={programId}
+                  onChange={e => {
+                    const p = programs.find(x => x.id === e.target.value)
+                    if (p) handleProgramSelect(p)
+                    else { setProgramId(''); setLessonType(''); setUnitMinutes(60) }
+                  }}>
+                  <option value="">프로그램을 선택하세요</option>
                   {programs.map(p => (
-                    <button key={p.id} onClick={() => handleProgramSelect(p)}
-                      style={{
-                        padding: '0.5rem 0.875rem', borderRadius: '0.625rem', cursor: 'pointer',
-                        border: `1.5px solid ${programId === p.id ? '#16A34A' : p.coach_id ? '#3b82f6' : '#e5e7eb'}`,
-                        background: programId === p.id ? '#f0fdf4' : p.coach_id ? '#eff6ff' : 'white',
-                        color: programId === p.id ? '#16A34A' : p.coach_id ? '#1d4ed8' : '#6b7280',
-                        fontWeight: 700, fontSize: '0.85rem', fontFamily: 'Noto Sans KR, sans-serif',
-                        position: 'relative',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
-                        minWidth: '68px',
-                      }}>
-                      <span>{p.name}</span>
-                      <span style={{
-                        fontSize: '0.68rem', fontWeight: 700,
-                        color: programId === p.id ? '#15803d' : p.coach_id ? '#1d4ed8' : '#9ca3af',
-                        background: programId === p.id ? '#dcfce7' : p.coach_id ? '#dbeafe' : '#f3f4f6',
-                        padding: '1px 7px', borderRadius: '9999px', lineHeight: 1.4,
-                      }}>{p.unit_minutes}분</span>
-                      {/* 코치 전용 표시 */}
-                      {p.coach_id && (
-                        <span style={{ fontSize: '0.6rem', position: 'absolute', top: '-6px', right: '-4px', background: '#1d4ed8', color: 'white', borderRadius: '9999px', padding: '1px 5px', fontWeight: 700 }}>
-                          전용
-                        </span>
-                      )}
-                    </button>
+                    <option key={p.id} value={p.id}>
+                      {p.coach_id ? '★ ' : ''}{p.name} ({p.unit_minutes}분){p.default_amount > 0 ? ` · ${p.default_amount.toLocaleString()}원` : ''}
+                    </option>
                   ))}
-                </div>
+                </select>
               )}
 
-              {/* 선택된 프로그램 정보 */}
+              {/* 선택된 프로그램 정보 배너 */}
               {programId && (
-                <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f0fdf4', borderRadius: '0.5rem', fontSize: '0.75rem', color: '#15803d', display: 'flex', gap: '1rem' }}>
-                  {programs.find(p => p.id === programId)?.unit_minutes}분 수업
-                  {(programs.find(p => p.id === programId)?.default_amount ?? 0) > 0 && (
-                    <span>· 기본 수업료 {programs.find(p => p.id === programId)!.default_amount.toLocaleString()}원 자동 입력됨</span>
-                  )}
+                <div style={{ marginTop: '0.5rem', padding: '0.625rem 0.875rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.625rem', fontSize: '0.78rem', color: '#15803d', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span>✅</span>
+                  <span>
+                    <strong>{programs.find(p => p.id === programId)?.name}</strong>
+                    {' · '}{programs.find(p => p.id === programId)?.unit_minutes}분
+                    {(programs.find(p => p.id === programId)?.default_amount ?? 0) > 0 &&
+                      ` · 기본 수업료 ${programs.find(p => p.id === programId)!.default_amount.toLocaleString()}원 자동 입력`}
+                  </span>
                 </div>
               )}
             </div>
-
-            {/* 프로그램 미선택 시에만: 수업 종류 + 회당 시간 직접 입력 */}
-            {!programId && (
-              <>
-                <div>
-                  <label style={labelStyle}>수업 종류</label>
-                  <input type="text" value={lessonType} onChange={e => setLessonType(e.target.value)}
-                    placeholder="개인레슨, 그룹레슨 등" style={inputStyle} />
-                </div>
-                <div>
-                  <label style={labelStyle}>회당 시간</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {[20, 30, 45, 60, 90].map(u => (
-                      <button key={u} onClick={() => setUnitMinutes(u)}
-                        style={{
-                          flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem',
-                          border: `1.5px solid ${unitMinutes === u ? '#16A34A' : '#e5e7eb'}`,
-                          background: unitMinutes === u ? '#f0fdf4' : 'white',
-                          color: unitMinutes === u ? '#16A34A' : '#6b7280',
-                          fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
-                        }}>
-                        {u}분
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
           </div>
         </div>
 
