@@ -1,6 +1,12 @@
 ﻿{
   "crons": [
-    { "path": "/api/cron/sync-next-month", "schedule": "0 15 25 * *" },
-    { "path": "/api/cron/unpaid-notify",   "schedule": "0 0 1 * *"  }
+    {
+      "path": "/api/cron/sync-next-month",
+      "schedule": "0 15 25 * *"
+    },
+    {
+      "path": "/api/cron/unpaid-notify",
+      "schedule": "0 0 1 * *"
+    }
   ]
 }
