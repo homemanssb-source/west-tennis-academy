@@ -390,33 +390,24 @@ export default function MemberApplyPage() {
                       </div>
                     )}
                   </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <label style={{ ...s.label, marginBottom: 0 }}>수업 시간</label>
-                      {programId && (
-                        <span style={{ fontSize: '0.68rem', color: '#15803d', fontWeight: 700, background: '#dcfce7', padding: '2px 8px', borderRadius: '9999px' }}>
-                          ✓ 프로그램 자동 설정
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.375rem' }}>
-                      {[30,45,60,90].map(u => (
-                        <button key={u}
-                          onClick={() => { if (!programId) setDuration(u) }}
-                          style={{
-                            ...(duration === u ? s.btnOn : s.btn), flex: 1,
-                            opacity: programId && duration !== u ? 0.35 : 1,
-                            cursor: programId ? 'default' : 'pointer',
-                            transition: 'opacity 0.2s',
-                          }}>{u}분</button>
-                      ))}
-                    </div>
-                    {programId && (
-                      <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '4px' }}>
-                        💡 시간 변경이 필요하면 다른 프로그램을 선택하세요
+                  {/* 수업 시간 - 프로그램 선택 시 자동 설정이라 숨김 */}
+                  {!programId ? (
+                    <div>
+                      <label style={s.label}>수업 시간</label>
+                      <div style={{ display: 'flex', gap: '0.375rem' }}>
+                        {[30,45,60,90].map(u => (
+                          <button key={u}
+                            onClick={() => setDuration(u)}
+                            style={{ ...(duration === u ? s.btnOn : s.btn), flex: 1 }}>{u}분</button>
+                        ))}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.75rem', padding: '0.75rem 1rem', fontSize: '0.82rem', color: '#15803d', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '1rem' }}>✅</span>
+                      수업 시간 <strong>{duration}분</strong> — 프로그램에서 자동 설정됨
+                    </div>
+                  )}
                 </div>
               </div>
               <button onClick={() => setStep(2)}

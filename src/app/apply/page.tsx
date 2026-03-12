@@ -36,7 +36,7 @@ export default function ApplyPage() {
   const handleSubmit = async () => {
     setError('')
     if (pin.length !== 6) return setError('PIN은 숫자 6자리입니다')
-    if (!/^\d{4}$/.test(pin)) return setError('PIN은 숫자만 입력 가능합니다')
+    if (!/^\d{6}$/.test(pin)) return setError('PIN은 숫자만 입력 가능합니다')
     if (pin !== pinConfirm) return setError('PIN이 일치하지 않습니다')
 
     setSaving(true)
