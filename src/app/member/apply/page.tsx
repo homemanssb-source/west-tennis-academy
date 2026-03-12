@@ -395,10 +395,10 @@ export default function MemberApplyPage() {
                     <div>
                       <label style={s.label}>수업 시간</label>
                       <div style={{ display: 'flex', gap: '0.375rem' }}>
-                        {[30,45,60,90].map(u => (
+                        {[20,30,45,60,90].map(u => (
                           <button key={u}
                             onClick={() => setDuration(u)}
-                            style={{ ...(duration === u ? s.btnOn : s.btn), flex: 1 }}>{u}분</button>
+                            style={{ ...(duration === u ? s.btnOn : s.btn), flex: 1, fontSize: '0.78rem' }}>{u}분</button>
                         ))}
                       </div>
                     </div>

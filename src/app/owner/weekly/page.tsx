@@ -7,12 +7,6 @@ interface Slot {
   lesson_plan: { lesson_type: string; member: { id: string; name: string }; coach: { id: string; name: string } }
 }
 
-// ✅ FIX #7: Block 인터페이스 추가
-interface Block {
-  id: string; coach_id: string; block_date: string | null; block_start: string | null; block_end: string | null
-  reason: string | null; repeat_weekly: boolean; day_of_week: number | null
-}
-
 const DAYS = ['월','화','수','목','금','토','일']
 const START_HOUR = 8, END_HOUR = 22, CELL_MIN = 10, CELL_H = 18
 const TOTAL_CELLS = ((END_HOUR - START_HOUR) * 60) / CELL_MIN
@@ -32,8 +26,6 @@ function toYMD(d: Date) { return d.toISOString().split('T')[0] }
 export default function WeeklySchedulePage() {
   const [monday, setMonday] = useState(() => getMonday(new Date()))
   const [slots, setSlots] = useState<Slot[]>([])
-  // ✅ FIX #7: blocks 상태 추가
-  const [blocks, setBlocks] = useState<Block[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'all'|'byCoach'>('all')
   const [selCoach, setSelCoach] = useState<string>('all')
@@ -43,18 +35,7 @@ export default function WeeklySchedulePage() {
     setLoading(true)
     fetch('/api/weekly-schedule?week=' + toYMD(monday))
       .then(r => r.json())
-      .then(d => {
-        // ✅ FIX #7: { slots, blocks } 형태로 변경된 응답 처리
-        if (d && typeof d === 'object' && 'slots' in d) {
-          setSlots(Array.isArray(d.slots) ? d.slots : [])
-          setBlocks(Array.isArray(d.blocks) ? d.blocks : [])
-        } else {
-          // 혹시 이전 형태(배열)로 응답 오면 하위 호환
-          setSlots(Array.isArray(d) ? d : [])
-          setBlocks([])
-        }
-        setLoading(false)
-      })
+      .then(d => { setSlots(Array.isArray(d) ? d : []); setLoading(false) })
   }, [monday])
 
   const changeWeek = (dir: number) => {
@@ -73,17 +54,7 @@ export default function WeeklySchedulePage() {
   coaches.forEach((c, i) => { coachColorMap[c.id] = COACH_COLORS[i % COACH_COLORS.length] })
   const filteredSlots = selCoach === 'all' ? slots : slots.filter(s => s.lesson_plan?.coach?.id === selCoach)
 
-  // ✅ FIX #7: 날짜에 해당하는 blocks 반환 헬퍼
-  function getBlocksForDate(date: Date): Block[] {
-    const ymd = toYMD(date)
-    const dow = date.getDay()
-    return blocks.filter(b => {
-      if (b.repeat_weekly) return b.day_of_week === dow
-      return b.block_date === ymd
-    })
-  }
-
-  function TimeGrid({ slotsForGrid, coachIdFilter }: { slotsForGrid: Slot[], coachIdFilter?: string }) {
+  function TimeGrid({ slotsForGrid }: { slotsForGrid: Slot[] }) {
     return (
       <div style={{ display:'flex', minWidth:'700px' }}>
         <div style={{ width:'32px', flexShrink:0, marginTop:'40px' }}>
@@ -100,13 +71,6 @@ export default function WeeklySchedulePage() {
             const dow = date.getDay()
             const daySlots = slotsForGrid.filter(s => s.scheduled_at.startsWith(ymd))
             const nowMin = isToday ? (now.getHours()-START_HOUR)*60+now.getMinutes() : -1
-
-            // ✅ FIX #7: 해당 날짜 휴무 블록 계산
-            const dayBlocks = getBlocksForDate(date).filter(b => {
-              if (!coachIdFilter) return true
-              return b.coach_id === coachIdFilter
-            })
-
             return (
               <div key={di} style={{ display:'flex', flexDirection:'column' }}>
                 <div style={{ textAlign:'center', height:'40px', background:isToday?'#16A34A':'white', border:'1.5px solid '+(isToday?'#16A34A':'#e5e7eb'), borderRadius:'8px 8px 0 0', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
@@ -117,35 +81,6 @@ export default function WeeklySchedulePage() {
                   {Array.from({ length:TOTAL_CELLS }, (_,i) => (
                     <div key={i} style={{ position:'absolute', left:0, right:0, top:i*CELL_H, height:CELL_H, borderBottom:i%6===5?'1px solid #e5e7eb':'1px solid #f3f4f6', background:i%6===0?'#fafafa':'transparent' }} />
                   ))}
-
-                  {/* ✅ FIX #7: 휴무 블록 회색으로 렌더링 */}
-                  {dayBlocks.map(b => {
-                    if (!b.block_start && !b.block_end) {
-                      // 종일 휴무
-                      return (
-                        <div key={b.id} style={{ position:'absolute', top:0, left:0, right:0, bottom:0, background:'rgba(156,163,175,0.25)', borderLeft:'3px solid #9ca3af', zIndex:4, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                          <div style={{ fontSize:'9px', color:'#6b7280', fontWeight:700, textAlign:'center', padding:'2px' }}>
-                            🚫 휴무{b.reason ? '\n'+b.reason : ''}
-                          </div>
-                        </div>
-                      )
-                    }
-                    // 시간대 휴무
-                    const [sh, sm] = (b.block_start ?? '00:00').split(':').map(Number)
-                    const [eh, em] = (b.block_end   ?? '23:59').split(':').map(Number)
-                    const startMin = (sh - START_HOUR) * 60 + sm
-                    const endMin   = (eh - START_HOUR) * 60 + em
-                    if (endMin <= 0 || startMin >= (END_HOUR - START_HOUR) * 60) return null
-                    const top    = Math.max(0, (startMin / CELL_MIN) * CELL_H)
-                    const height = Math.max(((endMin - startMin) / CELL_MIN) * CELL_H, CELL_H * 2)
-                    return (
-                      <div key={b.id} style={{ position:'absolute', top:top+1, left:0, right:0, height:height-2, background:'rgba(156,163,175,0.2)', borderLeft:'3px solid #9ca3af', zIndex:4, padding:'2px 3px', overflow:'hidden' }}>
-                        <div style={{ fontSize:'9px', color:'#6b7280', fontWeight:700 }}>🚫 휴무</div>
-                        {b.reason && <div style={{ fontSize:'8px', color:'#9ca3af' }}>{b.reason}</div>}
-                      </div>
-                    )
-                  })}
-
                   {isToday && nowMin>=0 && nowMin<=(END_HOUR-START_HOUR)*60 && (
                     <div style={{ position:'absolute', left:0, right:0, top:(nowMin/CELL_MIN)*CELL_H, borderTop:'2px solid #ef4444', zIndex:10, display:'flex', alignItems:'center' }}>
                       <div style={{ width:6, height:6, borderRadius:'50%', background:'#ef4444', marginTop:-3, marginLeft:-1, flexShrink:0 }} />
@@ -157,7 +92,7 @@ export default function WeeklySchedulePage() {
                     if (startMin < 0 || startMin >= (END_HOUR-START_HOUR)*60) return null
                     const dur = slot.duration_minutes || 30
                     const top = (startMin/CELL_MIN)*CELL_H
-                    const height = Math.max((dur/CELL_MIN)*CELL_H, CELL_H*2)
+                    const height = Math.max((dur/CELL_MIN)*CELL_H, CELL_H*3)
                     const status = slot.is_makeup ? 'makeup' : slot.status
                     const coachId = slot.lesson_plan?.coach?.id
                     const color = viewMode==='byCoach' && coachId ? coachColorMap[coachId] : STATUS_COLOR[status] ?? STATUS_COLOR.scheduled
@@ -212,10 +147,6 @@ export default function WeeklySchedulePage() {
                   <div style={{ width:'10px', height:'10px', background:STATUS_COLOR[k], borderRadius:'2px' }}/>{l}
                 </div>
               ))}
-              {/* ✅ FIX #7: 범례에 휴무 추가 */}
-              <div style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', color:'#6b7280' }}>
-                <div style={{ width:'10px', height:'10px', background:'#9ca3af', borderRadius:'2px' }}/>휴무
-              </div>
             </div>
             <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={filteredSlots} /></div></>
           )}
@@ -243,8 +174,7 @@ export default function WeeklySchedulePage() {
                         <span style={{ fontFamily:'Oswald,sans-serif', fontWeight:700, fontSize:'1rem', color:'#111827' }}>{coach.name} 코치</span>
                         <span style={{ marginLeft:'auto', fontSize:'0.75rem', color:'#6b7280' }}>이번 주 {coachSlots.length}건</span>
                       </div>
-                      {/* ✅ FIX #7: 코치별 뷰에서 해당 코치 휴무만 표시 */}
-                      <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={coachSlots} coachIdFilter={coach.id} /></div>
+                      <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={coachSlots} /></div>
                     </div>
                   )
                 })}

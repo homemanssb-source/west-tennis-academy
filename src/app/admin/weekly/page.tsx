@@ -92,7 +92,7 @@ export default function AdminWeeklyPage() {
                     if (startMin < 0 || startMin >= (END_HOUR-START_HOUR)*60) return null
                     const dur = slot.duration_minutes || 30
                     const top = (startMin/CELL_MIN)*CELL_H
-                    const height = Math.max((dur/CELL_MIN)*CELL_H, CELL_H*2)
+                    const height = Math.max((dur/CELL_MIN)*CELL_H, CELL_H*3)
                     const status = slot.is_makeup ? 'makeup' : slot.status
                     const coachId = slot.lesson_plan?.coach?.id
                     const color = viewMode==='byCoach' && coachId ? coachColorMap[coachId] : STATUS_COLOR[status] ?? STATUS_COLOR.scheduled

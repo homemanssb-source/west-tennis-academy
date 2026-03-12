@@ -343,37 +343,32 @@ export default function LessonPlanCreatePage() {
               )}
             </div>
 
-            {/* 수업 종류 직접입력 */}
-            <div>
-              <label style={labelStyle}>수업 종류</label>
-              <input type="text" value={lessonType} onChange={e => setLessonType(e.target.value)}
-                placeholder="개인레슨, 그룹레슨 등 (프로그램 선택 시 자동입력)" style={inputStyle} />
-            </div>
-
-            {/* 회당 시간 - 프로그램 선택 시 자동 설정 */}
-            {!programId ? (
-              <div>
-                <label style={labelStyle}>회당 시간</label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {[30, 45, 60, 90].map(u => (
-                    <button key={u} onClick={() => setUnitMinutes(u)}
-                      style={{
-                        flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem',
-                        border: `1.5px solid ${unitMinutes === u ? '#16A34A' : '#e5e7eb'}`,
-                        background: unitMinutes === u ? '#f0fdf4' : 'white',
-                        color: unitMinutes === u ? '#16A34A' : '#6b7280',
-                        fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
-                      }}>
-                      {u}분
-                    </button>
-                  ))}
+            {/* 프로그램 미선택 시에만: 수업 종류 + 회당 시간 직접 입력 */}
+            {!programId && (
+              <>
+                <div>
+                  <label style={labelStyle}>수업 종류</label>
+                  <input type="text" value={lessonType} onChange={e => setLessonType(e.target.value)}
+                    placeholder="개인레슨, 그룹레슨 등" style={inputStyle} />
                 </div>
-              </div>
-            ) : (
-              <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.75rem', padding: '0.75rem 1rem', fontSize: '0.82rem', color: '#15803d', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontSize: '1rem' }}>✅</span>
-                회당 시간 <strong>{unitMinutes}분</strong> — 프로그램에서 자동 설정됨
-              </div>
+                <div>
+                  <label style={labelStyle}>회당 시간</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {[20, 30, 45, 60, 90].map(u => (
+                      <button key={u} onClick={() => setUnitMinutes(u)}
+                        style={{
+                          flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem',
+                          border: `1.5px solid ${unitMinutes === u ? '#16A34A' : '#e5e7eb'}`,
+                          background: unitMinutes === u ? '#f0fdf4' : 'white',
+                          color: unitMinutes === u ? '#16A34A' : '#6b7280',
+                          fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                        }}>
+                        {u}분
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>
