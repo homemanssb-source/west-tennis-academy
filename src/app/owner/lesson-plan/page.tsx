@@ -13,6 +13,7 @@ interface Program {
   unit_minutes: number
   default_amount: number  // 기본 수업료 자동 입력
   coach_id: string | null // null=공통, 값=특정코치전용
+  is_active?: boolean
 }
 interface Schedule { datetime: string; duration: number }
 
@@ -67,7 +68,7 @@ export default function LessonPlanCreatePage() {
       const pList = Array.isArray(p) ? p : []
       setAllPrograms(pList)
       // 초기: 공통 프로그램만 표시 (coach_id === null)
-      setPrograms(pList.filter((x: Program) => x.coach_id === null && x.is_active !== false))
+      setPrograms(pList.filter((x: Program) => x.coach_id === null))
     })
   }, [])
 
