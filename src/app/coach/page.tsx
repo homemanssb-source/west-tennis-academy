@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Link from 'next/link'
 import NotificationBell from '@/components/notifications/NotificationBell'
+import CoachBottomNav from '@/components/CoachBottomNav'
 
 export default async function CoachHomePage() {
   const session = await getSession()
@@ -111,24 +112,7 @@ export default async function CoachHomePage() {
         )}
       </div>
 
-      {/* 하단 네비 - 💰 납부 버튼 추가됨 */}
-      <div className="bottom-nav">
-        <Link href="/coach" className="bottom-nav-item active">
-          <span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span>
-        </Link>
-        <Link href="/coach/applications" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>📋</span><span>신청확인</span>
-        </Link>
-        <Link href="/coach/payment" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span>
-        </Link>
-        <Link href="/coach/blocks" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span>
-        </Link>
-        <Link href="/coach/schedule" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span>
-        </Link>
-      </div>
+      <CoachBottomNav />
     </div>
   )
 }

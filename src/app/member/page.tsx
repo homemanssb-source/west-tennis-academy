@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Link from 'next/link'
 import NotificationBell from '@/components/notifications/NotificationBell'
+import MemberBottomNav from '@/components/MemberBottomNav'
 
 export default async function MemberHomePage() {
   const session = await getSession()
@@ -25,7 +26,6 @@ export default async function MemberHomePage() {
     .select('id, payment_status, total_count, completed_count')
     .eq('member_id', session.id)
 
-  // 대기 중인 수업 신청 수
   const { count: pendingAppCount } = await supabaseAdmin
     .from('lesson_applications')
     .select('*', { count: 'exact', head: true })
@@ -134,30 +134,7 @@ export default async function MemberHomePage() {
         )}
       </div>
 
-      {/* 하단 네비 */}
-      <div className="bottom-nav">
-        <Link href="/member" className="bottom-nav-item active">
-          <span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span>
-        </Link>
-        <Link href="/member/schedule" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span>
-        </Link>
-        <Link href="/member/apply" className="bottom-nav-item" style={{ position: 'relative' }}>
-          <span style={{ fontSize: '1.25rem' }}>🎾</span>
-          <span>신청</span>
-          {(pendingAppCount ?? 0) > 0 && (
-            <span style={{ position: 'absolute', top: '4px', right: '8px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: '9999px' }}>
-              {pendingAppCount}
-            </span>
-          )}
-        </Link>
-        <Link href="/member/payment" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span>
-        </Link>
-        <Link href="/member/family" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>👨‍👩‍👧</span><span>가족</span>
-        </Link>
-      </div>
+      <MemberBottomNav pendingAppCount={pendingAppCount ?? 0} />
     </div>
   )
 }
