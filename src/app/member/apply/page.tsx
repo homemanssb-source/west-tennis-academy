@@ -257,6 +257,7 @@ export default function MemberApplyPage() {
         duration_minutes: duration,
         lesson_type: selectedProgram?.name ?? '개인레슨',
         family_member_id: applicantType === 'family' ? familyId : null,
+        ...(programId ? { program_id: programId } : {}),
       }),
     })
     const d = await res.json()

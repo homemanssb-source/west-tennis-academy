@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '회원만 신청 가능합니다' }, { status: 403 })
   }
 
-  const { coach_id, month_id, slots, duration_minutes, lesson_type, family_member_id } = await req.json()
+  const { coach_id, month_id, slots, duration_minutes, lesson_type, family_member_id, program_id } = await req.json()
 
   if (!coach_id || !month_id || !slots || !Array.isArray(slots) || slots.length === 0) {
     return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
@@ -94,16 +94,31 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
     if (conflict) { errors.push(requested_at + ' 수업 충돌'); continue }
 
-    // 다른 회원 신청 중복 체크 (같은 코치, 같은 시간)
-    const { data: otherApp } = await supabaseAdmin
+    // 다른 회원 신청 중복 체크 - 프로그램 max_students 기반
+    const { data: otherApps } = await supabaseAdmin
       .from('lesson_applications')
       .select('id')
       .eq('coach_id', coach_id)
       .eq('requested_at', requested_at)
       .in('status', ['pending_coach', 'pending_admin', 'approved'])
-      .maybeSingle()
-    if (otherApp) { errors.push(requested_at + ' 이미 신청된 시간'); continue }
-    if (conflict) { errors.push(`${requested_at} 수업 충돌`); continue }
+
+    const currentCount = (otherApps ?? []).length
+
+    // 프로그램의 max_students 확인 (없으면 1명 = 개인레슨)
+    let maxStudents = 1
+    if (program_id) {
+      const { data: prog } = await supabaseAdmin
+        .from('lesson_programs')
+        .select('max_students')
+        .eq('id', program_id)
+        .single()
+      if (prog?.max_students) maxStudents = prog.max_students
+    }
+
+    if (currentCount >= maxStudents) {
+      errors.push(requested_at + ` 정원 초과 (${currentCount}/${maxStudents}명)`)
+      continue
+    }
 
     const { data, error } = await supabaseAdmin
       .from('lesson_applications')
@@ -116,6 +131,7 @@ export async function POST(req: NextRequest) {
         lesson_type: lesson_type ?? '개인레슨',
         status: 'pending_coach',
         family_member_id: family_member_id ?? null,
+        ...(program_id ? { program_id } : {}),
       })
       .select()
       .single()
@@ -145,8 +161,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ created: created.length, errors })
 }
-
-
-
-
-
