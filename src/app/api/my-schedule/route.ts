@@ -8,6 +8,21 @@ export async function GET() {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
 
+  // Step 1: 내 lesson_plans ID 먼저 조회
+  // (.eq('lesson_plan.member_id') 방식은 PostgREST에서
+  //  lesson_plan을 null로 반환하는 버그가 있어 두 단계로 분리)
+  const { data: plans } = await supabaseAdmin
+    .from('lesson_plans')
+    .select('id')
+    .eq('member_id', session.id)
+
+  if (!plans || plans.length === 0) {
+    return NextResponse.json([])
+  }
+
+  const planIds = plans.map((p: any) => p.id)
+
+  // Step 2: 해당 plan_ids에 속한 슬롯 조회
   const { data, error } = await supabaseAdmin
     .from('lesson_slots')
     .select(`
@@ -18,7 +33,7 @@ export async function GET() {
         month:month_id ( id, year, month )
       )
     `)
-    .eq('lesson_plan.member_id', session.id)
+    .in('lesson_plan_id', planIds)
     .order('scheduled_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -6,6 +6,11 @@ interface Slot {
   id: string; scheduled_at: string; duration_minutes: number; status: string; is_makeup: boolean
   lesson_plan: { lesson_type: string; member: { id: string; name: string }; coach: { id: string; name: string } }
 }
+interface Block {
+  id: string; coach_id: string; block_date: string | null
+  block_start: string | null; block_end: string | null
+  reason: string | null; repeat_weekly: boolean; day_of_week: number | null
+}
 
 const DAYS = ['월','화','수','목','금','토','일']
 const START_HOUR = 8, END_HOUR = 22, CELL_MIN = 10, CELL_H = 18
@@ -26,6 +31,7 @@ function toYMD(d: Date) { const kst = new Date(d.getTime() + 9*60*60*1000); retu
 export default function AdminWeeklyPage() {
   const [monday, setMonday] = useState(() => getMonday(new Date()))
   const [slots, setSlots] = useState<Slot[]>([])
+  const [blocks, setBlocks] = useState<Block[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'all'|'byCoach'>('all')
   const [selCoach, setSelCoach] = useState<string>('all')
@@ -35,7 +41,11 @@ export default function AdminWeeklyPage() {
     setLoading(true)
     fetch('/api/weekly-schedule?week=' + toYMD(monday))
       .then(r => r.json())
-      .then(d => { setSlots(Array.isArray(d) ? d : (Array.isArray(d?.slots) ? d.slots : [])); setLoading(false) })
+      .then(d => {
+        setSlots(Array.isArray(d) ? d : (Array.isArray(d?.slots) ? d.slots : []))
+        setBlocks(Array.isArray(d?.blocks) ? d.blocks : [])
+        setLoading(false)
+      })
   }, [monday])
 
   const changeWeek = (dir: number) => {
@@ -54,7 +64,7 @@ export default function AdminWeeklyPage() {
   coaches.forEach((c, i) => { coachColorMap[c.id] = COACH_COLORS[i % COACH_COLORS.length] })
   const filteredSlots = selCoach === 'all' ? slots : slots.filter(s => s.lesson_plan?.coach?.id === selCoach)
 
-  function TimeGrid({ slotsForGrid }: { slotsForGrid: Slot[] }) {
+  function TimeGrid({ slotsForGrid, blocksForGrid }: { slotsForGrid: Slot[]; blocksForGrid: Block[] }) {
     return (
       <div style={{ display:'flex', minWidth:'700px' }}>
         <div style={{ width:'32px', flexShrink:0, marginTop:'40px' }}>
@@ -70,6 +80,10 @@ export default function AdminWeeklyPage() {
             const isToday = ymd === toYMD(now)
             const dow = date.getDay()
             const daySlots = slotsForGrid.filter(s => s.scheduled_at.startsWith(ymd))
+            // 해당 날짜의 휴무 블록 (일회성 + 반복)
+            const dayBlocks = blocksForGrid.filter(b =>
+              b.repeat_weekly ? b.day_of_week === dow : b.block_date === ymd
+            )
             const nowMin = isToday ? (now.getHours()-START_HOUR)*60+now.getMinutes() : -1
             return (
               <div key={di} style={{ display:'flex', flexDirection:'column' }}>
@@ -86,6 +100,23 @@ export default function AdminWeeklyPage() {
                       <div style={{ width:6, height:6, borderRadius:'50%', background:'#ef4444', marginTop:-3, marginLeft:-1, flexShrink:0 }} />
                     </div>
                   )}
+                  {/* 코치 휴무 블록 */}
+                  {dayBlocks.map(b => {
+                    const startMin = b.block_start
+                      ? (Number(b.block_start.split(':')[0])*60 + Number(b.block_start.split(':')[1])) - START_HOUR*60
+                      : 0
+                    const endMin = b.block_end
+                      ? (Number(b.block_end.split(':')[0])*60 + Number(b.block_end.split(':')[1])) - START_HOUR*60
+                      : (END_HOUR - START_HOUR)*60
+                    const top  = Math.max(0, startMin/CELL_MIN*CELL_H)
+                    const height = Math.max(CELL_H, (endMin - startMin)/CELL_MIN*CELL_H)
+                    return (
+                      <div key={b.id} style={{ position:'absolute', top:top+1, left:0, right:0, height:height-1, background:'repeating-linear-gradient(45deg,#f3f0ff,#f3f0ff 4px,#ede9fe 4px,#ede9fe 8px)', borderLeft:'3px solid #7c3aed', zIndex:4, overflow:'hidden', padding:'2px 3px' }}>
+                        <div style={{ fontSize:'8px', fontWeight:700, color:'#7c3aed', lineHeight:1.3 }}>휴무</div>
+                        {height>=32 && b.reason && <div style={{ fontSize:'8px', color:'#5b21b6', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.reason}</div>}
+                      </div>
+                    )
+                  })}
                   {daySlots.map(slot => {
                     const dt = new Date(slot.scheduled_at)
                     const startMin = (dt.getHours()-START_HOUR)*60+dt.getMinutes()
@@ -148,7 +179,7 @@ export default function AdminWeeklyPage() {
                 </div>
               ))}
             </div>
-            <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={filteredSlots} /></div></>
+            <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={filteredSlots} blocksForGrid={blocks} /></div></>
           )}
           {viewMode==='byCoach' && (
             <>{coaches.length>0 && (
@@ -174,7 +205,7 @@ export default function AdminWeeklyPage() {
                         <span style={{ fontFamily:'Oswald,sans-serif', fontWeight:700, fontSize:'1rem', color:'#111827' }}>{coach.name} 코치</span>
                         <span style={{ marginLeft:'auto', fontSize:'0.75rem', color:'#6b7280' }}>이번 주 {coachSlots.length}건</span>
                       </div>
-                      <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={coachSlots} /></div>
+                      <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={coachSlots} blocksForGrid={blocks.filter(b => b.coach_id === coach.id)} /></div>
                     </div>
                   )
                 })}
