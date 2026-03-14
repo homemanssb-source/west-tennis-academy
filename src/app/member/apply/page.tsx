@@ -163,7 +163,11 @@ export default function MemberApplyPage() {
     fetch(`/api/lesson-slots?coach_id=${coachId}&from=${from}&to=${to}`)
       .then(r => r.json()).then(d => setBusySlots(Array.isArray(d) ? d : []))
     fetch(`/api/coach-blocks?coach_id=${coachId}`)
-      .then(r => r.json()).then(d => setCoachBlocks(Array.isArray(d) ? d : []))
+      .then(r => r.json()).then(d => {
+        console.log('[DEBUG] coachBlocks raw:', JSON.stringify(d))
+        console.log('[DEBUG] coachBlocks count:', Array.isArray(d) ? d.length : 'NOT ARRAY')
+        setCoachBlocks(Array.isArray(d) ? d : [])
+      })
   }, [coachId, monthId])
 
   const isBlocked = (date: Date, tStr: string) => {
@@ -172,6 +176,7 @@ export default function MemberApplyPage() {
     const [th, tm] = tStr.split(':').map(Number)
     const slotStart = th * 60 + tm
     const slotEnd   = slotStart + duration
+    if (coachBlocks.length === 0) console.log('[DEBUG] isBlocked: coachBlocks EMPTY!')
     return coachBlocks.some(b => {
       if (b.repeat_weekly) {
         if (b.day_of_week !== date.getDay()) return false
