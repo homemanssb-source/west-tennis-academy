@@ -129,7 +129,7 @@ export default function MemberApplyPage() {
     d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
     return d
   })()
-  const weekDates = Array.from({ length: 6 }, (_, i) => {
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(baseMonday)
     d.setDate(d.getDate() + weekOffset * 7 + i)
     return d
@@ -410,7 +410,7 @@ export default function MemberApplyPage() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <button onClick={() => setWeekOffset(w => w-1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>← 이전</button>
                   <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>
-                    {weekDates[0].getMonth()+1}/{weekDates[0].getDate()} ~ {weekDates[5].getMonth()+1}/{weekDates[5].getDate()}
+                    {weekDates[0].getMonth()+1}/{weekDates[0].getDate()} ~ {weekDates[6].getMonth()+1}/{weekDates[6].getDate()}
                   </span>
                   <button onClick={() => setWeekOffset(w => w+1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>다음 →</button>
                 </div>
@@ -637,7 +637,8 @@ export default function MemberApplyPage() {
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                          {app.coach?.name} 코치 · {app.lesson_type}
+                          {app.coach?.name} 코치
+                          {app.lesson_type && <span> · {app.lesson_type}</span>}
                           {app.applicant_name && <span style={{ color: '#6b7280', fontWeight: 400 }}> ({app.applicant_name})</span>}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>
