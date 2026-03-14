@@ -21,7 +21,7 @@ function getMonday(d: Date) {
   mon.setHours(0, 0, 0, 0)
   return mon
 }
-function toYMD(d: Date) { return d.toISOString().split('T')[0] }
+function toYMD(d: Date) { const kst = new Date(d.getTime() + 9*60*60*1000); return kst.toISOString().split('T')[0] }
 
 export default function WeeklySchedulePage() {
   const [monday, setMonday] = useState(() => getMonday(new Date()))
@@ -35,7 +35,7 @@ export default function WeeklySchedulePage() {
     setLoading(true)
     fetch('/api/weekly-schedule?week=' + toYMD(monday))
       .then(r => r.json())
-      .then(d => { setSlots(Array.isArray(d) ? d : []); setLoading(false) })
+      .then(d => { setSlots(Array.isArray(d) ? d : (Array.isArray(d?.slots) ? d.slots : [])); setLoading(false) })
   }, [monday])
 
   const changeWeek = (dir: number) => {

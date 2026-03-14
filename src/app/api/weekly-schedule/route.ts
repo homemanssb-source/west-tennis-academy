@@ -11,18 +11,18 @@ export async function GET(req: NextRequest) {
   const week = req.nextUrl.searchParams.get('week') // YYYY-MM-DD (월요일)
   if (!week) return NextResponse.json({ error: 'week 필요' }, { status: 400 })
 
-  const start = new Date(week)
-  const end   = new Date(week)
-  end.setDate(end.getDate() + 6)
-
-  const startStr = `${start.toISOString().split('T')[0]}T00:00:00+09:00`
-  const endStr   = `${end.toISOString().split('T')[0]}T23:59:59+09:00`
-  const startDate = start.toISOString().split('T')[0]
-  const endDate   = end.toISOString().split('T')[0]
+  // week = 'YYYY-MM-DD' KST 기준 (toYMD KST 수정으로 올바른 날짜 전달됨)
+  const startStr  = `${week}T00:00:00+09:00`
+  const startDate = week
+  // 6일 후 날짜 계산 (KST 기준)
+  const endDateObj = new Date(`${week}T12:00:00+09:00`)
+  endDateObj.setDate(endDateObj.getDate() + 6)
+  const endDate = endDateObj.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+  const endStr  = `${endDate}T23:59:59+09:00`
 
   // 해당 주의 요일 배열 (0=일~6=토)
   const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start)
+    const d = new Date(`${week}T12:00:00+09:00`)
     d.setDate(d.getDate() + i)
     return d.getDay()
   })

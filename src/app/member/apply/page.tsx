@@ -167,7 +167,8 @@ export default function MemberApplyPage() {
   }, [coachId, monthId])
 
   const isBlocked = (date: Date, tStr: string) => {
-    const ymd = date.toISOString().split('T')[0]
+    const kst = new Date(date.getTime() + 9*60*60*1000)
+    const ymd = kst.toISOString().split('T')[0]
     const [th, tm] = tStr.split(':').map(Number)
     const slotStart = th * 60 + tm
     const slotEnd   = slotStart + duration
@@ -189,17 +190,21 @@ export default function MemberApplyPage() {
   }
 
   const isBusy = (date: Date, tStr: string) => {
-    const ymd = date.toISOString().split('T')[0]
+    const toKST = (d: Date) => new Date(d.getTime() + 9*60*60*1000)
+    const kstDate = toKST(date)
+    const ymd = kstDate.toISOString().split('T')[0]
     return busySlots.some(s => {
-      const sd = new Date(s.scheduled_at)
-      return sd.toISOString().split('T')[0] === ymd &&
-        `${String(sd.getHours()).padStart(2,'0')}:${String(sd.getMinutes()).padStart(2,'0')}` === tStr &&
-        s.status !== 'cancelled'
+      if (s.status === 'cancelled') return false
+      const sd = toKST(new Date(s.scheduled_at))
+      const sdYmd  = sd.toISOString().split('T')[0]
+      const sdTime = `${String(sd.getUTCHours()).padStart(2,'0')}:${String(sd.getUTCMinutes()).padStart(2,'0')}`
+      return sdYmd === ymd && sdTime === tStr
     })
   }
 
   const isPending = (date: Date, tStr: string) => {
-    const ymd = date.toISOString().split('T')[0]
+    const kst = new Date(date.getTime() + 9*60*60*1000)
+    const ymd = kst.toISOString().split('T')[0]
     const dt  = `${ymd}T${tStr}`
     return myApps.some(a =>
       ['pending_coach','pending_admin'].includes(a.status) &&
