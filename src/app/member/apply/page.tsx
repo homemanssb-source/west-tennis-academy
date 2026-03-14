@@ -163,11 +163,7 @@ export default function MemberApplyPage() {
     fetch(`/api/lesson-slots?coach_id=${coachId}&from=${from}&to=${to}`)
       .then(r => r.json()).then(d => setBusySlots(Array.isArray(d) ? d : []))
     fetch(`/api/coach-blocks?coach_id=${coachId}`)
-      .then(r => r.json()).then(d => {
-        console.log('[DEBUG] coachBlocks raw:', JSON.stringify(d))
-        console.log('[DEBUG] coachBlocks count:', Array.isArray(d) ? d.length : 'NOT ARRAY')
-        setCoachBlocks(Array.isArray(d) ? d : [])
-      })
+      .then(r => r.json()).then(d => setCoachBlocks(Array.isArray(d) ? d : []))
   }, [coachId, monthId])
 
   const isBlocked = (date: Date, tStr: string) => {
@@ -176,21 +172,22 @@ export default function MemberApplyPage() {
     const [th, tm] = tStr.split(':').map(Number)
     const slotStart = th * 60 + tm
     const slotEnd   = slotStart + duration
-    if (coachBlocks.length === 0) console.log('[DEBUG] isBlocked: coachBlocks EMPTY!')
     return coachBlocks.some(b => {
       if (b.repeat_weekly) {
         if (b.day_of_week !== date.getDay()) return false
       } else {
         if (b.block_date !== ymd) return false
       }
+      // 종일 휴무: 시작/종료 모두 없음
       if (!b.block_start && !b.block_end) return true
-      if (b.block_start && b.block_end) {
-        const [bh, bm] = b.block_start.split(':').map(Number)
-        const [eh, em] = b.block_end.split(':').map(Number)
-        const bs = bh * 60 + bm, be = eh * 60 + em
-        return slotStart < be && slotEnd > bs
-      }
-      return false
+      // 시간 범위 휴무: 하나라도 있으면 체크 (없는 쪽은 하루 시작/끝으로 처리)
+      const bs = b.block_start
+        ? (Number(b.block_start.split(':')[0])*60 + Number(b.block_start.split(':')[1]))
+        : 0
+      const be = b.block_end
+        ? (Number(b.block_end.split(':')[0])*60 + Number(b.block_end.split(':')[1]))
+        : 24*60
+      return slotStart < be && slotEnd > bs
     })
   }
 
