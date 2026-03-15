@@ -41,7 +41,6 @@ export default function NotificationBell() {
 
   useEffect(() => { load() }, [])
 
-  // ✅ 전체 일괄 읽음 처리
   const markAllRead = async () => {
     await fetch('/api/notifications', { method: 'PATCH' })
     setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
@@ -52,6 +51,13 @@ export default function NotificationBell() {
       setOpen(false)
       router.push(n.link)
     }
+  }
+
+  // ✅ 단건 삭제
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation() // 카드 클릭 이벤트 막기
+    await fetch(`/api/notifications/${id}`, { method: 'DELETE' })
+    setNotifs(prev => prev.filter(n => n.id !== id))
   }
 
   const handlePushToggle = async () => {
@@ -103,7 +109,7 @@ export default function NotificationBell() {
           </button>
         )}
 
-        {/* 벨 버튼 — 열릴 때 로드 + 일괄 읽음 */}
+        {/* 벨 버튼 */}
         <button
           onClick={async () => {
             const next = !open
@@ -175,9 +181,21 @@ export default function NotificationBell() {
               padding: '0.875rem 1rem',
               borderBottom: '1px solid #f3f4f6',
             }}>
-              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>
-                알림
-              </span>
+              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>알림</span>
+              {/* ✅ 전체 삭제 버튼 */}
+              {notifs.length > 0 && (
+                <button
+                  onClick={async () => {
+                    await Promise.all(notifs.map(n =>
+                      fetch(`/api/notifications/${n.id}`, { method: 'DELETE' })
+                    ))
+                    setNotifs([])
+                  }}
+                  style={{ fontSize: '0.72rem', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  전체 삭제
+                </button>
+              )}
             </div>
 
             {/* 알림 목록 */}
@@ -213,9 +231,26 @@ export default function NotificationBell() {
                         <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px', lineHeight: 1.4 }}>{n.body}</div>
                         <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '4px' }}>{fmt(n.created_at)}</div>
                       </div>
-                      {!n.is_read && (
-                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#3b82f6', flexShrink: 0, marginTop: '4px' }} />
-                      )}
+                      {/* ✅ 단건 삭제 버튼 */}
+                      <button
+                        onClick={e => handleDelete(e, n.id)}
+                        title="삭제"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: '#d1d5db',
+                          fontSize: '0.85rem',
+                          padding: '2px 4px',
+                          borderRadius: '4px',
+                          flexShrink: 0,
+                          lineHeight: 1,
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                        onMouseLeave={e => (e.currentTarget.style.color = '#d1d5db')}
+                      >
+                        ✕
+                      </button>
                     </div>
                   )
                 })

@@ -27,22 +27,27 @@ const STATUS: Record<string, { label: string; color: string; bg: string; border:
 const DAYS = ['일','월','화','수','목','금','토']
 
 export default function OwnerApplicationsPage() {
-  const [apps,    setApps]    = useState<App[]>([])
-  const [coaches, setCoaches] = useState<Coach[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState<App | null>(null)
-  const [adminNote, setAdminNote]   = useState('')
-  const [editTime,  setEditTime]    = useState('')
-  const [editDate,  setEditDate]    = useState('')
-  const [editCoach, setEditCoach]   = useState('')
-  const [saving,    setSaving]      = useState(false)
-  const [filter,    setFilter]      = useState<'pending_admin'|'all'>('pending_admin')
+  const [apps,       setApps]       = useState<App[]>([])
+  const [coaches,    setCoaches]    = useState<Coach[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [selected,   setSelected]   = useState<App | null>(null)
+  const [adminNote,  setAdminNote]  = useState('')
+  const [editTime,   setEditTime]   = useState('')
+  const [editDate,   setEditDate]   = useState('')
+  const [editCoach,  setEditCoach]  = useState('')
+  const [saving,     setSaving]     = useState(false)
+  const [filter,     setFilter]     = useState<'pending_admin'|'all'>('pending_admin')
+  // ✅ 일괄 처리 상태
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const [bulkModal,  setBulkModal]  = useState<'approve'|'reject'|null>(null)
+  const [bulkNote,   setBulkNote]   = useState('')
 
   const load = async () => {
     setLoading(true)
     const res = await fetch('/api/lesson-applications')
     const d = await res.json()
     setApps(Array.isArray(d) ? d : [])
+    setCheckedIds(new Set())
     setLoading(false)
   }
 
@@ -54,15 +59,14 @@ export default function OwnerApplicationsPage() {
   const openModal = (a: App) => {
     setSelected(a)
     setAdminNote('')
-    setEditDate('')   // 비워두기 - 수정할 때만 입력
-    setEditTime('')   // 비워두기 - 수정할 때만 입력
+    setEditDate('')
+    setEditTime('')
     setEditCoach(a.coach?.id ?? '')
   }
 
   const handleAction = async (action: 'admin_approve' | 'admin_reject') => {
     if (!selected) return
     setSaving(true)
-    // 날짜/시간 둘 다 입력했을 때만 변경, 아니면 기존 시간 유지
     const requested_at = (action === 'admin_approve' && editDate && editTime)
       ? `${editDate}T${editTime}:00+09:00`
       : undefined
@@ -81,16 +85,44 @@ export default function OwnerApplicationsPage() {
     load()
   }
 
+  // ✅ 일괄 처리
+  const handleBulkAction = async (action: 'admin_approve' | 'admin_reject') => {
+    setSaving(true)
+    await Promise.all(Array.from(checkedIds).map(id =>
+      fetch(`/api/lesson-applications/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, admin_note: bulkNote || null }),
+      })
+    ))
+    setSaving(false)
+    setBulkModal(null)
+    setBulkNote('')
+    load()
+  }
+
+  const toggleCheck = (id: string) => {
+    setCheckedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
   const fmtDt = (dt: string) => {
     const d = new Date(dt)
     return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
 
-  const filtered = filter === 'pending_admin'
-    ? apps.filter(a => a.status === 'pending_admin')
-    : apps
+  const filtered     = filter === 'pending_admin' ? apps.filter(a => a.status === 'pending_admin') : apps
+  const pendingList  = apps.filter(a => a.status === 'pending_admin')
+  const pendingCount = pendingList.length
+  const allChecked   = pendingList.length > 0 && pendingList.every(a => checkedIds.has(a.id))
 
-  const pendingCount = apps.filter(a => a.status === 'pending_admin').length
+  const toggleAll = () => {
+    if (allChecked) setCheckedIds(new Set())
+    else setCheckedIds(new Set(pendingList.map(a => a.id)))
+  }
 
   const inputStyle = {
     width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb',
@@ -100,6 +132,7 @@ export default function OwnerApplicationsPage() {
 
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
+
       {/* 헤더 */}
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -111,18 +144,44 @@ export default function OwnerApplicationsPage() {
             </span>
           )}
         </div>
+
+        {/* 필터 탭 */}
         <div style={{ maxWidth: '900px', margin: '0.75rem auto 0', display: 'flex', gap: '0.5rem' }}>
-          {(['pending_admin','all'] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
+          {(['pending_admin', 'all'] as const).map(f => (
+            <button key={f} onClick={() => { setFilter(f); setCheckedIds(new Set()) }}
               style={{ padding: '0.375rem 0.875rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif',
                 background: filter === f ? '#1d4ed8' : '#f3f4f6',
-                color: filter === f ? 'white' : '#6b7280' }}>
+                color:      filter === f ? 'white'   : '#6b7280' }}>
               {f === 'pending_admin' ? `승인 대기 (${pendingCount})` : '전체'}
             </button>
           ))}
         </div>
+
+        {/* ✅ 일괄 처리 툴바 — 승인 대기 필터 + 항목 있을 때만 */}
+        {filter === 'pending_admin' && pendingCount > 0 && (
+          <div style={{ maxWidth: '900px', margin: '0.75rem auto 0', display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.625rem 0.875rem', background: '#eff6ff', borderRadius: '0.75rem', border: '1px solid #93c5fd' }}>
+            <input type="checkbox" checked={allChecked} onChange={toggleAll}
+              style={{ width: '16px', height: '16px', accentColor: '#1d4ed8', cursor: 'pointer', flexShrink: 0 }} />
+            <span style={{ fontSize: '0.8rem', color: '#374151', fontWeight: 600, flex: 1 }}>
+              {checkedIds.size > 0 ? `${checkedIds.size}개 선택됨` : '전체 선택'}
+            </span>
+            {checkedIds.size > 0 && (
+              <>
+                <button onClick={() => { setBulkModal('approve'); setBulkNote('') }}
+                  style={{ padding: '0.375rem 0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                  일괄 승인
+                </button>
+                <button onClick={() => { setBulkModal('reject'); setBulkNote('') }}
+                  style={{ padding: '0.375rem 0.875rem', background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                  일괄 거절
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* 목록 */}
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1rem 1.5rem 2rem' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>불러오는 중...</div>
@@ -135,36 +194,47 @@ export default function OwnerApplicationsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
             {filtered.map(a => {
               const st = STATUS[a.status] ?? STATUS.pending_coach
+              const isPending = a.status === 'pending_admin'
               return (
-                <div key={a.id}
-                  onClick={() => a.status === 'pending_admin' ? openModal(a) : null}
-                  style={{ background: 'white', border: `1.5px solid ${st.border}`, borderRadius: '1rem', padding: '1rem 1.25rem', cursor: a.status === 'pending_admin' ? 'pointer' : 'default',
-                    transition: 'box-shadow .15s' }}
-                  onMouseEnter={e => a.status === 'pending_admin' && (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
-                  onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
-                >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 700, color: '#111827' }}>{a.member?.name}</span>
-                        <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{a.member?.phone}</span>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: st.bg, color: st.color }}>
-                          {st.label}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#374151' }}>{fmtDt(a.requested_at)}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
-                        {a.coach?.name} 코치 · {a.duration_minutes}분 · {a.lesson_type} · {a.month?.year}년 {a.month?.month}월
-                      </div>
-                      {a.coach_note && (
-                        <div style={{ marginTop: '6px', fontSize: '0.75rem', background: '#fef9c3', color: '#854d0e', padding: '4px 8px', borderRadius: '0.5rem' }}>
-                          코치 메모: {a.coach_note}
+                <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }}>
+
+                  {/* ✅ 체크박스 — 승인 대기 필터 + pending_admin 항목만 */}
+                  {filter === 'pending_admin' && isPending && (
+                    <div style={{ paddingTop: '1.1rem' }}>
+                      <input type="checkbox" checked={checkedIds.has(a.id)} onChange={() => toggleCheck(a.id)}
+                        style={{ width: '16px', height: '16px', accentColor: '#1d4ed8', cursor: 'pointer' }} />
+                    </div>
+                  )}
+
+                  <div style={{ flex: 1, background: 'white', border: `1.5px solid ${st.border}`, borderRadius: '1rem', padding: '1rem 1.25rem',
+                    cursor: isPending ? 'pointer' : 'default', transition: 'box-shadow .15s' }}
+                    onClick={() => isPending ? openModal(a) : null}
+                    onMouseEnter={e => isPending && (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
+                    onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, color: '#111827' }}>{a.member?.name}</span>
+                          <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{a.member?.phone}</span>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: st.bg, color: st.color }}>
+                            {st.label}
+                          </span>
                         </div>
+                        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#374151' }}>{fmtDt(a.requested_at)}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
+                          {a.coach?.name} 코치 · {a.duration_minutes}분 · {a.lesson_type} · {a.month?.year}년 {a.month?.month}월
+                        </div>
+                        {a.coach_note && (
+                          <div style={{ marginTop: '6px', fontSize: '0.75rem', background: '#fef9c3', color: '#854d0e', padding: '4px 8px', borderRadius: '0.5rem' }}>
+                            코치 메모: {a.coach_note}
+                          </div>
+                        )}
+                      </div>
+                      {isPending && (
+                        <span style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700, flexShrink: 0 }}>클릭 →</span>
                       )}
                     </div>
-                    {a.status === 'pending_admin' && (
-                      <span style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700, flexShrink: 0 }}>클릭 →</span>
-                    )}
                   </div>
                 </div>
               )
@@ -173,7 +243,7 @@ export default function OwnerApplicationsPage() {
         )}
       </div>
 
-      {/* 승인 모달 */}
+      {/* 개별 승인 모달 */}
       {selected && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
           onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>
@@ -182,15 +252,12 @@ export default function OwnerApplicationsPage() {
 
             <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1.25rem' }}>
               <div style={{ fontWeight: 700, color: '#111827' }}>{selected.member?.name}</div>
-              <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
-                신청 시간: {fmtDt(selected.requested_at)}
-              </div>
+              <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>신청 시간: {fmtDt(selected.requested_at)}</div>
               {selected.coach_note && (
                 <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#854d0e' }}>코치 메모: {selected.coach_note}</div>
               )}
             </div>
 
-            {/* 시간/코치 수정 가능 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>
                 ✏️ 시간/코치 수정 시에만 입력 (빈칸이면 신청 시간 그대로 확정)
@@ -225,6 +292,39 @@ export default function OwnerApplicationsPage() {
               <button onClick={() => handleAction('admin_reject')} disabled={saving}
                 style={{ flex: 1, padding: '0.875rem', background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
                 거절
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ 일괄 처리 모달 */}
+      {bulkModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={e => { if (e.target === e.currentTarget) setBulkModal(null) }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: '400px', borderRadius: '1.5rem', padding: '1.5rem' }}>
+            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+              {bulkModal === 'approve' ? '일괄 최종 승인' : '일괄 거절'}
+            </h2>
+            <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1.25rem' }}>
+              선택한 <strong style={{ color: bulkModal === 'approve' ? '#16A34A' : '#b91c1c' }}>{checkedIds.size}개</strong> 신청을
+              {bulkModal === 'approve' ? ' 최종 승인' : ' 거절'}합니다.
+            </p>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>
+                공통 메모 (선택 — 모든 신청에 동일 적용)
+              </label>
+              <input style={inputStyle} placeholder="선택 사항"
+                value={bulkNote} onChange={e => setBulkNote(e.target.value)} />
+            </div>
+            <div style={{ display: 'flex', gap: '0.625rem' }}>
+              <button onClick={() => setBulkModal(null)}
+                style={{ flex: 1, padding: '0.875rem', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                취소
+              </button>
+              <button onClick={() => handleBulkAction(bulkModal === 'approve' ? 'admin_approve' : 'admin_reject')} disabled={saving}
+                style={{ flex: 2, padding: '0.875rem', background: bulkModal === 'approve' ? '#16A34A' : '#b91c1c', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                {saving ? '처리 중...' : bulkModal === 'approve' ? `✅ ${checkedIds.size}개 승인` : `❌ ${checkedIds.size}개 거절`}
               </button>
             </div>
           </div>
