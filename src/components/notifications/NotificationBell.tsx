@@ -24,9 +24,9 @@ const TYPE_STYLE: Record<string, { bg: string; color: string; emoji: string }> =
 export default function NotificationBell() {
   const router = useRouter()
   const { supported, subscribed, subscribe, unsubscribe } = usePush()
-  const [notifs,  setNotifs]  = useState<Notification[]>([])
-  const [open,    setOpen]    = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [notifs,      setNotifs]      = useState<Notification[]>([])
+  const [open,        setOpen]        = useState(false)
+  const [loading,     setLoading]     = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
 
   const unread = notifs.filter(n => !n.is_read).length
@@ -41,16 +41,13 @@ export default function NotificationBell() {
 
   useEffect(() => { load() }, [])
 
+  // ✅ 전체 일괄 읽음 처리
   const markAllRead = async () => {
     await fetch('/api/notifications', { method: 'PATCH' })
     setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
   }
 
   const handleClick = async (n: Notification) => {
-    if (!n.is_read) {
-      await fetch(`/api/notifications/${n.id}`, { method: 'PATCH' })
-      setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x))
-    }
     if (n.link) {
       setOpen(false)
       router.push(n.link)
@@ -60,20 +57,15 @@ export default function NotificationBell() {
   const handlePushToggle = async () => {
     setPushLoading(true)
     try {
-      if (subscribed) {
-        await unsubscribe()
-      } else {
-        await subscribe()
-      }
+      if (subscribed) await unsubscribe()
+      else await subscribe()
     } finally {
       setPushLoading(false)
     }
   }
 
   const fmt = (dt: string) => {
-    const d = new Date(dt)
-    const now = new Date()
-    const diff = Math.floor((now.getTime() - d.getTime()) / 1000)
+    const diff = Math.floor((Date.now() - new Date(dt).getTime()) / 1000)
     if (diff < 60) return '방금'
     if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
     if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
@@ -82,10 +74,9 @@ export default function NotificationBell() {
 
   return (
     <div style={{ position: 'relative' }}>
-      {/* 벨 버튼 + 푸시 토글 버튼 묶음 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
 
-        {/* 푸시 알림 구독 버튼 */}
+        {/* 푸시 알림 버튼 */}
         {supported && (
           <button
             onClick={handlePushToggle}
@@ -112,9 +103,16 @@ export default function NotificationBell() {
           </button>
         )}
 
-        {/* 벨 아이콘 */}
+        {/* 벨 버튼 — 열릴 때 로드 + 일괄 읽음 */}
         <button
-          onClick={() => { setOpen(o => !o); if (!open) load() }}
+          onClick={async () => {
+            const next = !open
+            setOpen(next)
+            if (next) {
+              await load()
+              await markAllRead()
+            }
+          }}
           style={{
             position: 'relative',
             background: 'rgba(255,255,255,0.15)',
@@ -153,14 +151,10 @@ export default function NotificationBell() {
         </button>
       </div>
 
-      {/* 드롭다운 알림 목록 */}
+      {/* 드롭다운 */}
       {open && (
         <>
-          {/* 배경 클릭 닫기 */}
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 40 }}
-            onClick={() => setOpen(false)}
-          />
+          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
           <div style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',
@@ -182,24 +176,20 @@ export default function NotificationBell() {
               borderBottom: '1px solid #f3f4f6',
             }}>
               <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>
-                알림 {unread > 0 && <span style={{ color: '#ef4444' }}>{unread}개 안읽음</span>}
+                알림
               </span>
-              {unread > 0 && (
-                <button
-                  onClick={markAllRead}
-                  style={{ fontSize: '0.75rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  모두 읽음
-                </button>
-              )}
             </div>
 
             {/* 알림 목록 */}
             <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
               {loading ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>로딩 중...</div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
+                  로딩 중...
+                </div>
               ) : notifs.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>알림이 없습니다</div>
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
+                  알림이 없습니다
+                </div>
               ) : (
                 notifs.map(n => {
                   const st = TYPE_STYLE[n.type] ?? TYPE_STYLE.info
