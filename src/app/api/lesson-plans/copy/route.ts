@@ -1,10 +1,11 @@
+// src/app/api/lesson-plans/copy/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
-  if (!session || !['owner','admin'].includes(session.role)) {
+  if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
 
@@ -12,12 +13,34 @@ export async function POST(req: NextRequest) {
   if (!from_month_id || !to_month_id) {
     return NextResponse.json({ error: '원본/대상 월 필요' }, { status: 400 })
   }
+  if (from_month_id === to_month_id) {
+    return NextResponse.json({ error: '원본과 대상 월이 같습니다' }, { status: 400 })
+  }
 
-  // 원본 월 플랜 조회
+  // ── 대상 월 정보 조회 ─────────────────────────────────────────────────
+  const { data: toMonthRecord } = await supabaseAdmin
+    .from('months')
+    .select('year, month')
+    .eq('id', to_month_id)
+    .single()
+
+  if (!toMonthRecord) {
+    return NextResponse.json({ error: '대상 월 정보 없음' }, { status: 404 })
+  }
+
+  const { year: toYear, month: toMonth } = toMonthRecord
+
+  // ── 원본 월 플랜 조회 (슬롯 포함) ────────────────────────────────────
   let query = supabaseAdmin
     .from('lesson_plans')
-    .select('*')
+    .select(`
+      *,
+      slots:lesson_slots (
+        scheduled_at, duration_minutes, status, is_makeup
+      )
+    `)
     .eq('month_id', from_month_id)
+    .not('slots.status', 'in', '("cancelled","draft")')
 
   if (coach_id) query = query.eq('coach_id', coach_id)
 
@@ -27,43 +50,195 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '복사할 플랜이 없습니다' }, { status: 404 })
   }
 
-  // 대상 월에 이미 있는 회원 확인 (중복 방지)
+  // ── 대상 월에 이미 있는 플랜 확인 (중복 방지) ────────────────────────
   const { data: existingPlans } = await supabaseAdmin
     .from('lesson_plans')
     .select('member_id, coach_id')
     .eq('month_id', to_month_id)
 
-  const existingSet = new Set(
+  const existingPlanSet = new Set(
     (existingPlans ?? []).map((p: any) => `${p.member_id}_${p.coach_id}`)
   )
 
-  const newPlans = sourcePlans
-    .filter((p: any) => !existingSet.has(`${p.member_id}_${p.coach_id}`))
-    .map((p: any) => ({
-      member_id:        p.member_id,
-      coach_id:         p.coach_id,
-      month_id:         to_month_id,
-      lesson_type:      p.lesson_type,
-      total_count:      p.total_count,
-      completed_count:  0,
-      payment_status:   'unpaid',
-      amount:           p.amount,
-      unit_minutes:     p.unit_minutes,
-      program_id:       p.program_id ?? null,
-      next_month_synced: false,
-    }))
+  // ── 대상 월에 이미 있는 슬롯 확인 (반복 실행 시 중복 방지) ──────────
+  const { data: existingPlansFull } = await supabaseAdmin
+    .from('lesson_plans')
+    .select('id, member_id, coach_id')
+    .eq('month_id', to_month_id)
 
-  if (newPlans.length === 0) {
-    return NextResponse.json({ ok: true, copied: 0, skipped: sourcePlans.length, message: '이미 모두 등록된 플랜입니다' })
+  const existingPlanMap = new Map(
+    (existingPlansFull ?? []).map((p: any) => [`${p.member_id}_${p.coach_id}`, p.id])
+  )
+
+  // ── 코치 휴무 전체 조회 ───────────────────────────────────────────────
+  const { data: coachBlocks } = await supabaseAdmin
+    .from('coach_blocks')
+    .select('*')
+
+  const blocks = coachBlocks ?? []
+
+  // 휴무 충돌 체크 함수
+  const isBlocked = (coachId: string, dateObj: Date, timeStr: string): boolean => {
+    const dateStr = dateObj.toISOString().split('T')[0]
+    const dayOfWeek = dateObj.getDay()
+    return blocks.some((b: any) => {
+      if (b.coach_id !== coachId) return false
+      if (b.block_date && b.block_date === dateStr) {
+        if (!b.block_start) return true
+        return timeStr >= b.block_start && timeStr <= (b.block_end ?? '23:59')
+      }
+      if (b.repeat_weekly && b.day_of_week === dayOfWeek) {
+        if (!b.block_start) return true
+        return timeStr >= b.block_start && timeStr <= (b.block_end ?? '23:59')
+      }
+      return false
+    })
   }
 
-  const { error } = await supabaseAdmin.from('lesson_plans').insert(newPlans)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // ── 대상 월 날짜 목록 ─────────────────────────────────────────────────
+  const daysInToMonth = new Date(toYear, toMonth, 0).getDate()
+  const toMonthDates: { date: Date; dayOfWeek: number }[] = []
+  for (let d = 1; d <= daysInToMonth; d++) {
+    const date = new Date(toYear, toMonth - 1, d)
+    toMonthDates.push({ date, dayOfWeek: date.getDay() })
+  }
+
+  let copiedPlans  = 0
+  let skippedPlans = 0
+  let createdSlots = 0
+  let conflictSlots = 0
+  let skippedSlots = 0
+
+  for (const plan of sourcePlans) {
+    const planKey = `${plan.member_id}_${plan.coach_id}`
+    let newPlanId: string
+
+    if (existingPlanSet.has(planKey)) {
+      // 이미 있는 플랜 → 슬롯만 추가 (반복 실행 안전)
+      skippedPlans++
+      newPlanId = existingPlanMap.get(planKey)!
+    } else {
+      // 신규 플랜 생성
+      const { data: newPlan, error: planErr } = await supabaseAdmin
+        .from('lesson_plans')
+        .insert({
+          member_id:         plan.member_id,
+          coach_id:          plan.coach_id,
+          month_id:          to_month_id,
+          lesson_type:       plan.lesson_type,
+          total_count:       0,
+          completed_count:   0,
+          payment_status:    'unpaid',
+          amount:            plan.amount,
+          unit_minutes:      plan.unit_minutes,
+          program_id:        plan.program_id ?? null,
+          next_month_synced: false,
+        })
+        .select('id')
+        .single()
+
+      if (planErr || !newPlan) continue
+      newPlanId = newPlan.id
+      copiedPlans++
+    }
+
+    // ── 슬롯 패턴 추출 ──────────────────────────────────────────────────
+    const slots = (plan.slots ?? []).filter((s: any) => !s.is_makeup)
+    if (slots.length === 0) continue
+
+    // 요일+시간 패턴 카운트
+    const patternCount: Record<string, { count: number; duration: number }> = {}
+    for (const slot of slots) {
+      const d = new Date(slot.scheduled_at)
+      const dow = d.getDay()
+      const hh  = String(d.getHours()).padStart(2, '0')
+      const mm  = String(d.getMinutes()).padStart(2, '0')
+      const key = `${dow}_${hh}:${mm}`
+      if (!patternCount[key]) patternCount[key] = { count: 0, duration: slot.duration_minutes }
+      patternCount[key].count++
+    }
+
+    // 1회 이상 등장한 패턴을 모두 인정
+    const threshold = Math.max(1, Math.floor(slots.length / 6))
+    const patterns = Object.entries(patternCount)
+      .filter(([, v]) => v.count >= threshold)
+      .map(([key, v]) => {
+        const [day, time] = key.split('_')
+        return { dayOfWeek: Number(day), time, duration: v.duration }
+      })
+
+    if (patterns.length === 0) continue
+
+    // ── 이미 있는 draft/scheduled 슬롯 확인 (반복 실행 중복 방지) ───────
+    const { data: existingSlots } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('scheduled_at')
+      .eq('lesson_plan_id', newPlanId)
+      .in('status', ['draft', 'scheduled'])
+
+    const existingSlotTimes = new Set(
+      (existingSlots ?? []).map((s: any) => s.scheduled_at.slice(0, 16))
+    )
+
+    // ── 대상 월 슬롯 생성 ───────────────────────────────────────────────
+    const draftSlotsToInsert: any[] = []
+
+    for (const pattern of patterns) {
+      const matchingDates = toMonthDates.filter(d => d.dayOfWeek === pattern.dayOfWeek)
+      for (const { date } of matchingDates) {
+        const [hh, mm] = pattern.time.split(':').map(Number)
+        const slotDate = new Date(toYear, toMonth - 1, date.getDate(), hh, mm, 0)
+
+        // KST 문자열 생성
+        const kstStr = `${toYear}-${String(toMonth).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00+09:00`
+        const slotKey = kstStr.slice(0, 16)
+
+        // 이미 있는 슬롯은 건너뜀
+        if (existingSlotTimes.has(slotKey)) {
+          skippedSlots++
+          continue
+        }
+
+        const blocked = isBlocked(plan.coach_id, slotDate, pattern.time)
+        if (blocked) conflictSlots++
+
+        draftSlotsToInsert.push({
+          lesson_plan_id:   newPlanId,
+          scheduled_at:     kstStr,
+          duration_minutes: pattern.duration,
+          status:           'draft',
+          slot_type:        'lesson',
+          is_makeup:        false,
+          has_conflict:     blocked,
+        })
+      }
+    }
+
+    if (draftSlotsToInsert.length > 0) {
+      const { error: slotErr } = await supabaseAdmin
+        .from('lesson_slots')
+        .insert(draftSlotsToInsert)
+
+      if (!slotErr) createdSlots += draftSlotsToInsert.length
+    }
+  }
+
+  // ── 메시지 구성 ───────────────────────────────────────────────────────
+  const parts = []
+  if (copiedPlans > 0)  parts.push(`플랜 ${copiedPlans}개 복사`)
+  if (skippedPlans > 0) parts.push(`${skippedPlans}개 기존 플랜 유지`)
+  if (createdSlots > 0) parts.push(`수업 ${createdSlots}개 초안 생성`)
+  if (skippedSlots > 0) parts.push(`${skippedSlots}개 슬롯 이미 존재`)
+  if (conflictSlots > 0) parts.push(`⚠️ 휴무 충돌 ${conflictSlots}건`)
 
   return NextResponse.json({
-    ok: true,
-    copied: newPlans.length,
-    skipped: sourcePlans.length - newPlans.length,
-    message: `${newPlans.length}개 플랜 복사 완료${sourcePlans.length - newPlans.length > 0 ? ` (${sourcePlans.length - newPlans.length}개 중복 건너뜀)` : ''}`,
+    ok:           true,
+    copied:       copiedPlans,
+    skipped:      skippedPlans,
+    slots:        createdSlots,
+    slotSkipped:  skippedSlots,
+    conflicts:    conflictSlots,
+    toMonthId:    to_month_id,
+    message:      parts.join(', '),
   })
 }

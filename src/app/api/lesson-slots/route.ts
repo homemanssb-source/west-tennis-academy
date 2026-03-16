@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     endStr   = `${to}T23:59:59+09:00`
   }
 
+  // ✅ draft/cancelled 제외 — 초안은 운영자 확정 전이라 달력에 표시 안 함
   const { data, error } = await supabaseAdmin
     .from('lesson_slots')
     .select(`
@@ -40,6 +41,7 @@ export async function GET(req: NextRequest) {
     `)
     .gte('scheduled_at', startStr)
     .lte('scheduled_at', endStr)
+    .not('status', 'in', '("draft","cancelled")')
     .order('scheduled_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
     ? data.filter((s: any) => s.lesson_plan?.coach?.id === coachId)
     : data
 
-  // ✅ 수정: coachId 없을 때 appSlots 조회 생략 ('' 로 쿼리하던 버그 제거)
+  // ✅ coachId 없을 때 appSlots 조회 생략 ('' 로 쿼리하던 버그 제거)
   let appSlots: any[] = []
   if (coachId) {
     const { data: appData } = await supabaseAdmin
@@ -66,11 +68,10 @@ export async function GET(req: NextRequest) {
       duration_minutes: 60,
       slot_type: null,
       lesson_plan: null,
-      slot_count: 1,
     }))
   }
 
-  // ✅ 추가: 시간대별 카운트 맵 (isBusy 정원 체크용)
+  // ✅ 시간대별 slot_count 맵 — isBusy 정원 체크용
   const allSlots = [...filtered, ...appSlots]
   const countMap: Record<string, number> = {}
   allSlots.forEach((s: any) => {

@@ -1,4 +1,5 @@
-﻿import { redirect } from 'next/navigation'
+﻿// src/app/coach/page.tsx
+import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Link from 'next/link'
@@ -13,6 +14,7 @@ export default async function CoachHomePage() {
   const start = `${today}T00:00:00+09:00`
   const end   = `${today}T23:59:59+09:00`
 
+  // ✅ draft/cancelled 제외 — 초안은 확정 전이라 코치 홈에 표시 안 함
   const { data: slots } = await supabaseAdmin
     .from('lesson_slots')
     .select(`
@@ -25,6 +27,7 @@ export default async function CoachHomePage() {
     `)
     .gte('scheduled_at', start)
     .lte('scheduled_at', end)
+    .not('status', 'in', '("draft","cancelled")')
     .order('scheduled_at', { ascending: true })
 
   const mySlots = (slots ?? []).filter((s: any) => s.lesson_plan?.coach?.id === session.id)

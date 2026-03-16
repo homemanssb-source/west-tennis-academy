@@ -1,3 +1,4 @@
+// src/app/api/my-schedule/route.ts
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -8,9 +9,7 @@ export async function GET() {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
 
-  // Step 1: 내 lesson_plans ID 먼저 조회
-  // (.eq('lesson_plan.member_id') 방식은 PostgREST에서
-  //  lesson_plan을 null로 반환하는 버그가 있어 두 단계로 분리)
+  // Step 1: 내 lesson_plans ID 조회
   const { data: plans } = await supabaseAdmin
     .from('lesson_plans')
     .select('id')
@@ -22,7 +21,7 @@ export async function GET() {
 
   const planIds = plans.map((p: any) => p.id)
 
-  // Step 2: 해당 plan_ids에 속한 슬롯 조회
+  // Step 2: 슬롯 조회 — ✅ draft/cancelled 제외 (초안은 확정 전이라 회원에게 안 보임)
   const { data, error } = await supabaseAdmin
     .from('lesson_slots')
     .select(`
@@ -34,6 +33,7 @@ export async function GET() {
       )
     `)
     .in('lesson_plan_id', planIds)
+    .not('status', 'in', '("draft","cancelled")')
     .order('scheduled_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
