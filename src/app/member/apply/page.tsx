@@ -10,7 +10,7 @@ interface Month        { id: string; year: number; month: number }
 interface Program      { id: string; name: string; unit_minutes: number; coach_id: string | null; default_amount: number; max_students: number }
 interface FamilyMember { id: string; name: string; birth_date: string | null }
 // ✅ slot_count 추가 (API에서 반환)
-interface SlotInfo     { scheduled_at: string; status: string; slot_count?: number }
+interface SlotInfo     { scheduled_at: string; status: string; slot_count?: number; duration_minutes?: number; lesson_plan?: { member?: { id: string } } | null }
 interface BlockInfo    { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
 interface MyApp {
   id: string; requested_at: string; duration_minutes: number
@@ -36,7 +36,9 @@ function generateDates(
   dayTimesMap?: Record<number, string>,
   busySlots?: SlotInfo[],
   coachBlocks?: BlockInfo[],
-  maxStudents?: number
+  maxStudents?: number,
+  duration?: number,
+  mySlotKeys?: Set<string>
 ): { dates: Date[]; skipped: { date: string; time: string; reason: string }[] } {
   const dates: Date[] = []
   const skipped: { date: string; time: string; reason: string }[] = []
@@ -64,13 +66,25 @@ function generateDates(
       continue
     }
 
-    // 정원 체크 — KST 변환 후 ymd+time 비교
+    // 정원 체크 — 시간 범위 겹침 기반 (1시간 수업이면 11:00~12:00 범위로 막음)
+    const [rh, rm] = tStr.split(':').map(Number)
+    const reqStart = rh * 60 + rm
+    const reqEnd   = reqStart + (duration ?? 60)
     const count = (busySlots ?? []).filter(s => {
       if (s.status === 'cancelled') return false
       const sd = new Date(new Date(s.scheduled_at).getTime() + 9 * 60 * 60 * 1000)
-      const sdYmd  = sd.toISOString().split('T')[0]
-      const sdTime = `${String(sd.getUTCHours()).padStart(2,'0')}:${String(sd.getUTCMinutes()).padStart(2,'0')}`
-      return sdYmd === ymd && sdTime === tStr
+      // ✅ 본인 확정 수업은 카운트 제외
+      const sdIso  = sd.toISOString()
+      const slotKey16 = `${sdIso.split('T')[0]}T${sdIso.split('T')[1].slice(0,5)}`
+      if (mySlotKeys?.has(slotKey16)) return false
+      const sdYmd  = sdIso.split('T')[0]
+      if (sdYmd !== ymd) return false
+      const sh = sd.getUTCHours()
+      const sm = sd.getUTCMinutes()
+      const slotStart = sh * 60 + sm
+      const slotDur   = (s as any).duration_minutes ?? 60
+      const slotEnd   = slotStart + slotDur
+      return reqStart < slotEnd && reqEnd > slotStart
     }).length
     if (count >= max) {
       skipped.push({ date: ymd, time: tStr, reason: `정원 초과 (${count}/${max}명)` })
@@ -122,6 +136,8 @@ export default function MemberApplyPage() {
   const [saving,         setSaving]         = useState(false)
   // ✅ 추가: 취소 중 상태
   const [cancelling,     setCancelling]     = useState<string | null>(null)
+  // 본인이 이미 확정된 수업 시간대 (busySlots 카운트에서 제외용)
+  const [mySlotKeys,     setMySlotKeys]     = useState<Set<string>>(new Set())
 
   const finalDates = generatedDates.filter((_, i) => !excludedIdxs.has(i))
 
@@ -146,9 +162,21 @@ export default function MemberApplyPage() {
 
   const loadMyApps = async () => {
     setLoading(true)
-    const res = await fetch('/api/lesson-applications?my=1')
-    const d = await res.json()
-    setMyApps(Array.isArray(d) ? d : [])
+    const [appsRes, scheduleRes] = await Promise.all([
+      fetch('/api/lesson-applications?my=1'),
+      fetch('/api/my-schedule'),
+    ])
+    const appsData     = await appsRes.json()
+    const scheduleData = await scheduleRes.json()
+    setMyApps(Array.isArray(appsData) ? appsData : [])
+    // 본인 확정 수업 시간대 저장 (scheduled_at 앞 16자리: YYYY-MM-DDTHH:mm)
+    const keys = new Set<string>(
+      (Array.isArray(scheduleData) ? scheduleData : [])
+        .filter((s: any) => s.status === 'scheduled')
+        .map((s: any) => s.scheduled_at?.slice(0, 16))
+        .filter(Boolean)
+    )
+    setMySlotKeys(keys)
     setLoading(false)
   }
 
@@ -222,19 +250,33 @@ export default function MemberApplyPage() {
     })
   }
 
-  // ✅ 수정: slot_count 기반 정원 체크
+  // ✅ 수정: 시간 범위 겹침 기반 정원 체크 (1시간 수업이면 11:00~12:00 범위로 막음)
   const isBusy = (date: Date, tStr: string) => {
     const toKST = (d: Date) => new Date(d.getTime() + 9*60*60*1000)
     const kstDate = toKST(date)
     const ymd = kstDate.toISOString().split('T')[0]
     const maxStudents = selectedProgram?.max_students ?? 1
+    const [rh, rm] = tStr.split(':').map(Number)
+    const reqStart = rh * 60 + rm
+    const reqEnd   = reqStart + duration  // 신청하려는 시간대의 끝
 
     const matchingSlots = busySlots.filter(s => {
       if (s.status === 'cancelled') return false
+      // ✅ 본인 확정 수업은 카운트 제외 (본인 슬롯이 있어도 정원 안 찬 것으로 처리)
+      const slotKstStr = toKST(new Date(s.scheduled_at)).toISOString()
+      const slotKey16  = `${slotKstStr.split('T')[0]}T${slotKstStr.split('T')[1].slice(0,5)}`
+      if (mySlotKeys.has(slotKey16)) return false
       const sd = toKST(new Date(s.scheduled_at))
       const sdYmd  = sd.toISOString().split('T')[0]
-      const sdTime = `${String(sd.getUTCHours()).padStart(2,'0')}:${String(sd.getUTCMinutes()).padStart(2,'0')}`
-      return sdYmd === ymd && sdTime === tStr
+      if (sdYmd !== ymd) return false
+      // 기존 슬롯의 시간 범위
+      const sh = sd.getUTCHours()
+      const sm = sd.getUTCMinutes()
+      const slotStart = sh * 60 + sm
+      const slotDur   = (s as any).duration_minutes ?? duration
+      const slotEnd   = slotStart + slotDur
+      // 시간 범위 겹침 체크: 두 구간이 겹치면 busy
+      return reqStart < slotEnd && reqEnd > slotStart
     })
     return matchingSlots.length >= maxStudents
   }
@@ -259,12 +301,12 @@ export default function MemberApplyPage() {
     const { dates, skipped } = generateDates(
       selectedMonth.year, selectedMonth.month, selectedDate,
       allDows, selectedTime, dtMap,
-      busySlots, coachBlocks, maxStudents
+      busySlots, coachBlocks, maxStudents, duration, mySlotKeys
     )
     setGeneratedDates(dates)
     setSkippedDates(skipped)
     setExcludedIdxs(new Set())
-  }, [repeatDays, dayTimes, selectedDate, selectedTime, selectedMonth, busySlots, coachBlocks, selectedProgram])
+  }, [repeatDays, dayTimes, selectedDate, selectedTime, selectedMonth, busySlots, coachBlocks, selectedProgram, duration, mySlotKeys])
 
   const toggleRepeatDay = (dow: number) => {
     if (dow === selectedDate?.getDay()) return
