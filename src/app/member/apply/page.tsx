@@ -64,11 +64,13 @@ function generateDates(
       continue
     }
 
-    // 정원 체크 (busySlots에서 해당 시간대 카운트)
-    const slotKey = `${ymd}T${tStr}`
+    // 정원 체크 — KST 변환 후 ymd+time 비교
     const count = (busySlots ?? []).filter(s => {
       if (s.status === 'cancelled') return false
-      return s.scheduled_at.startsWith(slotKey)
+      const sd = new Date(new Date(s.scheduled_at).getTime() + 9 * 60 * 60 * 1000)
+      const sdYmd  = sd.toISOString().split('T')[0]
+      const sdTime = `${String(sd.getUTCHours()).padStart(2,'0')}:${String(sd.getUTCMinutes()).padStart(2,'0')}`
+      return sdYmd === ymd && sdTime === tStr
     }).length
     if (count >= max) {
       skipped.push({ date: ymd, time: tStr, reason: `정원 초과 (${count}/${max}명)` })
@@ -575,9 +577,43 @@ export default function MemberApplyPage() {
                     const dow    = idx === 6 ? 0 : idx + 1
                     const isBase = dow === selectedDate?.getDay()
                     const active = isBase || repeatDays.includes(dow)
+
+                    // 해당 요일에 선택 가능한 날짜가 하나라도 있는지 확인
+                    // (기준 날짜 이후, 휴무 아닌, 정원 안 찬 날짜)
+                    const hasAvailable = (() => {
+                      if (isBase || !selectedDate || !selectedMonth) return true
+                      const { year, month } = selectedMonth
+                      const lastDay = new Date(year, month, 0).getDate()
+                      const tStr = selectedTime
+                      for (let d = selectedDate.getDate(); d <= lastDay; d++) {
+                        const date = new Date(year, month - 1, d)
+                        if (date.getDay() !== dow) continue
+                        const ymd = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+                        // 휴무 체크
+                        const blocked = coachBlocks.some(b =>
+                          b.repeat_weekly ? b.day_of_week === dow : b.block_date === ymd
+                        )
+                        if (blocked) continue
+                        // 정원 체크
+                        const maxStudents = selectedProgram?.max_students ?? 1
+                        const count = busySlots.filter(s => {
+                          if (s.status === 'cancelled') return false
+                          const sd = new Date(new Date(s.scheduled_at).getTime() + 9 * 60 * 60 * 1000)
+                          const sdYmd  = sd.toISOString().split('T')[0]
+                          const sdTime = `${String(sd.getUTCHours()).padStart(2,'0')}:${String(sd.getUTCMinutes()).padStart(2,'0')}`
+                          return sdYmd === ymd && sdTime === tStr
+                        }).length
+                        if (count < maxStudents) return true // 자리 있는 날짜 발견
+                      }
+                      return false
+                    })()
+
+                    // 선택 불가 요일은 숨김
+                    if (!isBase && !active && !hasAvailable) return null
+
                     return (
-                      <button key={dow} onClick={() => toggleRepeatDay(dow)} disabled={isBase}
-                        style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: `1.5px solid ${active ? '#16A34A' : '#e5e7eb'}`, background: active ? '#16A34A' : '#f3f4f6', color: active ? 'white' : '#6b7280', fontSize: '0.8rem', fontWeight: 700, cursor: isBase ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                      <button key={dow} onClick={() => toggleRepeatDay(dow)} disabled={isBase || !hasAvailable}
+                        style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: `1.5px solid ${active ? '#16A34A' : '#e5e7eb'}`, background: active ? '#16A34A' : '#f3f4f6', color: active ? 'white' : '#6b7280', fontSize: '0.8rem', fontWeight: 700, cursor: (isBase || !hasAvailable) ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
                         {day}
                       </button>
                     )
@@ -643,8 +679,8 @@ export default function MemberApplyPage() {
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button onClick={() => setStep(2)} style={s.prevBtn}>← 이전</button>
                 <button onClick={() => setStep(4)}
-                  disabled={finalDates.length === 0 || repeatDays.some(dow => !dayTimes[dow])}
-                  style={s.nextBtn(finalDates.length === 0 || repeatDays.some(dow => !dayTimes[dow]))}>
+                  disabled={!selectedDate || !selectedTime || repeatDays.some(dow => !dayTimes[dow])}
+                  style={s.nextBtn(!selectedDate || !selectedTime || repeatDays.some(dow => !dayTimes[dow]))}>
                   다음 → 미리보기
                 </button>
               </div>
