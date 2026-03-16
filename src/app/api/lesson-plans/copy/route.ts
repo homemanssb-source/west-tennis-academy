@@ -223,6 +223,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── 초안 생성 시 draft_open = true 자동 설정 ─────────────────────────
+  if (createdSlots > 0) {
+    await supabaseAdmin
+      .from('months')
+      .update({ draft_open: true })
+      .eq('id', to_month_id)
+  }
+
   // ── 메시지 구성 ───────────────────────────────────────────────────────
   const parts = []
   if (copiedPlans > 0)  parts.push(`플랜 ${copiedPlans}개 복사`)
@@ -230,6 +238,7 @@ export async function POST(req: NextRequest) {
   if (createdSlots > 0) parts.push(`수업 ${createdSlots}개 초안 생성`)
   if (skippedSlots > 0) parts.push(`${skippedSlots}개 슬롯 이미 존재`)
   if (conflictSlots > 0) parts.push(`⚠️ 휴무 충돌 ${conflictSlots}건`)
+  if (createdSlots > 0) parts.push(`✅ 회원 미리보기 오픈됨`)
 
   return NextResponse.json({
     ok:           true,
@@ -239,6 +248,7 @@ export async function POST(req: NextRequest) {
     slotSkipped:  skippedSlots,
     conflicts:    conflictSlots,
     toMonthId:    to_month_id,
+    draftOpen:    createdSlots > 0,
     message:      parts.join(', '),
   })
 }

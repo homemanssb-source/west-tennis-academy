@@ -1,3 +1,4 @@
+// src/app/api/months/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -9,7 +10,7 @@ export async function GET() {
   const { data, error } = await supabaseAdmin
     .from('months')
     .select('*')
-    .order('year', { ascending: false })
+    .order('year',  { ascending: false })
     .order('month', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -38,4 +39,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   return NextResponse.json(data)
+}
+
+// ✅ 추가: draft_open 토글 (운영자만)
+export async function PATCH(req: NextRequest) {
+  const session = await getSession()
+  if (!session || !['owner','admin'].includes(session.role)) {
+    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+  }
+
+  const { month_id, draft_open } = await req.json()
+  if (!month_id || draft_open === undefined) {
+    return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
+  }
+
+  const { error } = await supabaseAdmin
+    .from('months')
+    .update({ draft_open })
+    .eq('id', month_id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true, draft_open })
 }
