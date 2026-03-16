@@ -253,5 +253,10 @@ export async function POST(req: NextRequest) {
     toMonthId:    to_month_id,
     draftOpen:    createdSlots > 0,
     message:      parts.join(', '),
+    _debug: {
+      sourcePlansCount: sourcePlans.length,
+      firstPlanId: sourcePlans[0]?.id,
+      firstPlanSlots: sourcePlans[0]?.slots?.length,
+    }
   })
 }
