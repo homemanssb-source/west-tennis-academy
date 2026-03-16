@@ -1,4 +1,3 @@
-===== app\owner\settings\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
