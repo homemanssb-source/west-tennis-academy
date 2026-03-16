@@ -29,7 +29,7 @@ interface MemberRequest {
 
 interface Month { id: string; year: number; month: number; draft_open?: boolean }
 
-const DAY_KO = ['ÀÏ','¿ù','È­','¼ö','¸ñ','±İ','Åä']
+const DAY_KO = ['ì¼','ì›”','í™”','ìˆ˜','ëª©','ê¸ˆ','í† ']
 
 function fmtSlot(iso: string) {
   const [datePart, timePart] = iso.split('T')
@@ -47,7 +47,7 @@ export default function ScheduleDraftPage() {
   const [loading,  setLoading]  = useState(false)
   const [saving,   setSaving]   = useState(false)
   const [msg,      setMsg]      = useState('')
-  const [reqTab,   setReqTab]   = useState(false) // È¸¿ø ¿äÃ» ÅÇ ¿­¸² ¿©ºÎ
+  const [reqTab,   setReqTab]   = useState(false) // íšŒì› ìš”ì²­ íƒ­ ì—´ë¦¼ ì—¬ë¶€
 
   useEffect(() => {
     fetch('/api/months').then(r => r.json()).then((d: Month[]) => {
@@ -85,7 +85,7 @@ export default function ScheduleDraftPage() {
     if (!monthId) return
     const conflicts = drafts.filter(d => d.has_conflict)
     if (conflicts.length > 0) {
-      const ok = confirm(`Ãæµ¹ ${conflicts.length}°ÇÀº Á¦¿ÜÇÏ°í ³ª¸ÓÁö ${drafts.length - conflicts.length}°Ç¸¸ È®Á¤ÇÒ±î¿ä?`)
+      const ok = confirm(`ì¶©ëŒ ${conflicts.length}ê±´ì€ ì œì™¸í•˜ê³  ë‚˜ë¨¸ì§€ ${drafts.length - conflicts.length}ê±´ë§Œ í™•ì •í• ê¹Œìš”?`)
       if (!ok) return
     }
     setSaving(true)
@@ -96,8 +96,8 @@ export default function ScheduleDraftPage() {
     })
     const data = await res.json()
     setSaving(false)
-    if (!res.ok) { setMsg('? ' + data.error); return }
-    setMsg(`? ${data.confirmed}°Ç È®Á¤µÊ`)
+    if (!res.ok) { setMsg('âŒ ' + data.error); return }
+    setMsg(`âœ… ${data.confirmed}ê±´ í™•ì •ë¨`)
     loadAll(monthId)
   }
 
@@ -113,7 +113,7 @@ export default function ScheduleDraftPage() {
   }
 
   const handleDeleteOne = async (slotId: string) => {
-    if (!confirm('ÀÌ ÃÊ¾È ½½·ÔÀ» »èÁ¦ÇÒ±î¿ä?')) return
+    if (!confirm('ì´ ì´ˆì•ˆ ìŠ¬ë¡¯ì„ ì‚­ì œí• ê¹Œìš”?')) return
     setSaving(true)
     await fetch('/api/schedule-draft', {
       method: 'POST',
@@ -124,7 +124,7 @@ export default function ScheduleDraftPage() {
     loadAll(monthId)
   }
 
-  // È¸¿ø ¿äÃ» Ã³¸® (½ÂÀÎ/°ÅÀı)
+  // íšŒì› ìš”ì²­ ì²˜ë¦¬ (ìŠ¹ì¸/ê±°ì ˆ)
   const handleRequestAction = async (reqId: string, action: 'approve' | 'reject') => {
     setSaving(true)
     await fetch(`/api/lesson-applications/${reqId}`, {
@@ -138,7 +138,7 @@ export default function ScheduleDraftPage() {
     loadAll(monthId)
   }
 
-  // draft_open Åä±Û
+  // draft_open í† ê¸€
   const handleToggleDraftOpen = async () => {
     const selMonth = months.find(m => m.id === monthId)
     const newVal   = !selMonth?.draft_open
@@ -148,7 +148,7 @@ export default function ScheduleDraftPage() {
       body: JSON.stringify({ month_id: monthId, draft_open: newVal }),
     })
     setMonths(prev => prev.map(m => m.id === monthId ? { ...m, draft_open: newVal } : m))
-    setMsg(newVal ? '? È¸¿ø ¹Ì¸®º¸±â ¿ÀÇÂµÊ' : '?? È¸¿ø ¹Ì¸®º¸±â ´İÈû')
+    setMsg(newVal ? 'âœ… íšŒì› ë¯¸ë¦¬ë³´ê¸° ì˜¤í”ˆë¨' : 'ğŸ”’ íšŒì› ë¯¸ë¦¬ë³´ê¸° ë‹«í˜')
   }
 
   const okDrafts       = drafts.filter(d => !d.has_conflict)
@@ -158,61 +158,61 @@ export default function ScheduleDraftPage() {
 
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      {/* Çì´õ */}
+      {/* í—¤ë” */}
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>¡ç</Link>
+          <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>â†</Link>
           <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827', flex: 1 }}>
-            ¼ö¾÷ ÃÊ¾È È®Á¤
+            ìˆ˜ì—… ì´ˆì•ˆ í™•ì •
           </h1>
           <select value={monthId} onChange={e => setMonthId(e.target.value)}
             style={{ padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white', color: '#374151' }}>
-            {months.map(m => <option key={m.id} value={m.id}>{m.year}³â {m.month}¿ù</option>)}
+            {months.map(m => <option key={m.id} value={m.id}>{m.year}ë…„ {m.month}ì›”</option>)}
           </select>
         </div>
       </div>
 
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem' }}>
 
-        {/* draft_open Åä±Û + ¾È³» */}
+        {/* draft_open í† ê¸€ + ì•ˆë‚´ */}
         <div style={{ background: selMonth?.draft_open ? '#f0fdf4' : '#eff6ff', border: `1.5px solid ${selMonth?.draft_open ? '#86efac' : '#bfdbfe'}`, borderRadius: '1rem', padding: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ flex: 1, fontSize: '0.875rem', color: selMonth?.draft_open ? '#15803d' : '#1d4ed8', fontFamily: 'Noto Sans KR, sans-serif' }}>
             {selMonth?.draft_open
-              ? '? È¸¿ø ¹Ì¸®º¸±â ¿ÀÇÂ Áß ? È¸¿øÀÌ ´ÙÀ½´Ş ¼ö¾÷ ÃÊ¾ÈÀ» È®ÀÎÇÏ°í ¼öÁ¤ ¿äÃ»ÇÒ ¼ö ÀÖ½À´Ï´Ù'
-              : '?? ÃÊ¾È »ı¼º ÈÄ È¸¿ø¿¡°Ô ¹Ì¸®º¸±â¸¦ ¿ÀÇÂÇÏ¸é ¼öÁ¤ ¿äÃ»À» ¹ŞÀ» ¼ö ÀÖ½À´Ï´Ù'
+              ? 'âœ… íšŒì› ë¯¸ë¦¬ë³´ê¸° ì˜¤í”ˆ ì¤‘ â€” íšŒì›ì´ ë‹¤ìŒë‹¬ ìˆ˜ì—… ì´ˆì•ˆì„ í™•ì¸í•˜ê³  ìˆ˜ì • ìš”ì²­í•  ìˆ˜ ìˆìŠµë‹ˆë‹¤'
+              : 'ğŸ’¡ ì´ˆì•ˆ ìƒì„± í›„ íšŒì›ì—ê²Œ ë¯¸ë¦¬ë³´ê¸°ë¥¼ ì˜¤í”ˆí•˜ë©´ ìˆ˜ì • ìš”ì²­ì„ ë°›ì„ ìˆ˜ ìˆìŠµë‹ˆë‹¤'
             }
           </div>
           <button onClick={handleToggleDraftOpen}
             style={{ padding: '0.5rem 1rem', borderRadius: '0.625rem', border: 'none', background: selMonth?.draft_open ? '#fef2f2' : '#16A34A', color: selMonth?.draft_open ? '#b91c1c' : 'white', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', whiteSpace: 'nowrap' }}>
-            {selMonth?.draft_open ? '?? ¹Ì¸®º¸±â ´İ±â' : '?? ¹Ì¸®º¸±â ¿ÀÇÂ'}
+            {selMonth?.draft_open ? 'ğŸ”’ ë¯¸ë¦¬ë³´ê¸° ë‹«ê¸°' : 'ğŸ”“ ë¯¸ë¦¬ë³´ê¸° ì˜¤í”ˆ'}
           </button>
         </div>
 
-        {/* È¸¿ø ¼öÁ¤ ¿äÃ» ¹èÁö + ÅÇ */}
+        {/* íšŒì› ìˆ˜ì • ìš”ì²­ ë°°ì§€ + íƒ­ */}
         {requests.length > 0 && (
           <div style={{ marginBottom: '1rem' }}>
             <button onClick={() => setReqTab(v => !v)}
               style={{ width: '100%', padding: '0.75rem 1rem', background: pendingReqs.length > 0 ? '#fef9c3' : 'white', border: `1.5px solid ${pendingReqs.length > 0 ? '#fde68a' : '#e5e7eb'}`, borderRadius: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-              <span style={{ fontSize: '1rem' }}>??</span>
+              <span style={{ fontSize: '1rem' }}>ğŸ“</span>
               <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', flex: 1, textAlign: 'left' }}>
-                È¸¿ø ¼öÁ¤ ¿äÃ»
+                íšŒì› ìˆ˜ì • ìš”ì²­
               </span>
               {pendingReqs.length > 0 && (
                 <span style={{ background: '#f59e0b', color: 'white', fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px' }}>
-                  °ËÅä ÇÊ¿ä {pendingReqs.length}°Ç
+                  ê²€í†  í•„ìš” {pendingReqs.length}ê±´
                 </span>
               )}
-              <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>{reqTab ? '¡ã' : '¡å'}</span>
+              <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>{reqTab ? 'â–²' : 'â–¼'}</span>
             </button>
 
             {reqTab && (
               <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {requests.map(r => {
                   const isPending = ['pending_coach','pending_admin'].includes(r.status)
-                  const typeLabel = r.request_type === 'exclude' ? '?? Á¦¿Ü ¿äÃ»' :
-                                    r.request_type === 'change'  ? '?? º¯°æ ¿äÃ»' : '? Ãß°¡ ¿äÃ»'
-                  const statusLabel = r.status === 'approved' ? '? ½ÂÀÎ' :
-                                      r.status === 'rejected' ? '? °ÅÀı' : '? °ËÅä Áß'
+                  const typeLabel = r.request_type === 'exclude' ? 'ğŸš« ì œì™¸ ìš”ì²­' :
+                                    r.request_type === 'change'  ? 'ğŸ”„ ë³€ê²½ ìš”ì²­' : 'â• ì¶”ê°€ ìš”ì²­'
+                  const statusLabel = r.status === 'approved' ? 'âœ… ìŠ¹ì¸' :
+                                      r.status === 'rejected' ? 'âŒ ê±°ì ˆ' : 'â³ ê²€í†  ì¤‘'
                   return (
                     <div key={r.id} style={{ background: 'white', border: `1.5px solid ${isPending ? '#fde68a' : '#e5e7eb'}`, borderRadius: '0.875rem', padding: '0.875rem 1rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
@@ -221,18 +221,18 @@ export default function ScheduleDraftPage() {
                         <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, color: isPending ? '#854d0e' : r.status === 'approved' ? '#15803d' : '#b91c1c', fontFamily: 'Noto Sans KR, sans-serif' }}>{statusLabel}</span>
                       </div>
                       <div style={{ fontSize: '0.78rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif', marginBottom: isPending ? '0.625rem' : '0' }}>
-                        {r.requested_at ? fmtSlot(r.requested_at).full : ''} ¡¤ {r.lesson_type}
-                        {r.admin_note && <span style={{ marginLeft: '0.5rem', color: '#9ca3af' }}>? {r.admin_note}</span>}
+                        {r.requested_at ? fmtSlot(r.requested_at).full : ''} Â· {r.lesson_type}
+                        {r.admin_note && <span style={{ marginLeft: '0.5rem', color: '#9ca3af' }}>â€” {r.admin_note}</span>}
                       </div>
                       {isPending && (
                         <div style={{ display: 'flex', gap: '0.375rem' }}>
                           <button onClick={() => handleRequestAction(r.id, 'approve')} disabled={saving}
                             style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: 'none', background: '#16A34A', color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                            ? ¹İ¿µ
+                            âœ… ë°˜ì˜
                           </button>
                           <button onClick={() => handleRequestAction(r.id, 'reject')} disabled={saving}
                             style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                            ? °ÅÀı
+                            âŒ ê±°ì ˆ
                           </button>
                         </div>
                       )}
@@ -244,48 +244,48 @@ export default function ScheduleDraftPage() {
           </div>
         )}
 
-        {/* ¿ä¾à + ÀÏ°ı È®Á¤ ¹öÆ° */}
+        {/* ìš”ì•½ + ì¼ê´„ í™•ì • ë²„íŠ¼ */}
         {!loading && drafts.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.75rem', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 700, color: '#15803d' }}>
-              ? È®Á¤ ´ë±â {okDrafts.length}°Ç
+              âœ… í™•ì • ëŒ€ê¸° {okDrafts.length}ê±´
             </div>
             {conflictDrafts.length > 0 && (
               <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.75rem', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 700, color: '#b91c1c' }}>
-                ?? Ãæµ¹ {conflictDrafts.length}°Ç
+                âš ï¸ ì¶©ëŒ {conflictDrafts.length}ê±´
               </div>
             )}
             <div style={{ marginLeft: 'auto' }}>
               <button onClick={handleConfirmAll} disabled={saving || okDrafts.length === 0}
                 style={{ padding: '0.625rem 1.25rem', background: okDrafts.length === 0 ? '#e5e7eb' : '#16A34A', color: okDrafts.length === 0 ? '#9ca3af' : 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: okDrafts.length === 0 ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                {saving ? 'Ã³¸® Áß...' : `?? ${okDrafts.length}°Ç ÀÏ°ı È®Á¤`}
+                {saving ? 'ì²˜ë¦¬ ì¤‘...' : `ğŸ“‹ ${okDrafts.length}ê±´ ì¼ê´„ í™•ì •`}
               </button>
             </div>
           </div>
         )}
 
         {msg && (
-          <div style={{ background: msg.startsWith('?') ? '#f0fdf4' : '#fef2f2', border: `1.5px solid ${msg.startsWith('?') ? '#86efac' : '#fecaca'}`, borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '1rem', fontSize: '0.875rem', color: msg.startsWith('?') ? '#15803d' : '#b91c1c', fontWeight: 600, fontFamily: 'Noto Sans KR, sans-serif' }}>
+          <div style={{ background: msg.startsWith('âœ…') ? '#f0fdf4' : '#fef2f2', border: `1.5px solid ${msg.startsWith('âœ…') ? '#86efac' : '#fecaca'}`, borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '1rem', fontSize: '0.875rem', color: msg.startsWith('âœ…') ? '#15803d' : '#b91c1c', fontWeight: 600, fontFamily: 'Noto Sans KR, sans-serif' }}>
             {msg}
           </div>
         )}
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>ºÒ·¯¿À´Â Áß...</div>
+          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>ë¶ˆëŸ¬ì˜¤ëŠ” ì¤‘...</div>
         ) : drafts.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>??</div>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>ğŸ“­</div>
             <p style={{ fontFamily: 'Noto Sans KR, sans-serif' }}>
-              {selMonth ? `${selMonth.year}³â ${selMonth.month}¿ù ` : ''}È®Á¤ ´ë±â ÁßÀÎ ÃÊ¾ÈÀÌ ¾ø½À´Ï´Ù
+              {selMonth ? `${selMonth.year}ë…„ ${selMonth.month}ì›” ` : ''}í™•ì • ëŒ€ê¸° ì¤‘ì¸ ì´ˆì•ˆì´ ì—†ìŠµë‹ˆë‹¤
             </p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
             {conflictDrafts.length > 0 && (
               <>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b91c1c', marginTop: '0.5rem', marginBottom: '0.25rem' }}>?? Ãæµ¹ Ç×¸ñ ? ¼öµ¿ Ã³¸® ÇÊ¿ä</div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b91c1c', marginTop: '0.5rem', marginBottom: '0.25rem' }}>âš ï¸ ì¶©ëŒ í•­ëª© â€” ìˆ˜ë™ ì²˜ë¦¬ í•„ìš”</div>
                 {conflictDrafts.map(s => <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving} />)}
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '0.75rem', marginBottom: '0.25rem' }}>? Á¤»ó Ç×¸ñ</div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '0.75rem', marginBottom: '0.25rem' }}>âœ… ì •ìƒ í•­ëª©</div>
               </>
             )}
             {okDrafts.map(s => (
@@ -314,22 +314,22 @@ function SlotCard({ slot, onConfirm, onDelete, saving }: {
     <div style={{ background: 'white', border: `1.5px solid ${isConflict ? '#fecaca' : '#e5e7eb'}`, borderLeft: `4px solid ${isConflict ? '#b91c1c' : '#16A34A'}`, borderRadius: '0.875rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px' }}>
-          {isConflict && <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>ÈŞ¹«Ãæµ¹</span>}
+          {isConflict && <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>íœ´ë¬´ì¶©ëŒ</span>}
           <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>{memberName}</span>
-          <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{coachName} ÄÚÄ¡</span>
+          <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{coachName} ì½”ì¹˜</span>
         </div>
         <div style={{ fontSize: '0.8rem', color: isConflict ? '#b91c1c' : '#374151', fontWeight: isConflict ? 700 : 400, fontFamily: 'Noto Sans KR, sans-serif' }}>
-          ?? {full} ¡¤ {lessonType} ¡¤ {slot.duration_minutes}ºĞ
+          ğŸ“… {full} Â· {lessonType} Â· {slot.duration_minutes}ë¶„
         </div>
       </div>
       <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
         <button onClick={() => onConfirm(slot.id)} disabled={saving}
           style={{ padding: '0.375rem 0.75rem', background: isConflict ? '#fff7ed' : '#f0fdf4', border: `1.5px solid ${isConflict ? '#fed7aa' : '#86efac'}`, borderRadius: '0.5rem', color: isConflict ? '#c2410c' : '#15803d', fontWeight: 700, fontSize: '0.75rem', cursor: saving ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-          {isConflict ? '°­Á¦ È®Á¤' : 'È®Á¤'}
+          {isConflict ? 'ê°•ì œ í™•ì •' : 'í™•ì •'}
         </button>
         <button onClick={() => onDelete(slot.id)} disabled={saving}
           style={{ padding: '0.375rem 0.75rem', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.5rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: saving ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-          »èÁ¦
+          ì‚­ì œ
         </button>
       </div>
     </div>
