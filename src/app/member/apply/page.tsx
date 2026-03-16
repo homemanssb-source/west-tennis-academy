@@ -56,10 +56,27 @@ function generateDates(
 
     const ymd = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
 
-    // 휴무 체크
+    // 휴무 체크 — 시간 범위도 확인 (12:00~16:00 휴무면 11:00 수업은 통과)
+    const [th, tm] = tStr.split(':').map(Number)
+    const reqS = th * 60 + tm
+    const reqE = reqS + (duration ?? 60)
     const blocked = (coachBlocks ?? []).some(b => {
-      if (b.repeat_weekly) return b.day_of_week === dow
-      return b.block_date === ymd
+      // 요일/날짜 체크
+      if (b.repeat_weekly) {
+        if (b.day_of_week !== dow) return false
+      } else {
+        if (b.block_date !== ymd) return false
+      }
+      // 종일 휴무 (시간 미설정)
+      if (!b.block_start && !b.block_end) return true
+      // 시간 범위 겹침 체크
+      const bs = b.block_start
+        ? Number(b.block_start.split(':')[0]) * 60 + Number(b.block_start.split(':')[1])
+        : 0
+      const be = b.block_end
+        ? Number(b.block_end.split(':')[0]) * 60 + Number(b.block_end.split(':')[1])
+        : 24 * 60
+      return reqS < be && reqE > bs
     })
     if (blocked) {
       skipped.push({ date: ymd, time: tStr, reason: '코치 휴무' })
@@ -293,35 +310,19 @@ export default function MemberApplyPage() {
 
   // ✅ 수정: generateDates에 busySlots/coachBlocks/maxStudents 전달
   useEffect(() => {
-    // ✅ selectedTime 없으면 실행 안 함 (빈 문자열이면 모든 날짜 건너뜀)
-    if (!selectedDate || !selectedMonth || !selectedTime) {
-      console.log('[generateDates] early return:', { selectedDate, selectedMonth, selectedTime })
-      return
-    }
+    if (!selectedDate || !selectedMonth || !selectedTime) return
     const baseDow   = selectedDate.getDay()
     const allDows   = Array.from(new Set([...repeatDays, baseDow]))
     const dtMap: Record<number, string> = { ...dayTimes }
     if (!dtMap[baseDow] && selectedTime) dtMap[baseDow] = selectedTime
     const validDows = allDows.filter(dow => !!dtMap[dow])
-    if (validDows.length === 0) {
-      console.log('[generateDates] validDows 없음:', { allDows, dtMap })
-      return
-    }
+    if (validDows.length === 0) return
     const maxStudents = selectedProgram?.max_students ?? 1
-    console.log('[generateDates] 실행:', {
-      year: selectedMonth.year, month: selectedMonth.month,
-      startDate: selectedDate.toDateString(),
-      validDows, selectedTime, dtMap,
-      busySlotsCount: busySlots.length,
-      maxStudents, duration,
-      mySlotKeysCount: mySlotKeys.size,
-    })
     const { dates, skipped } = generateDates(
       selectedMonth.year, selectedMonth.month, selectedDate,
       validDows, selectedTime, dtMap,
       busySlots, coachBlocks, maxStudents, duration, mySlotKeys
     )
-    console.log('[generateDates] 결과:', { datesCount: dates.length, skippedCount: skipped.length, skipped })
     setGeneratedDates(dates)
     setSkippedDates(skipped)
     setExcludedIdxs(new Set())
