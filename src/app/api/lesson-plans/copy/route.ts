@@ -40,7 +40,6 @@ export async function POST(req: NextRequest) {
       )
     `)
     .eq('month_id', from_month_id)
-    .not('slots.status', 'in', '("cancelled","draft")')
 
   if (coach_id) query = query.eq('coach_id', coach_id)
 
@@ -143,7 +142,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 슬롯 패턴 추출 ──────────────────────────────────────────────────
-    const slots = (plan.slots ?? []).filter((s: any) => !s.is_makeup)
+    const slots = (plan.slots ?? []).filter((s: any) => !s.is_makeup && !['cancelled','draft'].includes(s.status))
     if (slots.length === 0) continue
 
     // 요일+시간 패턴 카운트
