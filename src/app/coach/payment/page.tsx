@@ -22,8 +22,6 @@ export default function CoachPaymentPage() {
   const [monthId,   setMonthId]   = useState('')
   const [loading,   setLoading]   = useState(true)
   const [filter,    setFilter]    = useState<'all' | 'unpaid' | 'paid'>('all')
-  // ✅ 추가: 납부 확인 처리 중 상태
-  const [confirming, setConfirming] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/months').then(r => r.json()).then(d => {
@@ -42,23 +40,6 @@ export default function CoachPaymentPage() {
   }, [monthId])
 
   const fmt = (n: number) => (n || 0).toLocaleString('ko-KR')
-
-  // ✅ 추가: 납부 확인 처리
-  const handleConfirmPayment = async (plan: Plan) => {
-    if (!confirm(`${plan.member?.name}님의 수업료 ${fmt(plan.amount)}원을 납부 완료로 처리할까요?`)) return
-    setConfirming(plan.id)
-    const res = await fetch('/api/coach/payment', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan_id: plan.id }),
-    })
-    const d = await res.json()
-    setConfirming(null)
-    if (!res.ok) { alert(d.error ?? '처리 실패'); return }
-    alert('납부 확인 처리되었습니다.')
-    // 목록 갱신
-    setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, payment_status: 'paid' } : p))
-  }
 
   const filtered = plans.filter(p =>
     filter === 'all'    ? true :
@@ -171,15 +152,6 @@ export default function CoachPaymentPage() {
                   </div>
                 </div>
 
-                {/* ✅ 추가: 미납 상태일 때 납부 확인 버튼 */}
-                {p.payment_status === 'unpaid' && (
-                  <button
-                    onClick={() => handleConfirmPayment(p)}
-                    disabled={confirming === p.id}
-                    style={{ marginTop: '0.75rem', width: '100%', padding: '0.5rem', borderRadius: '0.625rem', border: 'none', background: confirming === p.id ? '#e5e7eb' : '#16A34A', color: confirming === p.id ? '#9ca3af' : 'white', fontSize: '0.8rem', fontWeight: 700, cursor: confirming === p.id ? 'not-allowed' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                    {confirming === p.id ? '처리 중...' : '✅ 납부 확인 처리'}
-                  </button>
-                )}
               </div>
             ))}
           </div>
