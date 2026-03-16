@@ -293,14 +293,20 @@ export default function MemberApplyPage() {
 
   // ✅ 수정: generateDates에 busySlots/coachBlocks/maxStudents 전달
   useEffect(() => {
-    if (!selectedDate || !selectedMonth) return
-    const allDows   = Array.from(new Set([...repeatDays, selectedDate.getDay()]))
+    // ✅ selectedTime 없으면 실행 안 함 (빈 문자열이면 모든 날짜 건너뜀)
+    if (!selectedDate || !selectedMonth || !selectedTime) return
+    const baseDow   = selectedDate.getDay()
+    const allDows   = Array.from(new Set([...repeatDays, baseDow]))
     const dtMap: Record<number, string> = { ...dayTimes }
-    if (!dtMap[selectedDate.getDay()]) dtMap[selectedDate.getDay()] = selectedTime
+    // 기준 요일 시간 보장 (빈 문자열이면 넣지 않음)
+    if (!dtMap[baseDow] && selectedTime) dtMap[baseDow] = selectedTime
+    // 추가 요일 중 시간 미설정된 것 제거 (빈 문자열 방지)
+    const validDows = allDows.filter(dow => !!dtMap[dow])
+    if (validDows.length === 0) return
     const maxStudents = selectedProgram?.max_students ?? 1
     const { dates, skipped } = generateDates(
       selectedMonth.year, selectedMonth.month, selectedDate,
-      allDows, selectedTime, dtMap,
+      validDows, selectedTime, dtMap,
       busySlots, coachBlocks, maxStudents, duration, mySlotKeys
     )
     setGeneratedDates(dates)
