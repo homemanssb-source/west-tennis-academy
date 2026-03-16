@@ -1,3 +1,4 @@
+===== app\owner\members\[id]\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -23,7 +24,7 @@ export default function MemberDetailPage() {
   }, [id])
 
   const handleResetPin = async () => {
-    if (!confirm('PIN을 123456으로 초기화할까요?\n회원이 로그인 후 새 PIN으로 변경해야 합니다.')) return
+    if (!confirm('PIN을 초기화할까요? 새 임시 PIN이 자동 발급됩니다.\n회원이 로그인 후 새 PIN으로 변경해야 합니다.')) return
     const res = await fetch(`/api/members/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -114,7 +115,7 @@ export default function MemberDetailPage() {
             🔑 PIN 초기화 (임시 PIN 발급)
           </button>
           <p style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '6px', marginLeft: '2px' }}>
-            회원이 PIN을 분실한 경우 임시 PIN(123456)으로 초기화합니다. 회원은 로그인 후 새 PIN으로 변경해야 합니다.
+            회원이 PIN을 분실한 경우 임시 PIN(자동 발급)으로 초기화합니다. 회원은 로그인 후 새 PIN으로 변경해야 합니다.
           </p>
         </div>
 

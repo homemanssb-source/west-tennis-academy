@@ -48,36 +48,37 @@ export async function GET(req: NextRequest) {
     ? data.filter((s: any) => s.lesson_plan?.coach?.id === coachId)
     : data
 
-  // pending 신청도 포함 (정원 카운트에 반영)
-  const { data: appData } = await supabaseAdmin
-    .from('lesson_applications')
-    .select('id, requested_at, status, coach_id')
-    .eq('coach_id', coachId ?? '')
-    .gte('requested_at', startStr)
-    .lte('requested_at', endStr)
-    .in('status', ['pending_coach', 'pending_admin', 'approved'])
+  // ✅ 수정: coachId 없을 때 appSlots 조회 생략 ('' 로 쿼리하던 버그 제거)
+  let appSlots: any[] = []
+  if (coachId) {
+    const { data: appData } = await supabaseAdmin
+      .from('lesson_applications')
+      .select('id, requested_at, status, coach_id')
+      .eq('coach_id', coachId)
+      .gte('requested_at', startStr)
+      .lte('requested_at', endStr)
+      .in('status', ['pending_coach', 'pending_admin', 'approved'])
 
-  const appSlots = (appData ?? []).map((a: any) => ({
-    id: a.id,
-    scheduled_at: a.requested_at,
-    status: a.status,
-    duration_minutes: 60,
-    slot_type: null,
-    lesson_plan: null,
-  }))
+    appSlots = (appData ?? []).map((a: any) => ({
+      id: a.id,
+      scheduled_at: a.requested_at,
+      status: a.status,
+      duration_minutes: 60,
+      slot_type: null,
+      lesson_plan: null,
+      slot_count: 1,
+    }))
+  }
 
-  // ✅ 추가: 시간대별 슬롯 카운트 맵 생성
-  // → isBusy에서 "몇 명이 있는지"를 알 수 있도록
-  // 형식: { "2026-03-16T09:00": 2, ... }
+  // ✅ 추가: 시간대별 카운트 맵 (isBusy 정원 체크용)
   const allSlots = [...filtered, ...appSlots]
   const countMap: Record<string, number> = {}
   allSlots.forEach((s: any) => {
     if (s.status === 'cancelled') return
-    const key = s.scheduled_at?.slice(0, 16) // "2026-03-16T09:00"
+    const key = s.scheduled_at?.slice(0, 16)
     if (key) countMap[key] = (countMap[key] ?? 0) + 1
   })
 
-  // 각 슬롯에 slot_count 필드 추가
   const result = allSlots.map((s: any) => ({
     ...s,
     slot_count: s.status !== 'cancelled'

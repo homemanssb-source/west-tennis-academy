@@ -1,5 +1,4 @@
 ﻿'use client'
-
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import CoachBottomNav from '@/components/CoachBottomNav'
@@ -18,11 +17,13 @@ interface Plan {
 interface Month { id: string; year: number; month: number }
 
 export default function CoachPaymentPage() {
-  const [plans,   setPlans]   = useState<Plan[]>([])
-  const [months,  setMonths]  = useState<Month[]>([])
-  const [monthId, setMonthId] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [filter,  setFilter]  = useState<'all' | 'unpaid' | 'paid'>('all')
+  const [plans,     setPlans]     = useState<Plan[]>([])
+  const [months,    setMonths]    = useState<Month[]>([])
+  const [monthId,   setMonthId]   = useState('')
+  const [loading,   setLoading]   = useState(true)
+  const [filter,    setFilter]    = useState<'all' | 'unpaid' | 'paid'>('all')
+  // ✅ 추가: 납부 확인 처리 중 상태
+  const [confirming, setConfirming] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/months').then(r => r.json()).then(d => {
@@ -41,6 +42,23 @@ export default function CoachPaymentPage() {
   }, [monthId])
 
   const fmt = (n: number) => (n || 0).toLocaleString('ko-KR')
+
+  // ✅ 추가: 납부 확인 처리
+  const handleConfirmPayment = async (plan: Plan) => {
+    if (!confirm(`${plan.member?.name}님의 수업료 ${fmt(plan.amount)}원을 납부 완료로 처리할까요?`)) return
+    setConfirming(plan.id)
+    const res = await fetch('/api/coach/payment', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan_id: plan.id }),
+    })
+    const d = await res.json()
+    setConfirming(null)
+    if (!res.ok) { alert(d.error ?? '처리 실패'); return }
+    alert('납부 확인 처리되었습니다.')
+    // 목록 갱신
+    setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, payment_status: 'paid' } : p))
+  }
 
   const filtered = plans.filter(p =>
     filter === 'all'    ? true :
@@ -94,7 +112,8 @@ export default function CoachPaymentPage() {
             {totalAmount > 0 && (
               <div style={{ marginTop: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.75, marginBottom: '0.375rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                  <span>납부율</span><span>{Math.round(paidAmount / totalAmount * 100)}%</span>
+                  <span>납부율</span>
+                  <span>{Math.round(paidAmount / totalAmount * 100)}%</span>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '9999px', height: '6px', overflow: 'hidden' }}>
                   <div style={{ background: '#4ade80', height: '100%', borderRadius: '9999px', width: `${Math.round(paidAmount / totalAmount * 100)}%`, transition: 'width 0.5s ease' }} />
@@ -127,28 +146,40 @@ export default function CoachPaymentPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
             {filtered.map(p => (
-              <div key={p.id} style={{ background: 'white', borderRadius: '1rem', border: `1.5px solid ${p.payment_status === 'unpaid' ? '#fecaca' : '#bbf7d0'}`, padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: p.payment_status === 'unpaid' ? '#fef2f2' : '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
-                  {p.payment_status === 'unpaid' ? '⏳' : '✅'}
+              <div key={p.id} style={{ background: 'white', borderRadius: '1rem', border: `1.5px solid ${p.payment_status === 'unpaid' ? '#fecaca' : '#bbf7d0'}`, padding: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: p.payment_status === 'unpaid' ? '#fef2f2' : '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
+                    {p.payment_status === 'unpaid' ? '⏳' : '✅'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>{p.member?.name}</span>
+                      <span style={{ fontSize: '0.7rem', color: '#9ca3af', fontFamily: 'Noto Sans KR, sans-serif' }}>{p.lesson_type}</span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                      {p.total_count}회 · {p.unit_minutes}분
+                      <span style={{ marginLeft: '0.5rem', color: '#9ca3af' }}>{p.member?.phone}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: p.payment_status === 'unpaid' ? '#b91c1c' : '#16A34A' }}>
+                      {fmt(p.amount)}원
+                    </div>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', marginTop: '4px', display: 'inline-block', background: p.payment_status === 'unpaid' ? '#fef2f2' : '#f0fdf4', color: p.payment_status === 'unpaid' ? '#b91c1c' : '#16A34A', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                      {p.payment_status === 'unpaid' ? '미납' : '납부'}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>{p.member?.name}</span>
-                    <span style={{ fontSize: '0.7rem', color: '#9ca3af', fontFamily: 'Noto Sans KR, sans-serif' }}>{p.lesson_type}</span>
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                    {p.total_count}회 · {p.unit_minutes}분
-                    <span style={{ marginLeft: '0.5rem', color: '#9ca3af' }}>{p.member?.phone}</span>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: p.payment_status === 'unpaid' ? '#b91c1c' : '#16A34A' }}>
-                    {fmt(p.amount)}원
-                  </div>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', marginTop: '4px', display: 'inline-block', background: p.payment_status === 'unpaid' ? '#fef2f2' : '#f0fdf4', color: p.payment_status === 'unpaid' ? '#b91c1c' : '#16A34A', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                    {p.payment_status === 'unpaid' ? '미납' : '납부'}
-                  </div>
-                </div>
+
+                {/* ✅ 추가: 미납 상태일 때 납부 확인 버튼 */}
+                {p.payment_status === 'unpaid' && (
+                  <button
+                    onClick={() => handleConfirmPayment(p)}
+                    disabled={confirming === p.id}
+                    style={{ marginTop: '0.75rem', width: '100%', padding: '0.5rem', borderRadius: '0.625rem', border: 'none', background: confirming === p.id ? '#e5e7eb' : '#16A34A', color: confirming === p.id ? '#9ca3af' : 'white', fontSize: '0.8rem', fontWeight: 700, cursor: confirming === p.id ? 'not-allowed' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                    {confirming === p.id ? '처리 중...' : '✅ 납부 확인 처리'}
+                  </button>
+                )}
               </div>
             ))}
           </div>

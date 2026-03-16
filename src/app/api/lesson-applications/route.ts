@@ -1,9 +1,9 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+﻿// src/app/api/lesson-applications/route.ts
+import { NextRequest, NextResponse } from 'next/server'
 import { sendPushToUser } from '@/lib/push'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
-// GET - 신청 목록 조회
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: '로그인 필요' }, { status: 401 })
@@ -30,7 +30,6 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 가족 이름 첨부
   const result = await Promise.all((data ?? []).map(async (app: any) => {
     if (app.family_member_id) {
       const { data: fm } = await supabaseAdmin
@@ -46,7 +45,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(result)
 }
 
-// POST - 수업 신청 (여러 슬롯 한번에, 가족 신청 지원)
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session || session.role !== 'member') {
@@ -59,7 +57,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
   }
 
-  // 가족 신청 시 해당 가족이 본인 계정 소유인지 확인
   if (family_member_id) {
     const { data: fm } = await supabaseAdmin
       .from('family_members')
@@ -70,11 +67,22 @@ export async function POST(req: NextRequest) {
     if (!fm) return NextResponse.json({ error: '가족 정보 오류' }, { status: 403 })
   }
 
+  // ✅ 수정: max_students를 루프 밖에서 한 번만 조회 (N+1 제거)
+  let maxStudents = 1
+  if (program_id) {
+    const { data: prog } = await supabaseAdmin
+      .from('lesson_programs')
+      .select('max_students')
+      .eq('id', program_id)
+      .single()
+    if (prog?.max_students) maxStudents = prog.max_students
+  }
+
   const created = []
   const errors  = []
 
   for (const requested_at of slots) {
-    // 중복 확인
+    // 본인 중복 확인
     const { data: existing } = await supabaseAdmin
       .from('lesson_applications')
       .select('id')
@@ -85,16 +93,17 @@ export async function POST(req: NextRequest) {
 
     if (existing) { errors.push(`${requested_at} 중복`); continue }
 
-    // 슬롯 충돌 확인 (같은 코치 같은 시간)
+    // 확정 슬롯 충돌 확인
     const { data: conflict } = await supabaseAdmin
       .from('lesson_slots')
       .select('id')
       .eq('scheduled_at', requested_at)
+      .eq('lesson_plan.coach_id', coach_id) // ✅ 수정: 코치 기준으로 충돌 체크
       .in('status', ['scheduled', 'completed'])
       .maybeSingle()
     if (conflict) { errors.push(requested_at + ' 수업 충돌'); continue }
 
-    // 다른 회원 신청 중복 체크 - 프로그램 max_students 기반
+    // 정원 체크 (다른 회원 신청 수)
     const { data: otherApps } = await supabaseAdmin
       .from('lesson_applications')
       .select('id')
@@ -104,22 +113,12 @@ export async function POST(req: NextRequest) {
 
     const currentCount = (otherApps ?? []).length
 
-    // 프로그램의 max_students 확인 (없으면 1명 = 개인레슨)
-    let maxStudents = 1
-    if (program_id) {
-      const { data: prog } = await supabaseAdmin
-        .from('lesson_programs')
-        .select('max_students')
-        .eq('id', program_id)
-        .single()
-      if (prog?.max_students) maxStudents = prog.max_students
-    }
-
     if (currentCount >= maxStudents) {
       errors.push(requested_at + ` 정원 초과 (${currentCount}/${maxStudents}명)`)
       continue
     }
 
+    // ✅ 수정: INSERT 실패 시 duplicate key(23505)로 레이스컨디션 방어
     const { data, error } = await supabaseAdmin
       .from('lesson_applications')
       .insert({
@@ -137,27 +136,41 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      console.error('INSERT ERROR:', JSON.stringify(error))
-      errors.push(error.message)
+      if (error.code === '23505') {
+        errors.push(requested_at + ' 동시 신청 중복')
+      } else {
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('INSERT ERROR:', JSON.stringify(error))
+        }
+        errors.push(error.message)
+      }
+    } else {
+      created.push(data)
     }
-    else created.push(data)
   }
 
   if (created.length === 0) {
     return NextResponse.json({ error: `신청 실패: ${errors.join(', ')}` }, { status: 409 })
   }
 
-  // 코치에게 알림 (한번만)
-  await supabaseAdmin.from('notifications').insert({
+  // 코치 알림
+  const { error: notifErr } = await supabaseAdmin.from('notifications').insert({
     profile_id: coach_id,
     title: '새 수업 신청',
     body: `${session.name}님이 ${created.length}회 수업을 신청했습니다. 확인해주세요.`,
     type: 'info',
     link: '/coach/applications',
   })
+  if (notifErr && process.env.NODE_ENV !== 'production') {
+    console.error('알림 발송 실패:', notifErr.message)
+  }
 
-  // 핸드폰 푸시 알림
-  await sendPushToUser(coach_id, '🎾 새 수업 신청', session.name + '님이 ' + created.length + '개 수업을 신청했습니다.', '/coach/applications')
+  await sendPushToUser(
+    coach_id,
+    '🎾 새 수업 신청',
+    session.name + '님이 ' + created.length + '개 수업을 신청했습니다.',
+    '/coach/applications'
+  )
 
   return NextResponse.json({ created: created.length, errors })
 }

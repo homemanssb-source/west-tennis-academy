@@ -1,3 +1,4 @@
+===== app\admin\members\[id]\page.tsx =====
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
@@ -28,7 +29,7 @@ export default function AdminMemberDetailPage() {
   }
 
   const handleResetPin = async () => {
-    if (!confirm('PIN을 123456으로 초기화할까요?')) return
+    if (!confirm('PIN을 초기화할까요? 새 임시 PIN이 자동 발급됩니다.')) return
     const res = await fetch(`/api/members/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reset_pin' }) })
     const data = await res.json()
     if (data.temp_pin) setTempPin(data.temp_pin)

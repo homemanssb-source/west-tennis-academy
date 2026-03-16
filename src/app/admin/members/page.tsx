@@ -1,3 +1,4 @@
+===== app\admin\members\page.tsx =====
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -86,7 +87,7 @@ export default function AdminMembersPage() {
             </div>
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
               <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>취소</button>
-              <button onClick={handleAdd} disabled={saving} style={{ flex: 2, padding: '0.75rem', borderRadius: '0.75rem', border: 'none', background: '#15803d', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>{saving ? '등록 중...' : '등록 (임시PIN: 123456)'}</button>
+              <button onClick={handleAdd} disabled={saving} style={{ flex: 2, padding: '0.75rem', borderRadius: '0.75rem', border: 'none', background: '#15803d', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>{saving ? '등록 중...' : '등록 (임시 PIN 자동 발급)'}</button>
             </div>
           </div>
         </div>
