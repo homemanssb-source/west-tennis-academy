@@ -5,7 +5,7 @@ import Link from 'next/link'
 import MemberBottomNav from '@/components/MemberBottomNav'
 
 interface Coach        { id: string; name: string }
-interface Month        { id: string; year: number; month: number }
+interface Month        { id: string; year: number; month: number; draft_open?: boolean }
 // ✅ max_students 추가
 interface Program      { id: string; name: string; unit_minutes: number; coach_id: string | null; default_amount: number; max_students: number }
 interface FamilyMember { id: string; name: string; birth_date: string | null }
@@ -168,7 +168,10 @@ export default function MemberApplyPage() {
       setCoaches(Array.isArray(c) ? c : [])
       const mList = Array.isArray(m) ? m : []
       setMonths(mList)
-      if (mList.length > 0) setMonthId(mList[0].id)
+      // ✅ draft_open=false인 달 중 첫 번째 선택 (draft_open=true인 달은 선택 불가)
+      const availableMonth = mList.find((x: Month) => !x.draft_open)
+      if (availableMonth) setMonthId(availableMonth.id)
+      else if (mList.length > 0) setMonthId(mList[0].id)
       const pList = Array.isArray(p) ? p : []
       setAllPrograms(pList)
       setPrograms(pList.filter((x: Program) => x.coach_id === null))
@@ -459,8 +462,19 @@ export default function MemberApplyPage() {
                   <div>
                     <label style={s.label}>수업 월</label>
                     <select value={monthId} onChange={e => setMonthId(e.target.value)} style={s.input}>
-                      {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
+                      {months.map(m => (
+                        <option key={m.id} value={m.id} disabled={!!m.draft_open}>
+                          {m.year}년 {m.month}월{m.draft_open ? ' (일정 준비 중)' : ''}
+                        </option>
+                      ))}
                     </select>
+                    {/* draft_open인 달이 선택된 경우 안내 */}
+                    {months.find(m => m.id === monthId)?.draft_open && (
+                      <div style={{ marginTop: '0.5rem', padding: '0.625rem 0.875rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.625rem', fontSize: '0.78rem', color: '#1d4ed8', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                        📅 해당 월은 운영자가 수업 일정을 준비 중이에요.<br/>
+                        <strong>스케줄 탭 → 다음달 미리보기</strong>에서 확인하고 수정 요청해주세요.
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={s.label}>
@@ -509,8 +523,8 @@ export default function MemberApplyPage() {
                 </div>
               </div>
               <button onClick={() => setStep(2)}
-                disabled={!coachId || !monthId || (applicantType === 'family' && !familyId)}
-                style={s.nextBtn(!coachId || !monthId || (applicantType === 'family' && !familyId))}>
+                disabled={!coachId || !monthId || (applicantType === 'family' && !familyId) || !!months.find(m => m.id === monthId)?.draft_open}
+                style={s.nextBtn(!coachId || !monthId || (applicantType === 'family' && !familyId) || !!months.find(m => m.id === monthId)?.draft_open)}>
                 다음 → 날짜 선택
               </button>
             </div>
