@@ -6,10 +6,10 @@ import MemberBottomNav from '@/components/MemberBottomNav'
 
 interface Coach        { id: string; name: string }
 interface Month        { id: string; year: number; month: number; draft_open?: boolean }
-// ? max_students Ãß°¡
+// ? max_students ï¿½ß°ï¿½
 interface Program      { id: string; name: string; unit_minutes: number; coach_id: string | null; default_amount: number; max_students: number }
 interface FamilyMember { id: string; name: string; birth_date: string | null }
-// ? slot_count Ãß°¡ (API¿¡¼­ ¹ÝÈ¯)
+// ? slot_count ï¿½ß°ï¿½ (APIï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È¯)
 interface SlotInfo     { scheduled_at: string; status: string; slot_count?: number; duration_minutes?: number; lesson_plan?: { member?: { id: string } } | null }
 interface BlockInfo    { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
 interface MyApp {
@@ -19,17 +19,17 @@ interface MyApp {
   applicant_name?: string
 }
 
-const DAYS_KO    = ['ÀÏ','¿ù','È­','¼ö','¸ñ','±Ý','Åä']
-const DAYS_LABEL = ['¿ù','È­','¼ö','¸ñ','±Ý','Åä','ÀÏ']
+const DAYS_KO    = ['ï¿½ï¿½','ï¿½ï¿½','È­','ï¿½ï¿½','ï¿½ï¿½','ï¿½ï¿½','ï¿½ï¿½']
+const DAYS_LABEL = ['ï¿½ï¿½','È­','ï¿½ï¿½','ï¿½ï¿½','ï¿½ï¿½','ï¿½ï¿½','ï¿½ï¿½']
 
 const STATUS: Record<string, { label: string; color: string; bg: string }> = {
-  pending_coach: { label: 'ÄÚÄ¡ È®ÀÎ Áß', color: '#854d0e', bg: '#fef9c3' },
-  pending_admin: { label: '½ÂÀÎ ´ë±â',    color: '#1d4ed8', bg: '#eff6ff' },
-  approved:      { label: 'È®Á¤',         color: '#15803d', bg: '#dcfce7' },
-  rejected:      { label: '°ÅÀý',         color: '#b91c1c', bg: '#fee2e2' },
+  pending_coach: { label: 'ï¿½ï¿½Ä¡ È®ï¿½ï¿½ ï¿½ï¿½', color: '#854d0e', bg: '#fef9c3' },
+  pending_admin: { label: 'ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½',    color: '#1d4ed8', bg: '#eff6ff' },
+  approved:      { label: 'È®ï¿½ï¿½',         color: '#15803d', bg: '#dcfce7' },
+  rejected:      { label: 'ï¿½ï¿½ï¿½ï¿½',         color: '#b91c1c', bg: '#fee2e2' },
 }
 
-// ? ¼öÁ¤: busySlots + coachBlocks + maxStudents ¹Þ¾Æ¼­ Ãæµ¹ ³¯Â¥ ÀÚµ¿ Á¦¿Ü
+// ? ï¿½ï¿½ï¿½ï¿½: busySlots + coachBlocks + maxStudents ï¿½Þ¾Æ¼ï¿½ ï¿½æµ¹ ï¿½ï¿½Â¥ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½
 function generateDates(
   year: number, month: number, startDate: Date,
   weekdays: number[], timeStr: string,
@@ -56,20 +56,20 @@ function generateDates(
 
     const ymd = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
 
-    // ÈÞ¹« Ã¼Å© ? ½Ã°£ ¹üÀ§µµ È®ÀÎ (12:00~16:00 ÈÞ¹«¸é 11:00 ¼ö¾÷Àº Åë°ú)
+    // ï¿½Þ¹ï¿½ Ã¼Å© ? ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ (12:00~16:00 ï¿½Þ¹ï¿½ï¿½ï¿½ 11:00 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½)
     const [th, tm] = tStr.split(':').map(Number)
     const reqS = th * 60 + tm
     const reqE = reqS + (duration ?? 60)
     const blocked = (coachBlocks ?? []).some(b => {
-      // ¿äÀÏ/³¯Â¥ Ã¼Å©
+      // ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½Â¥ Ã¼Å©
       if (b.repeat_weekly) {
         if (b.day_of_week !== dow) return false
       } else {
         if (b.block_date !== ymd) return false
       }
-      // Á¾ÀÏ ÈÞ¹« (½Ã°£ ¹Ì¼³Á¤)
+      // ï¿½ï¿½ï¿½ï¿½ ï¿½Þ¹ï¿½ (ï¿½Ã°ï¿½ ï¿½Ì¼ï¿½ï¿½ï¿½)
       if (!b.block_start && !b.block_end) return true
-      // ½Ã°£ ¹üÀ§ °ãÄ§ Ã¼Å©
+      // ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä§ Ã¼Å©
       const bs = b.block_start
         ? Number(b.block_start.split(':')[0]) * 60 + Number(b.block_start.split(':')[1])
         : 0
@@ -79,18 +79,18 @@ function generateDates(
       return reqS < be && reqE > bs
     })
     if (blocked) {
-      skipped.push({ date: ymd, time: tStr, reason: 'ÄÚÄ¡ ÈÞ¹«' })
+      skipped.push({ date: ymd, time: tStr, reason: 'ï¿½ï¿½Ä¡ ï¿½Þ¹ï¿½' })
       continue
     }
 
-    // Á¤¿ø Ã¼Å© ? ½Ã°£ ¹üÀ§ °ãÄ§ ±â¹Ý (1½Ã°£ ¼ö¾÷ÀÌ¸é 11:00~12:00 ¹üÀ§·Î ¸·À½)
+    // ï¿½ï¿½ï¿½ï¿½ Ã¼Å© ? ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä§ ï¿½ï¿½ï¿½ (1ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì¸ï¿½ 11:00~12:00 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
     const [rh, rm] = tStr.split(':').map(Number)
     const reqStart = rh * 60 + rm
     const reqEnd   = reqStart + (duration ?? 60)
     const count = (busySlots ?? []).filter(s => {
       if (s.status === 'cancelled') return false
       const sd = new Date(new Date(s.scheduled_at).getTime() + 9 * 60 * 60 * 1000)
-      // ? º»ÀÎ È®Á¤ ¼ö¾÷Àº Ä«¿îÆ® Á¦¿Ü
+      // ? ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ä«ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
       const sdIso  = sd.toISOString()
       const slotKey16 = `${sdIso.split('T')[0]}T${sdIso.split('T')[1].slice(0,5)}`
       if (mySlotKeys?.has(slotKey16)) return false
@@ -104,7 +104,7 @@ function generateDates(
       return reqStart < slotEnd && reqEnd > slotStart
     }).length
     if (count >= max) {
-      skipped.push({ date: ymd, time: tStr, reason: `Á¤¿ø ÃÊ°ú (${count}/${max}¸í)` })
+      skipped.push({ date: ymd, time: tStr, reason: `ï¿½ï¿½ï¿½ï¿½ ï¿½Ê°ï¿½ (${count}/${max}ï¿½ï¿½)` })
       continue
     }
 
@@ -146,14 +146,14 @@ export default function MemberApplyPage() {
   const [selectedTime,   setSelectedTime]   = useState('')
   const [dayTimes,       setDayTimes]       = useState<Record<number, string>>({})
   const [repeatDays,     setRepeatDays]     = useState<number[]>([])
-  // ? ¼öÁ¤: generatedDates ¡æ { dates, skipped } ±¸Á¶·Î º¯°æ
+  // ? ï¿½ï¿½ï¿½ï¿½: generatedDates ï¿½ï¿½ { dates, skipped } ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
   const [generatedDates, setGeneratedDates] = useState<Date[]>([])
   const [skippedDates,   setSkippedDates]   = useState<{ date: string; time: string; reason: string }[]>([])
   const [excludedIdxs,   setExcludedIdxs]   = useState<Set<number>>(new Set())
   const [saving,         setSaving]         = useState(false)
-  // ? Ãß°¡: Ãë¼Ò Áß »óÅÂ
+  // ? ï¿½ß°ï¿½: ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
   const [cancelling,     setCancelling]     = useState<string | null>(null)
-  // º»ÀÎÀÌ ÀÌ¹Ì È®Á¤µÈ ¼ö¾÷ ½Ã°£´ë (busySlots Ä«¿îÆ®¿¡¼­ Á¦¿Ü¿ë)
+  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ì¹ï¿½ È®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ï¿½ï¿½ (busySlots Ä«ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ü¿ï¿½)
   const [mySlotKeys,     setMySlotKeys]     = useState<Set<string>>(new Set())
 
   const finalDates = generatedDates.filter((_, i) => !excludedIdxs.has(i))
@@ -168,7 +168,7 @@ export default function MemberApplyPage() {
       setCoaches(Array.isArray(c) ? c : [])
       const mList = Array.isArray(m) ? m : []
       setMonths(mList)
-      // ? draft_open=falseÀÎ ´Þ Áß Ã¹ ¹øÂ° ¼±ÅÃ (draft_open=trueÀÎ ´ÞÀº ¼±ÅÃ ºÒ°¡)
+      // ? draft_open=falseï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ Ã¹ ï¿½ï¿½Â° ï¿½ï¿½ï¿½ï¿½ (draft_open=trueï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ò°ï¿½)
       const availableMonth = mList.find((x: Month) => !x.draft_open)
       if (availableMonth) setMonthId(availableMonth.id)
       else if (mList.length > 0) setMonthId(mList[0].id)
@@ -189,7 +189,7 @@ export default function MemberApplyPage() {
     const appsData     = await appsRes.json()
     const scheduleData = await scheduleRes.json()
     setMyApps(Array.isArray(appsData) ? appsData : [])
-    // º»ÀÎ È®Á¤ ¼ö¾÷ ½Ã°£´ë ÀúÀå (scheduled_at ¾Õ 16ÀÚ¸®: YYYY-MM-DDTHH:mm)
+    // ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ (scheduled_at ï¿½ï¿½ 16ï¿½Ú¸ï¿½: YYYY-MM-DDTHH:mm)
     const keys = new Set<string>(
       (Array.isArray(scheduleData) ? scheduleData : [])
         .filter((s: any) => s.status === 'scheduled')
@@ -270,7 +270,7 @@ export default function MemberApplyPage() {
     })
   }
 
-  // ? ¼öÁ¤: ½Ã°£ ¹üÀ§ °ãÄ§ ±â¹Ý Á¤¿ø Ã¼Å© (1½Ã°£ ¼ö¾÷ÀÌ¸é 11:00~12:00 ¹üÀ§·Î ¸·À½)
+  // ? ï¿½ï¿½ï¿½ï¿½: ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä§ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼Å© (1ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ì¸ï¿½ 11:00~12:00 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
   const isBusy = (date: Date, tStr: string) => {
     const toKST = (d: Date) => new Date(d.getTime() + 9*60*60*1000)
     const kstDate = toKST(date)
@@ -278,24 +278,24 @@ export default function MemberApplyPage() {
     const maxStudents = selectedProgram?.max_students ?? 1
     const [rh, rm] = tStr.split(':').map(Number)
     const reqStart = rh * 60 + rm
-    const reqEnd   = reqStart + duration  // ½ÅÃ»ÇÏ·Á´Â ½Ã°£´ëÀÇ ³¡
+    const reqEnd   = reqStart + duration  // ï¿½ï¿½Ã»ï¿½Ï·ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
 
     const matchingSlots = busySlots.filter(s => {
       if (s.status === 'cancelled') return false
-      // ? º»ÀÎ È®Á¤ ¼ö¾÷Àº Ä«¿îÆ® Á¦¿Ü (º»ÀÎ ½½·ÔÀÌ ÀÖ¾îµµ Á¤¿ø ¾È Âù °ÍÀ¸·Î Ã³¸®)
+      // ? ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ä«ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ö¾îµµ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½)
       const slotKstStr = toKST(new Date(s.scheduled_at)).toISOString()
       const slotKey16  = `${slotKstStr.split('T')[0]}T${slotKstStr.split('T')[1].slice(0,5)}`
       if (mySlotKeys.has(slotKey16)) return false
       const sd = toKST(new Date(s.scheduled_at))
       const sdYmd  = sd.toISOString().split('T')[0]
       if (sdYmd !== ymd) return false
-      // ±âÁ¸ ½½·ÔÀÇ ½Ã°£ ¹üÀ§
+      // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½
       const sh = sd.getUTCHours()
       const sm = sd.getUTCMinutes()
       const slotStart = sh * 60 + sm
       const slotDur   = (s as any).duration_minutes ?? duration
       const slotEnd   = slotStart + slotDur
-      // ½Ã°£ ¹üÀ§ °ãÄ§ Ã¼Å©: µÎ ±¸°£ÀÌ °ãÄ¡¸é busy
+      // ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä§ Ã¼Å©: ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ busy
       return reqStart < slotEnd && reqEnd > slotStart
     })
     return matchingSlots.length >= maxStudents
@@ -311,7 +311,7 @@ export default function MemberApplyPage() {
     )
   }
 
-  // ? ¼öÁ¤: generateDates¿¡ busySlots/coachBlocks/maxStudents Àü´Þ
+  // ? ï¿½ï¿½ï¿½ï¿½: generateDatesï¿½ï¿½ busySlots/coachBlocks/maxStudents ï¿½ï¿½ï¿½ï¿½
   useEffect(() => {
     if (!selectedDate || !selectedMonth || !selectedTime) return
     const baseDow   = selectedDate.getDay()
@@ -360,7 +360,7 @@ export default function MemberApplyPage() {
         month_id: monthId,
         slots,
         duration_minutes: duration,
-        lesson_type: selectedProgram?.name ?? '°³ÀÎ·¹½¼',
+        lesson_type: selectedProgram?.name ?? 'ï¿½ï¿½ï¿½Î·ï¿½ï¿½ï¿½',
         family_member_id: applicantType === 'family' ? familyId : null,
         ...(programId ? { program_id: programId } : {}),
       }),
@@ -368,19 +368,19 @@ export default function MemberApplyPage() {
     const d = await res.json()
     setSaving(false)
     if (d.error) { alert(d.error); return }
-    alert(`${finalDates.length}È¸ ¼ö¾÷ ½ÅÃ» ¿Ï·á!\nÄÚÄ¡ È®ÀÎ ÈÄ ¾È³»µå¸³´Ï´Ù.`)
+    alert(`${finalDates.length}È¸ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½Ï·ï¿½!\nï¿½ï¿½Ä¡ È®ï¿½ï¿½ ï¿½ï¿½ ï¿½È³ï¿½ï¿½å¸³ï¿½Ï´ï¿½.`)
     setTab('list'); setStep(1); loadMyApps()
   }
 
-  // ? Ãß°¡: ½ÅÃ» Ãë¼Ò
+  // ? ï¿½ß°ï¿½: ï¿½ï¿½Ã» ï¿½ï¿½ï¿½
   const handleCancel = async (appId: string) => {
-    if (!confirm('¼ö¾÷ ½ÅÃ»À» Ãë¼ÒÇÏ½Ã°Ú½À´Ï±î?\nÃë¼Ò ÈÄ Àç½ÅÃ»ÀÌ ÇÊ¿äÇÕ´Ï´Ù.')) return
+    if (!confirm('ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ï½Ã°Ú½ï¿½ï¿½Ï±ï¿½?\nï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ ï¿½Ê¿ï¿½ï¿½Õ´Ï´ï¿½.')) return
     setCancelling(appId)
     const res = await fetch(`/api/lesson-applications/${appId}`, { method: 'DELETE' })
     const d = await res.json()
     setCancelling(null)
-    if (!res.ok) { alert(d.error ?? 'Ãë¼Ò ½ÇÆÐ'); return }
-    alert('½ÅÃ»ÀÌ Ãë¼ÒµÇ¾ú½À´Ï´Ù.')
+    if (!res.ok) { alert(d.error ?? 'ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½'); return }
+    alert('ï¿½ï¿½Ã»ï¿½ï¿½ ï¿½ï¿½ÒµÇ¾ï¿½ï¿½ï¿½ï¿½Ï´ï¿½.')
     loadMyApps()
   }
 
@@ -394,27 +394,27 @@ export default function MemberApplyPage() {
     prevBtn: { flex: 1, padding: '0.875rem', borderRadius: '0.875rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', cursor: 'pointer' as const, fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 600, fontSize: '0.875rem' },
   }
 
-  const STEP_LABELS = ['±âº» Á¤º¸', '³¯Â¥ ¼±ÅÃ', '¹Ýº¹ ¼³Á¤', '¹Ì¸®º¸±â']
+  const STEP_LABELS = ['ï¿½âº» ï¿½ï¿½ï¿½ï¿½', 'ï¿½ï¿½Â¥ ï¿½ï¿½ï¿½ï¿½', 'ï¿½Ýºï¿½ ï¿½ï¿½ï¿½ï¿½', 'ï¿½Ì¸ï¿½ï¿½ï¿½ï¿½ï¿½']
 
   return (
     <div className="mobile-wrap" style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      {/* Çì´õ */}
+      {/* ï¿½ï¿½ï¿½ */}
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>?? ¼ö¾÷ ½ÅÃ»</div>
+        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>?? ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»</div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {(['new','list'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ flex: 1, padding: '0.5rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 700, fontSize: '0.85rem', background: tab === t ? '#16A34A' : '#f3f4f6', color: tab === t ? 'white' : '#6b7280' }}>
-              {t === 'new' ? '+ »õ ½ÅÃ»' : `³» ½ÅÃ» (${myApps.length})`}
+              {t === 'new' ? '+ ï¿½ï¿½ ï¿½ï¿½Ã»' : `ï¿½ï¿½ ï¿½ï¿½Ã» (${myApps.length})`}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ¦¡¦¡ »õ ½ÅÃ» ÅÇ ¦¡¦¡ */}
+      {/* ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ */}
       {tab === 'new' && (
         <div style={{ padding: '1rem 1.25rem 6rem' }}>
-          {/* ½ºÅÜ ÀÎµðÄÉÀÌÅÍ */}
+          {/* ï¿½ï¿½ï¿½ï¿½ ï¿½Îµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */}
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1.25rem' }}>
             {STEP_LABELS.map((label, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < STEP_LABELS.length - 1 ? 1 : 0 }}>
@@ -431,67 +431,67 @@ export default function MemberApplyPage() {
             ))}
           </div>
 
-          {/* ¦¡¦¡ STEP 1: ±âº» Á¤º¸ ¦¡¦¡ */}
+          {/* ï¿½ï¿½ï¿½ï¿½ STEP 1: ï¿½âº» ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ */}
           {step === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={s.card}>
-                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>±âº» Á¤º¸</h2>
+                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>ï¿½âº» ï¿½ï¿½ï¿½ï¿½</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
                   {family.length > 0 && (
                     <div>
-                      <label style={s.label}>½ÅÃ»ÀÚ</label>
+                      <label style={s.label}>ï¿½ï¿½Ã»ï¿½ï¿½</label>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => setApplicantType('self')} style={applicantType === 'self' ? s.btnOn : s.btn}>º»ÀÎ</button>
-                        <button onClick={() => setApplicantType('family')} style={applicantType === 'family' ? s.btnOn : s.btn}>°¡Á·</button>
+                        <button onClick={() => setApplicantType('self')} style={applicantType === 'self' ? s.btnOn : s.btn}>ï¿½ï¿½ï¿½ï¿½</button>
+                        <button onClick={() => setApplicantType('family')} style={applicantType === 'family' ? s.btnOn : s.btn}>ï¿½ï¿½ï¿½ï¿½</button>
                       </div>
                       {applicantType === 'family' && (
                         <select value={familyId} onChange={e => setFamilyId(e.target.value)} style={{ ...s.input, marginTop: '0.5rem' }}>
-                          <option value="">°¡Á· ¼±ÅÃ</option>
+                          <option value="">ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</option>
                           {family.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                         </select>
                       )}
                     </div>
                   )}
                   <div>
-                    <label style={s.label}>ÄÚÄ¡ ¼±ÅÃ</label>
+                    <label style={s.label}>ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½</label>
                     <select value={coachId} onChange={e => setCoachId(e.target.value)} style={s.input}>
-                      <option value="">ÄÚÄ¡¸¦ ¼±ÅÃÇØÁÖ¼¼¿ä</option>
-                      {coaches.map(c => <option key={c.id} value={c.id}>{c.name} ÄÚÄ¡</option>)}
+                      <option value="">ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¼ï¿½ï¿½ï¿½</option>
+                      {coaches.map(c => <option key={c.id} value={c.id}>{c.name} ï¿½ï¿½Ä¡</option>)}
                     </select>
                   </div>
                   <div>
-                    <label style={s.label}>¼ö¾÷ ¿ù</label>
+                    <label style={s.label}>ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½</label>
                     <select value={monthId} onChange={e => setMonthId(e.target.value)} style={s.input}>
                       {months.map(m => (
                         <option key={m.id} value={m.id} disabled={!!m.draft_open}>
-                          {m.year}³â {m.month}¿ù{m.draft_open ? ' (ÀÏÁ¤ ÁØºñ Áß)' : ''}
+                          {m.year}ï¿½ï¿½ {m.month}ï¿½ï¿½{m.draft_open ? ' (ï¿½ï¿½ï¿½ï¿½ ï¿½Øºï¿½ ï¿½ï¿½)' : ''}
                         </option>
                       ))}
                     </select>
-                    {/* draft_openÀÎ ´ÞÀÌ ¼±ÅÃµÈ °æ¿ì ¾È³» */}
+                    {/* draft_openï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ãµï¿½ ï¿½ï¿½ï¿½ ï¿½È³ï¿½ */}
                     {months.find(m => m.id === monthId)?.draft_open && (
                       <div style={{ marginTop: '0.5rem', padding: '0.625rem 0.875rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.625rem', fontSize: '0.78rem', color: '#1d4ed8', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                        ?? ÇØ´ç ¿ùÀº ¿î¿µÀÚ°¡ ¼ö¾÷ ÀÏÁ¤À» ÁØºñ ÁßÀÌ¿¡¿ä.<br/>
-                        <strong>½ºÄÉÁÙ ÅÇ ¡æ ´ÙÀ½´Þ ¹Ì¸®º¸±â</strong>¿¡¼­ È®ÀÎÇÏ°í ¼öÁ¤ ¿äÃ»ÇØÁÖ¼¼¿ä.
+                        ?? ï¿½Ø´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½î¿µï¿½Ú°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Øºï¿½ ï¿½ï¿½ï¿½Ì¿ï¿½ï¿½ï¿½.<br/>
+                        <strong>ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ì¸ï¿½ï¿½ï¿½ï¿½ï¿½</strong>ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½ï¿½Ï°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»ï¿½ï¿½ï¿½Ö¼ï¿½ï¿½ï¿½.
                       </div>
                     )}
                   </div>
                   <div>
                     <label style={s.label}>
-                      ÇÁ·Î±×·¥
+                      ï¿½ï¿½ï¿½Î±×·ï¿½
                       {coachId && coaches.find(c => c.id === coachId) && (
                         <span style={{ fontWeight: 400, color: '#3b82f6', marginLeft: '6px' }}>
-                          ? {coaches.find(c => c.id === coachId)!.name} ÄÚÄ¡ ±âÁØ
+                          ? {coaches.find(c => c.id === coachId)!.name} ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
                         </span>
                       )}
                     </label>
                     {!coachId ? (
                       <div style={{ padding: '0.625rem 0.875rem', background: '#f9fafb', borderRadius: '0.625rem', border: '1.5px dashed #e5e7eb', fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center' }}>
-                        ?? ¸ÕÀú ÄÚÄ¡¸¦ ¼±ÅÃÇÏ¸é ¼ö¾÷ ÇÁ·Î±×·¥ÀÌ Ç¥½ÃµË´Ï´Ù
+                        ?? ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï¸ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Î±×·ï¿½ï¿½ï¿½ Ç¥ï¿½ÃµË´Ï´ï¿½
                       </div>
                     ) : programs.length === 0 ? (
                       <div style={{ padding: '0.625rem 0.875rem', background: '#fef9c3', borderRadius: '0.625rem', border: '1.5px solid #fde68a', fontSize: '0.8rem', color: '#854d0e' }}>
-                        ?? µî·ÏµÈ ¼ö¾÷ ÇÁ·Î±×·¥ÀÌ ¾ø½À´Ï´Ù
+                        ?? ï¿½ï¿½Ïµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Î±×·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½
                       </div>
                     ) : (
                       <select style={s.input} value={programId} onChange={e => {
@@ -499,10 +499,10 @@ export default function MemberApplyPage() {
                         if (p) { setProgramId(p.id); setDuration(p.unit_minutes || 60) }
                         else { setProgramId(''); setDuration(60) }
                       }}>
-                        <option value="">ÇÁ·Î±×·¥À» ¼±ÅÃÇÏ¼¼¿ä</option>
+                        <option value="">ï¿½ï¿½ï¿½Î±×·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï¼ï¿½ï¿½ï¿½</option>
                         {programs.map(p => (
                           <option key={p.id} value={p.id}>
-                            {p.coach_id ? '¡Ú ' : ''}{p.name} ({p.unit_minutes}ºÐ{p.max_students > 1 ? ` ¡¤ ÃÖ´ë ${p.max_students}¸í` : ''})
+                            {p.coach_id ? 'ï¿½ï¿½ ' : ''}{p.name} ({p.unit_minutes}ï¿½ï¿½{p.max_students > 1 ? ` ï¿½ï¿½ ï¿½Ö´ï¿½ ${p.max_students}ï¿½ï¿½` : ''})
                           </option>
                         ))}
                       </select>
@@ -512,9 +512,9 @@ export default function MemberApplyPage() {
                         <span>?</span>
                         <span>
                           <strong>{programs.find(p => p.id === programId)?.name}</strong>
-                          {' ¡¤ '}{programs.find(p => p.id === programId)?.unit_minutes}ºÐ
+                          {' ï¿½ï¿½ '}{programs.find(p => p.id === programId)?.unit_minutes}ï¿½ï¿½
                           {(programs.find(p => p.id === programId)?.max_students ?? 1) > 1 &&
-                            <span style={{ color: '#1d4ed8' }}> ¡¤ ±×·ì ÃÖ´ë {programs.find(p => p.id === programId)?.max_students}¸í</span>
+                            <span style={{ color: '#1d4ed8' }}> ï¿½ï¿½ ï¿½×·ï¿½ ï¿½Ö´ï¿½ {programs.find(p => p.id === programId)?.max_students}ï¿½ï¿½</span>
                           }
                         </span>
                       </div>
@@ -525,35 +525,35 @@ export default function MemberApplyPage() {
               <button onClick={() => setStep(2)}
                 disabled={!coachId || !monthId || (applicantType === 'family' && !familyId) || !!months.find(m => m.id === monthId)?.draft_open}
                 style={s.nextBtn(!coachId || !monthId || (applicantType === 'family' && !familyId) || !!months.find(m => m.id === monthId)?.draft_open)}>
-                ´ÙÀ½ ¡æ ³¯Â¥ ¼±ÅÃ
+                ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Â¥ ï¿½ï¿½ï¿½ï¿½
               </button>
             </div>
           )}
 
-          {/* ¦¡¦¡ STEP 2: ³¯Â¥ ¼±ÅÃ ¦¡¦¡ */}
+          {/* ï¿½ï¿½ï¿½ï¿½ STEP 2: ï¿½ï¿½Â¥ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ */}
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* ? Ãß°¡: STEP 2 ¾È³» ¹è³Ê */}
+              {/* ? ï¿½ß°ï¿½: STEP 2 ï¿½È³ï¿½ ï¿½ï¿½ï¿½ */}
               <div style={{ padding: '0.75rem 1rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.875rem', fontSize: '0.8rem', color: '#1d4ed8' }}>
-                <div style={{ fontWeight: 700, marginBottom: '4px' }}>?? Ã¹ ¼ö¾÷ ³¯Â¥¿Í ½Ã°£À» ¼±ÅÃÇÏ¼¼¿ä</div>
+                <div style={{ fontWeight: 700, marginBottom: '4px' }}>?? Ã¹ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Â¥ï¿½ï¿½ ï¿½Ã°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï¼ï¿½ï¿½ï¿½</div>
                 <div style={{ color: '#3b82f6', lineHeight: 1.5 }}>
-                  ÀÌ ³¯Â¥¸¦ ±âÁØÀ¸·Î ¹Ýº¹ ¼ö¾÷ ÀÏÁ¤ÀÌ ÀÚµ¿ »ý¼ºµË´Ï´Ù.<br/>
-                  ´ÙÀ½ ´Ü°è¿¡¼­ Ãß°¡ ¿äÀÏÀ» ¼±ÅÃÇÒ ¼ö ÀÖ¾î¿ä.
+                  ï¿½ï¿½ ï¿½ï¿½Â¥ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ýºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ë´Ï´ï¿½.<br/>
+                  ï¿½ï¿½ï¿½ï¿½ ï¿½Ü°è¿¡ï¿½ï¿½ ï¿½ß°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ö¾ï¿½ï¿½.
                 </div>
               </div>
               <div style={s.card}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                  <button onClick={() => setWeekOffset(w => w-1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>¡ç ÀÌÀü</button>
+                  <button onClick={() => setWeekOffset(w => w-1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</button>
                   <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>
                     {weekDates[0].getMonth()+1}/{weekDates[0].getDate()} ~ {weekDates[6].getMonth()+1}/{weekDates[6].getDate()}
                   </span>
-                  <button onClick={() => setWeekOffset(w => w+1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>´ÙÀ½ ¡æ</button>
+                  <button onClick={() => setWeekOffset(w => w+1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½</button>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.625rem', fontSize: '0.7rem', color: '#6b7280' }}>
-                  <span style={{ color: '#15803d' }}>¡Û °¡´É</span>
-                  <span style={{ color: '#b91c1c' }}>? {(selectedProgram?.max_students ?? 1) > 1 ? 'Á¤¿ø¸¶°¨' : '¼ö¾÷ÀÖÀ½'}</span>
-                  <span style={{ color: '#854d0e' }}>¡¦ ½ÅÃ»´ë±â</span>
-                  <span style={{ color: '#7c3aed' }}>ÈÞ ÄÚÄ¡ÈÞ¹«</span>
+                  <span style={{ color: '#15803d' }}>ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</span>
+                  <span style={{ color: '#b91c1c' }}>? {(selectedProgram?.max_students ?? 1) > 1 ? 'ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½' : 'ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½'}</span>
+                  <span style={{ color: '#854d0e' }}>ï¿½ï¿½ ï¿½ï¿½Ã»ï¿½ï¿½ï¿½</span>
+                  <span style={{ color: '#7c3aed' }}>ï¿½ï¿½ ï¿½ï¿½Ä¡ï¿½Þ¹ï¿½</span>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '340px' }}>
@@ -584,7 +584,7 @@ export default function MemberApplyPage() {
                                   disabled={isPast || busy || blocked || pending}
                                   onClick={() => { setSelectedDate(new Date(date)); setSelectedTime(tStr) }}
                                   style={{ width: '100%', padding: '3px 0', borderRadius: '4px', border: isSel ? '2px solid #16A34A' : 'none', fontSize: '0.65rem', cursor: (isPast || busy || blocked || pending) ? 'not-allowed' : 'pointer', background: isSel ? '#16A34A' : busy ? '#fee2e2' : blocked ? '#f3f0ff' : pending ? '#fef9c3' : isPast ? '#f9fafb' : '#f0fdf4', color: isSel ? 'white' : busy ? '#fca5a5' : blocked ? '#7c3aed' : pending ? '#854d0e' : isPast ? '#d1d5db' : '#15803d' }}>
-                                  {isSel ? '?' : busy ? '?' : blocked ? 'ÈÞ' : pending ? '¡¦' : '¡Û'}
+                                  {isSel ? '?' : busy ? '?' : blocked ? 'ï¿½ï¿½' : pending ? 'ï¿½ï¿½' : 'ï¿½ï¿½'}
                                 </button>
                               </td>
                             )
@@ -596,35 +596,35 @@ export default function MemberApplyPage() {
                 </div>
                 {selectedDate && selectedTime && (
                   <div style={{ marginTop: '0.75rem', padding: '0.625rem 0.875rem', background: '#f0fdf4', borderRadius: '0.625rem', fontSize: '0.85rem', color: '#15803d', fontWeight: 600 }}>
-                    ? Ã¹ ¼ö¾÷: {fmtDate(selectedDate)} {selectedTime}
+                    ? Ã¹ ï¿½ï¿½ï¿½ï¿½: {fmtDate(selectedDate)} {selectedTime}
                   </div>
                 )}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setStep(1)} style={s.prevBtn}>¡ç ÀÌÀü</button>
-                <button onClick={() => setStep(3)} disabled={!selectedDate || !selectedTime} style={s.nextBtn(!selectedDate || !selectedTime)}>´ÙÀ½ ¡æ ¹Ýº¹ ¼³Á¤</button>
+                <button onClick={() => setStep(1)} style={s.prevBtn}>ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</button>
+                <button onClick={() => setStep(3)} disabled={!selectedDate || !selectedTime} style={s.nextBtn(!selectedDate || !selectedTime)}>ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ýºï¿½ ï¿½ï¿½ï¿½ï¿½</button>
               </div>
             </div>
           )}
 
-          {/* ¦¡¦¡ STEP 3: ¹Ýº¹ ¼³Á¤ ¦¡¦¡ */}
+          {/* ï¿½ï¿½ï¿½ï¿½ STEP 3: ï¿½Ýºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ */}
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* ? Ãß°¡: STEP 3 ¾È³» ¹è³Ê */}
+              {/* ? ï¿½ß°ï¿½: STEP 3 ï¿½È³ï¿½ ï¿½ï¿½ï¿½ */}
               <div style={{ padding: '0.75rem 1rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', fontSize: '0.8rem', color: '#15803d' }}>
                 <div style={{ fontWeight: 700, marginBottom: '4px' }}>
-                  ?? Ã¹ ¼ö¾÷: {selectedDate && fmtDate(selectedDate)} {selectedTime}
+                  ?? Ã¹ ï¿½ï¿½ï¿½ï¿½: {selectedDate && fmtDate(selectedDate)} {selectedTime}
                 </div>
                 <div style={{ color: '#16a34a', lineHeight: 1.5 }}>
-                  ÀÌ ¿äÀÏÀº ÀÌ¹Ì Æ÷ÇÔµÇ¾î ÀÖ¾î¿ä.<br/>
-                  <strong>Ãß°¡ ¿äÀÏ</strong>À» ¼±ÅÃÇÏ¸é ÇØ´ç ¿äÀÏµµ ¸ÅÁÖ ½ÅÃ»µÅ¿ä. (¼±ÅÃ ¾È ÇØµµ µË´Ï´Ù)<br/>
-                  ÈÞ¹«ÀÏÀÌ³ª Á¤¿øÀÌ Âù ³¯Â¥´Â ÀÚµ¿À¸·Î Á¦¿ÜµË´Ï´Ù.
+                  ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ì¹ï¿½ ï¿½ï¿½ï¿½ÔµÇ¾ï¿½ ï¿½Ö¾ï¿½ï¿½.<br/>
+                  <strong>ï¿½ß°ï¿½ ï¿½ï¿½ï¿½ï¿½</strong>ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï¸ï¿½ ï¿½Ø´ï¿½ ï¿½ï¿½ï¿½Ïµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ã»ï¿½Å¿ï¿½. (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Øµï¿½ ï¿½Ë´Ï´ï¿½)<br/>
+                  ï¿½Þ¹ï¿½ï¿½ï¿½ï¿½Ì³ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Â¥ï¿½ï¿½ ï¿½Úµï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ÜµË´Ï´ï¿½.
                 </div>
               </div>
               <div style={s.card}>
-                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', color: '#111827' }}>¹Ýº¹ ¿äÀÏ ¼±ÅÃ</h2>
+                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', color: '#111827' }}>ï¿½Ýºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</h2>
                 <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.875rem' }}>
-                  {fmtDate(selectedDate!)}ºÎÅÍ {selectedMonth?.year}³â {selectedMonth?.month}¿ù ¸»ÀÏ±îÁö
+                  {fmtDate(selectedDate!)}ï¿½ï¿½ï¿½ï¿½ {selectedMonth?.year}ï¿½ï¿½ {selectedMonth?.month}ï¿½ï¿½ ï¿½ï¿½ï¿½Ï±ï¿½ï¿½ï¿½
                 </p>
 
                 {repeatDays.length > 0 && (
@@ -632,17 +632,17 @@ export default function MemberApplyPage() {
                     {repeatDays.map(dow => (
                       <div key={dow} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.625rem' }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', minWidth: '32px' }}>
-                          {DAYS_LABEL[dow === 0 ? 6 : dow - 1]}¿äÀÏ
+                          {DAYS_LABEL[dow === 0 ? 6 : dow - 1]}ï¿½ï¿½ï¿½ï¿½
                         </span>
                         <select value={dayTimes[dow] ?? ''} onChange={e => setDayTimes(prev => ({ ...prev, [dow]: e.target.value }))} style={{ ...s.input, flex: 1 }}>
-                          <option value="">½Ã°£ ¼±ÅÃ</option>
+                          <option value="">ï¿½Ã°ï¿½ ï¿½ï¿½ï¿½ï¿½</option>
                           {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                     ))}
                     {repeatDays.some(dow => !dayTimes[dow]) && (
                       <div style={{ padding: '0.5rem 0.75rem', background: '#fef9c3', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#854d0e' }}>
-                        ?? ¸ðµç ¿äÀÏÀÇ ½Ã°£À» ¼±ÅÃÇØÁÖ¼¼¿ä
+                        ?? ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¼ï¿½ï¿½ï¿½
                       </div>
                     )}
                   </div>
@@ -663,14 +663,14 @@ export default function MemberApplyPage() {
                   })}
                 </div>
 
-                {/* ÀÚµ¿ »ý¼º ÀÏÁ¤ */}
+                {/* ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ */}
                 {generatedDates.length > 0 ? (
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151' }}>ÀÚµ¿ »ý¼º ÀÏÁ¤</span>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151' }}>ï¿½Úµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</span>
                       <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                        <strong style={{ color: '#16A34A' }}>{finalDates.length}È¸</strong> ½ÅÃ» ¿¹Á¤
-                        {excludedIdxs.size > 0 && <span style={{ color: '#b91c1c', marginLeft: '0.375rem' }}>({excludedIdxs.size}°³ Á¦¿Ü)</span>}
+                        <strong style={{ color: '#16A34A' }}>{finalDates.length}È¸</strong> ï¿½ï¿½Ã» ï¿½ï¿½ï¿½ï¿½
+                        {excludedIdxs.size > 0 && <span style={{ color: '#b91c1c', marginLeft: '0.375rem' }}>({excludedIdxs.size}ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)</span>}
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '2px' }}>
@@ -680,14 +680,14 @@ export default function MemberApplyPage() {
                         return (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.625rem', borderRadius: '0.5rem', background: excluded ? '#fef2f2' : '#f0fdf4', border: `1px solid ${excluded ? '#fecaca' : '#bbf7d0'}`, opacity: excluded ? 0.65 : 1 }}>
                             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: excluded ? '#9ca3af' : '#15803d', minWidth: '28px', textDecoration: excluded ? 'line-through' : 'none' }}>
-                              {excluded ? 'Á¦¿Ü' : `${rank}È¸`}
+                              {excluded ? 'ï¿½ï¿½ï¿½ï¿½' : `${rank}È¸`}
                             </span>
                             <span style={{ fontSize: '0.82rem', flex: 1, color: excluded ? '#9ca3af' : '#374151', textDecoration: excluded ? 'line-through' : 'none' }}>
                               {fmtDateTime(d)}
                             </span>
                             <button onClick={() => toggleExclude(i)}
                               style={{ fontSize: '0.7rem', fontWeight: 700, border: 'none', borderRadius: '0.375rem', padding: '3px 8px', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', background: excluded ? '#dcfce7' : '#fee2e2', color: excluded ? '#15803d' : '#b91c1c', flexShrink: 0 }}>
-                              {excluded ? 'º¹¿ø' : 'Á¦¿Ü'}
+                              {excluded ? 'ï¿½ï¿½ï¿½ï¿½' : 'ï¿½ï¿½ï¿½ï¿½'}
                             </button>
                           </div>
                         )
@@ -696,14 +696,14 @@ export default function MemberApplyPage() {
                     {excludedIdxs.size > 0 && (
                       <button onClick={() => setExcludedIdxs(new Set())}
                         style={{ marginTop: '0.5rem', width: '100%', padding: '0.4rem', background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#6b7280', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 600 }}>
-                        ?? ÀüÃ¼ º¹¿ø
+                        ?? ï¿½ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½
                       </button>
                     )}
-                    {/* ? Ãß°¡: ÀÚµ¿ Á¦¿ÜµÈ ³¯Â¥ ¾È³» */}
+                    {/* ? ï¿½ß°ï¿½: ï¿½Úµï¿½ ï¿½ï¿½ï¿½Üµï¿½ ï¿½ï¿½Â¥ ï¿½È³ï¿½ */}
                     {skippedDates.length > 0 && (
                       <div style={{ marginTop: '0.75rem', padding: '0.625rem 0.875rem', background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '0.625rem' }}>
                         <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#854d0e', marginBottom: '4px' }}>
-                          ?? ¾Æ·¡ ³¯Â¥´Â ÀÚµ¿ Á¦¿ÜµÇ¾ú½À´Ï´Ù
+                          ?? ï¿½Æ·ï¿½ ï¿½ï¿½Â¥ï¿½ï¿½ ï¿½Úµï¿½ ï¿½ï¿½ï¿½ÜµÇ¾ï¿½ï¿½ï¿½ï¿½Ï´ï¿½
                         </div>
                         {skippedDates.map((s, i) => (
                           <div key={i} style={{ fontSize: '0.72rem', color: '#92400e', lineHeight: 1.6 }}>
@@ -715,44 +715,44 @@ export default function MemberApplyPage() {
                   </>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '1.5rem', color: '#9ca3af', background: '#f9fafb', borderRadius: '0.75rem', fontSize: '0.85rem' }}>
-                    ¼±ÅÃÇÑ ³¯Â¥ ±âÁØÀ¸·Î ÀÏÁ¤ÀÌ »ý¼ºµË´Ï´Ù
+                    ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Â¥ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ë´Ï´ï¿½
                   </div>
                 )}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setStep(2)} style={s.prevBtn}>¡ç ÀÌÀü</button>
+                <button onClick={() => setStep(2)} style={s.prevBtn}>ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</button>
                 <button onClick={() => setStep(4)}
                   disabled={!selectedDate || !selectedTime || repeatDays.some(dow => !dayTimes[dow])}
                   style={s.nextBtn(!selectedDate || !selectedTime || repeatDays.some(dow => !dayTimes[dow]))}>
-                  ´ÙÀ½ ¡æ ¹Ì¸®º¸±â
+                  ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ì¸ï¿½ï¿½ï¿½ï¿½ï¿½
                 </button>
               </div>
             </div>
           )}
 
-          {/* ¦¡¦¡ STEP 4: ¹Ì¸®º¸±â ¦¡¦¡ */}
+          {/* ï¿½ï¿½ï¿½ï¿½ STEP 4: ï¿½Ì¸ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ */}
           {step === 4 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={s.card}>
-                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>?? ½ÅÃ» ¹Ì¸®º¸±â</h2>
+                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>?? ï¿½ï¿½Ã» ï¿½Ì¸ï¿½ï¿½ï¿½ï¿½ï¿½</h2>
                 <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1rem' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem', fontSize: '0.8rem' }}>
                     {[
-                      ['½ÅÃ»ÀÚ',  applicantType === 'family' ? selectedFamilyM?.name ?? '' : 'º»ÀÎ'],
-                      ['ÄÚÄ¡',    `${selectedCoach?.name} ÄÚÄ¡`],
-                      ['·¹½¼',    selectedProgram?.name ?? '°³ÀÎ·¹½¼'],
-                      ['½Ã°£',    `${duration}ºÐ`],
-                      ['¼ö¾÷ ¿ù', `${selectedMonth?.year}³â ${selectedMonth?.month}¿ù`],
-                      ['ÃÑ È½¼ö', `${finalDates.length}È¸`],
+                      ['ï¿½ï¿½Ã»ï¿½ï¿½',  applicantType === 'family' ? selectedFamilyM?.name ?? '' : 'ï¿½ï¿½ï¿½ï¿½'],
+                      ['ï¿½ï¿½Ä¡',    `${selectedCoach?.name} ï¿½ï¿½Ä¡`],
+                      ['ï¿½ï¿½ï¿½ï¿½',    selectedProgram?.name ?? 'ï¿½ï¿½ï¿½Î·ï¿½ï¿½ï¿½'],
+                      ['ï¿½Ã°ï¿½',    `${duration}ï¿½ï¿½`],
+                      ['ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½', `${selectedMonth?.year}ï¿½ï¿½ ${selectedMonth?.month}ï¿½ï¿½`],
+                      ['ï¿½ï¿½ È½ï¿½ï¿½', `${finalDates.length}È¸`],
                     ].map(([label, val]) => (
                       <div key={label}>
                         <span style={{ color: '#6b7280' }}>{label}</span><br/>
-                        <strong style={{ color: label === 'ÃÑ È½¼ö' ? '#16A34A' : '#111827', fontSize: label === 'ÃÑ È½¼ö' ? '1.1rem' : '0.875rem' }}>{val}</strong>
+                        <strong style={{ color: label === 'ï¿½ï¿½ È½ï¿½ï¿½' ? '#16A34A' : '#111827', fontSize: label === 'ï¿½ï¿½ È½ï¿½ï¿½' ? '1.1rem' : '0.875rem' }}>{val}</strong>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>ÀüÃ¼ ÀÏÁ¤</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>ï¿½ï¿½Ã¼ ï¿½ï¿½ï¿½ï¿½</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '220px', overflowY: 'auto' }}>
                   {finalDates.map((d, i) => (
                     <div key={i} style={{ display: 'flex', gap: '0.5rem', padding: '0.375rem 0.625rem', background: '#f9fafb', borderRadius: '0.5rem' }}>
@@ -762,14 +762,14 @@ export default function MemberApplyPage() {
                   ))}
                 </div>
                 <div style={{ marginTop: '0.875rem', padding: '0.625rem 0.875rem', background: '#fef9c3', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#854d0e' }}>
-                  ¡Ø ±Ý¾×Àº °ü¸®ÀÚ°¡ º°µµ ÀÔ·ÂÇÕ´Ï´Ù
+                  ï¿½ï¿½ ï¿½Ý¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ú°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ô·ï¿½ï¿½Õ´Ï´ï¿½
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setStep(3)} style={s.prevBtn}>¡ç ¼öÁ¤</button>
+                <button onClick={() => setStep(3)} style={s.prevBtn}>ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½</button>
                 <button onClick={handleSubmit} disabled={saving}
                   style={{ flex: 2, padding: '0.875rem', borderRadius: '0.875rem', border: 'none', fontWeight: 700, fontSize: '1rem', fontFamily: 'Noto Sans KR, sans-serif', cursor: saving ? 'not-allowed' : 'pointer', background: saving ? '#e5e7eb' : '#16A34A', color: saving ? '#9ca3af' : 'white' }}>
-                  {saving ? '½ÅÃ» Áß...' : `?? ${finalDates.length}È¸ ½ÅÃ»ÇÏ±â`}
+                  {saving ? 'ï¿½ï¿½Ã» ï¿½ï¿½...' : `?? ${finalDates.length}È¸ ï¿½ï¿½Ã»ï¿½Ï±ï¿½`}
                 </button>
               </div>
             </div>
@@ -777,15 +777,15 @@ export default function MemberApplyPage() {
         </div>
       )}
 
-      {/* ¦¡¦¡ ³» ½ÅÃ» ¸ñ·Ï ¦¡¦¡ */}
+      {/* ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Ã» ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ */}
       {tab === 'list' && (
         <div style={{ padding: '1.25rem', paddingBottom: '6rem' }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>ºÒ·¯¿À´Â Áß...</div>
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>ï¿½Ò·ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½...</div>
           ) : myApps.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
               <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>??</div>
-              <p style={{ fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>½ÅÃ» ³»¿ªÀÌ ¾ø½À´Ï´Ù</p>
+              <p style={{ fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>ï¿½ï¿½Ã» ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -796,12 +796,12 @@ export default function MemberApplyPage() {
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                          {app.coach?.name} ÄÚÄ¡
-                          {app.lesson_type && <span> ¡¤ {app.lesson_type}</span>}
+                          {app.coach?.name} ï¿½ï¿½Ä¡
+                          {app.lesson_type && <span> ï¿½ï¿½ {app.lesson_type}</span>}
                           {app.applicant_name && <span style={{ color: '#6b7280', fontWeight: 400 }}> ({app.applicant_name})</span>}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>
-                          {app.month?.year}³â {app.month?.month}¿ù ¡¤ {app.duration_minutes}ºÐ
+                          {app.month?.year}ï¿½ï¿½ {app.month?.month}ï¿½ï¿½ ï¿½ï¿½ {app.duration_minutes}ï¿½ï¿½
                         </div>
                       </div>
                       <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: '9999px', background: st.bg, color: st.color, whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -810,25 +810,25 @@ export default function MemberApplyPage() {
                     </div>
                     {(app.coach_note || app.admin_note) && (
                       <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#6b7280' }}>
-                        {app.coach_note && <div>ÄÚÄ¡: {app.coach_note}</div>}
-                        {app.admin_note && <div>°ü¸®ÀÚ: {app.admin_note}</div>}
+                        {app.coach_note && <div>ï¿½ï¿½Ä¡: {app.coach_note}</div>}
+                        {app.admin_note && <div>ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½: {app.admin_note}</div>}
                       </div>
                     )}
                     <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '0.5rem' }}>
-                      ½ÅÃ»ÀÏ: {new Date(app.requested_at).toLocaleDateString('ko-KR')}
+                      ï¿½ï¿½Ã»ï¿½ï¿½: {new Date(app.requested_at).toLocaleDateString('ko-KR')}
                     </div>
-                    {/* ? Ãß°¡: pending_coach »óÅÂ¿¡¼­¸¸ Ãë¼Ò ¹öÆ° Ç¥½Ã */}
+                    {/* ? ï¿½ß°ï¿½: pending_coach ï¿½ï¿½ï¿½Â¿ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½Æ° Ç¥ï¿½ï¿½ */}
                     {app.status === 'pending_coach' && (
                       <button
                         onClick={() => handleCancel(app.id)}
                         disabled={cancelling === app.id}
                         style={{ marginTop: '0.625rem', width: '100%', padding: '0.5rem', borderRadius: '0.625rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontSize: '0.78rem', fontWeight: 700, cursor: cancelling === app.id ? 'not-allowed' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                        {cancelling === app.id ? 'Ãë¼Ò Áß...' : '? ½ÅÃ» Ãë¼Ò'}
+                        {cancelling === app.id ? 'ï¿½ï¿½ï¿½ ï¿½ï¿½...' : '? ï¿½ï¿½Ã» ï¿½ï¿½ï¿½'}
                       </button>
                     )}
                     {app.status === 'pending_admin' && (
                       <div style={{ marginTop: '0.5rem', padding: '0.4rem 0.75rem', background: '#eff6ff', borderRadius: '0.5rem', fontSize: '0.72rem', color: '#1d4ed8' }}>
-                        ?? ÄÚÄ¡ È®ÀÎ ¿Ï·á. °ü¸®ÀÚ ÃÖÁ¾ ½ÂÀÎ ´ë±â ÁßÀÔ´Ï´Ù. Ãë¼Ò´Â °ü¸®ÀÚ¿¡°Ô ¹®ÀÇÇÏ¼¼¿ä.
+                        ?? ï¿½ï¿½Ä¡ È®ï¿½ï¿½ ï¿½Ï·ï¿½. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ô´Ï´ï¿½. ï¿½ï¿½Ò´ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ú¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï¼ï¿½ï¿½ï¿½.
                       </div>
                     )}
                   </div>
