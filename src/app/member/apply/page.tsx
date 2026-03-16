@@ -578,17 +578,9 @@ export default function MemberApplyPage() {
                     const isBase = dow === selectedDate?.getDay()
                     const active = isBase || repeatDays.includes(dow)
 
-                    // 매주 반복 휴무 요일만 숨김 처리
-                    const isWeeklyBlocked = !isBase && coachBlocks.some(b =>
-                      b.repeat_weekly && b.day_of_week === dow
-                    )
-
-                    // 매주 반복 휴무 요일은 숨김
-                    if (!isBase && !active && isWeeklyBlocked) return null
-
                     return (
-                      <button key={dow} onClick={() => toggleRepeatDay(dow)} disabled={isBase || isWeeklyBlocked}
-                        style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: `1.5px solid ${active ? '#16A34A' : '#e5e7eb'}`, background: active ? '#16A34A' : '#f3f4f6', color: active ? 'white' : '#6b7280', fontSize: '0.8rem', fontWeight: 700, cursor: (isBase || isWeeklyBlocked) ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                      <button key={dow} onClick={() => toggleRepeatDay(dow)} disabled={isBase}
+                        style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: `1.5px solid ${active ? '#16A34A' : '#e5e7eb'}`, background: active ? '#16A34A' : '#f3f4f6', color: active ? 'white' : '#6b7280', fontSize: '0.8rem', fontWeight: 700, cursor: isBase ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
                         {day}
                       </button>
                     )
