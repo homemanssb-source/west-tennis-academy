@@ -1,4 +1,5 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+﻿// src/app/api/lesson-slots/route.ts
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
@@ -12,7 +13,6 @@ export async function GET(req: NextRequest) {
   const to      = searchParams.get('to')
   const coachId = searchParams.get('coach_id')
 
-  // ✅ FIX #14: from만 있고 to가 없으면 "undefinedT23:59:59" 생성되는 버그 수정
   if (!date && (!from || !to)) {
     return NextResponse.json({ error: 'date 또는 from+to 파라미터 필요' }, { status: 400 })
   }
@@ -48,13 +48,14 @@ export async function GET(req: NextRequest) {
     ? data.filter((s: any) => s.lesson_plan?.coach?.id === coachId)
     : data
 
+  // pending 신청도 포함 (정원 카운트에 반영)
   const { data: appData } = await supabaseAdmin
     .from('lesson_applications')
     .select('id, requested_at, status, coach_id')
     .eq('coach_id', coachId ?? '')
     .gte('requested_at', startStr)
     .lte('requested_at', endStr)
-    .in('status', ['pending_coach','pending_admin','approved'])
+    .in('status', ['pending_coach', 'pending_admin', 'approved'])
 
   const appSlots = (appData ?? []).map((a: any) => ({
     id: a.id,
@@ -65,5 +66,24 @@ export async function GET(req: NextRequest) {
     lesson_plan: null,
   }))
 
-  return NextResponse.json([...filtered, ...appSlots])
+  // ✅ 추가: 시간대별 슬롯 카운트 맵 생성
+  // → isBusy에서 "몇 명이 있는지"를 알 수 있도록
+  // 형식: { "2026-03-16T09:00": 2, ... }
+  const allSlots = [...filtered, ...appSlots]
+  const countMap: Record<string, number> = {}
+  allSlots.forEach((s: any) => {
+    if (s.status === 'cancelled') return
+    const key = s.scheduled_at?.slice(0, 16) // "2026-03-16T09:00"
+    if (key) countMap[key] = (countMap[key] ?? 0) + 1
+  })
+
+  // 각 슬롯에 slot_count 필드 추가
+  const result = allSlots.map((s: any) => ({
+    ...s,
+    slot_count: s.status !== 'cancelled'
+      ? (countMap[s.scheduled_at?.slice(0, 16)] ?? 1)
+      : 0,
+  }))
+
+  return NextResponse.json(result)
 }

@@ -6,9 +6,11 @@ import MemberBottomNav from '@/components/MemberBottomNav'
 
 interface Coach        { id: string; name: string }
 interface Month        { id: string; year: number; month: number }
-interface Program      { id: string; name: string; unit_minutes: number; coach_id: string | null; default_amount: number }
+// ✅ max_students 추가
+interface Program      { id: string; name: string; unit_minutes: number; coach_id: string | null; default_amount: number; max_students: number }
 interface FamilyMember { id: string; name: string; birth_date: string | null }
-interface SlotInfo     { scheduled_at: string; status: string }
+// ✅ slot_count 추가 (API에서 반환)
+interface SlotInfo     { scheduled_at: string; status: string; slot_count?: number }
 interface BlockInfo    { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
 interface MyApp {
   id: string; requested_at: string; duration_minutes: number
@@ -27,13 +29,20 @@ const STATUS: Record<string, { label: string; color: string; bg: string }> = {
   rejected:      { label: '거절',         color: '#b91c1c', bg: '#fee2e2' },
 }
 
+// ✅ 수정: busySlots + coachBlocks + maxStudents 받아서 충돌 날짜 자동 제외
 function generateDates(
   year: number, month: number, startDate: Date,
   weekdays: number[], timeStr: string,
-  dayTimesMap?: Record<number, string>
-): Date[] {
-  const result: Date[] = []
+  dayTimesMap?: Record<number, string>,
+  busySlots?: SlotInfo[],
+  coachBlocks?: BlockInfo[],
+  maxStudents?: number
+): { dates: Date[]; skipped: { date: string; time: string; reason: string }[] } {
+  const dates: Date[] = []
+  const skipped: { date: string; time: string; reason: string }[] = []
   const lastDay = new Date(year, month, 0).getDate()
+  const max = maxStudents ?? 1
+
   for (let d = startDate.getDate(); d <= lastDay; d++) {
     const date = new Date(year, month - 1, d)
     const dow = date.getDay()
@@ -42,9 +51,33 @@ function generateDates(
     if (!tStr) continue
     const [h, m] = tStr.split(':').map(Number)
     date.setHours(h, m, 0, 0)
-    result.push(date)
+
+    const ymd = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+
+    // 휴무 체크
+    const blocked = (coachBlocks ?? []).some(b => {
+      if (b.repeat_weekly) return b.day_of_week === dow
+      return b.block_date === ymd
+    })
+    if (blocked) {
+      skipped.push({ date: ymd, time: tStr, reason: '코치 휴무' })
+      continue
+    }
+
+    // 정원 체크 (busySlots에서 해당 시간대 카운트)
+    const slotKey = `${ymd}T${tStr}`
+    const count = (busySlots ?? []).filter(s => {
+      if (s.status === 'cancelled') return false
+      return s.scheduled_at.startsWith(slotKey)
+    }).length
+    if (count >= max) {
+      skipped.push({ date: ymd, time: tStr, reason: `정원 초과 (${count}/${max}명)` })
+      continue
+    }
+
+    dates.push(date)
   }
-  return result
+  return { dates, skipped }
 }
 
 function fmtDate(d: Date) {
@@ -60,8 +93,8 @@ export default function MemberApplyPage() {
 
   const [coaches,     setCoaches]     = useState<Coach[]>([])
   const [months,      setMonths]      = useState<Month[]>([])
-  const [allPrograms, setAllPrograms] = useState<Program[]>([])  // 전체 보관
-  const [programs,    setPrograms]    = useState<Program[]>([])  // 코치 선택 후 표시용
+  const [allPrograms, setAllPrograms] = useState<Program[]>([])
+  const [programs,    setPrograms]    = useState<Program[]>([])
   const [family,      setFamily]      = useState<FamilyMember[]>([])
   const [myApps,      setMyApps]      = useState<MyApp[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -80,11 +113,14 @@ export default function MemberApplyPage() {
   const [selectedTime,   setSelectedTime]   = useState('')
   const [dayTimes,       setDayTimes]       = useState<Record<number, string>>({})
   const [repeatDays,     setRepeatDays]     = useState<number[]>([])
+  // ✅ 수정: generatedDates → { dates, skipped } 구조로 변경
   const [generatedDates, setGeneratedDates] = useState<Date[]>([])
+  const [skippedDates,   setSkippedDates]   = useState<{ date: string; time: string; reason: string }[]>([])
   const [excludedIdxs,   setExcludedIdxs]   = useState<Set<number>>(new Set())
   const [saving,         setSaving]         = useState(false)
+  // ✅ 추가: 취소 중 상태
+  const [cancelling,     setCancelling]     = useState<string | null>(null)
 
-  // 제외된 날짜를 뺀 최종 신청 목록
   const finalDates = generatedDates.filter((_, i) => !excludedIdxs.has(i))
 
   useEffect(() => {
@@ -100,7 +136,6 @@ export default function MemberApplyPage() {
       if (mList.length > 0) setMonthId(mList[0].id)
       const pList = Array.isArray(p) ? p : []
       setAllPrograms(pList)
-      // 초기: 공통 프로그램만 표시 (코치 선택 전)
       setPrograms(pList.filter((x: Program) => x.coach_id === null))
       setFamily(Array.isArray(f) ? f : [])
     })
@@ -121,7 +156,6 @@ export default function MemberApplyPage() {
   const selectedFamilyM = family.find(f => f.id === familyId)
   const pendingAppCount = myApps.filter(a => ['pending_coach','pending_admin'].includes(a.status)).length
 
-  // 주간 달력 계산
   const today = new Date(); today.setHours(0,0,0,0)
   const baseMonday = (() => {
     const d = new Date(today)
@@ -139,19 +173,16 @@ export default function MemberApplyPage() {
     '15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30',
     '19:00','19:30','20:00','20:30','21:00']
 
-  // ── 코치 변경 시 → 해당 코치 프로그램 필터링 ──────────────
   useEffect(() => {
     if (!coachId) {
-      // 코치 미선택: 공통 프로그램만
       setPrograms(allPrograms.filter(x => x.coach_id === null))
       setProgramId('')
       return
     }
-    // 코치 선택: API에서 공통 + 해당 코치 전용 합쳐서 가져옴
     fetch(`/api/programs?coach_id=${coachId}`)
       .then(r => r.json())
       .then(d => setPrograms(Array.isArray(d) ? d : []))
-    setProgramId('') // 코치 바뀌면 선택 초기화
+    setProgramId('')
   }, [coachId])
 
   useEffect(() => {
@@ -178,9 +209,7 @@ export default function MemberApplyPage() {
       } else {
         if (b.block_date !== ymd) return false
       }
-      // 종일 휴무: 시작/종료 모두 없음
       if (!b.block_start && !b.block_end) return true
-      // 시간 범위 휴무: 하나라도 있으면 체크 (없는 쪽은 하루 시작/끝으로 처리)
       const bs = b.block_start
         ? (Number(b.block_start.split(':')[0])*60 + Number(b.block_start.split(':')[1]))
         : 0
@@ -191,17 +220,21 @@ export default function MemberApplyPage() {
     })
   }
 
+  // ✅ 수정: slot_count 기반 정원 체크
   const isBusy = (date: Date, tStr: string) => {
     const toKST = (d: Date) => new Date(d.getTime() + 9*60*60*1000)
     const kstDate = toKST(date)
     const ymd = kstDate.toISOString().split('T')[0]
-    return busySlots.some(s => {
+    const maxStudents = selectedProgram?.max_students ?? 1
+
+    const matchingSlots = busySlots.filter(s => {
       if (s.status === 'cancelled') return false
       const sd = toKST(new Date(s.scheduled_at))
       const sdYmd  = sd.toISOString().split('T')[0]
       const sdTime = `${String(sd.getUTCHours()).padStart(2,'0')}:${String(sd.getUTCMinutes()).padStart(2,'0')}`
       return sdYmd === ymd && sdTime === tStr
     })
+    return matchingSlots.length >= maxStudents
   }
 
   const isPending = (date: Date, tStr: string) => {
@@ -214,16 +247,22 @@ export default function MemberApplyPage() {
     )
   }
 
-  // 요일 변경 시 날짜 재생성 + 제외목록 초기화
+  // ✅ 수정: generateDates에 busySlots/coachBlocks/maxStudents 전달
   useEffect(() => {
     if (!selectedDate || !selectedMonth) return
     const allDows   = Array.from(new Set([...repeatDays, selectedDate.getDay()]))
     const dtMap: Record<number, string> = { ...dayTimes }
     if (!dtMap[selectedDate.getDay()]) dtMap[selectedDate.getDay()] = selectedTime
-    const dates = generateDates(selectedMonth.year, selectedMonth.month, selectedDate, allDows, selectedTime, dtMap)
+    const maxStudents = selectedProgram?.max_students ?? 1
+    const { dates, skipped } = generateDates(
+      selectedMonth.year, selectedMonth.month, selectedDate,
+      allDows, selectedTime, dtMap,
+      busySlots, coachBlocks, maxStudents
+    )
     setGeneratedDates(dates)
+    setSkippedDates(skipped)
     setExcludedIdxs(new Set())
-  }, [repeatDays, dayTimes, selectedDate, selectedTime, selectedMonth])
+  }, [repeatDays, dayTimes, selectedDate, selectedTime, selectedMonth, busySlots, coachBlocks, selectedProgram])
 
   const toggleRepeatDay = (dow: number) => {
     if (dow === selectedDate?.getDay()) return
@@ -241,7 +280,6 @@ export default function MemberApplyPage() {
   const handleSubmit = async () => {
     if (!finalDates.length) return
     setSaving(true)
-    // ✅ API가 기대하는 string[] 형식으로 전송
     const slots = finalDates.map(d => {
       const ymd = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
       const hm  = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
@@ -265,6 +303,18 @@ export default function MemberApplyPage() {
     if (d.error) { alert(d.error); return }
     alert(`${finalDates.length}회 수업 신청 완료!\n코치 확인 후 안내드립니다.`)
     setTab('list'); setStep(1); loadMyApps()
+  }
+
+  // ✅ 추가: 신청 취소
+  const handleCancel = async (appId: string) => {
+    if (!confirm('수업 신청을 취소하시겠습니까?\n취소 후 재신청이 필요합니다.')) return
+    setCancelling(appId)
+    const res = await fetch(`/api/lesson-applications/${appId}`, { method: 'DELETE' })
+    const d = await res.json()
+    setCancelling(null)
+    if (!res.ok) { alert(d.error ?? '취소 실패'); return }
+    alert('신청이 취소되었습니다.')
+    loadMyApps()
   }
 
   const s = {
@@ -348,7 +398,6 @@ export default function MemberApplyPage() {
                       {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
                     </select>
                   </div>
-                  {/* 프로그램 선택 - 드롭다운 */}
                   <div>
                     <label style={s.label}>
                       프로그램
@@ -358,7 +407,6 @@ export default function MemberApplyPage() {
                         </span>
                       )}
                     </label>
-
                     {!coachId ? (
                       <div style={{ padding: '0.625rem 0.875rem', background: '#f9fafb', borderRadius: '0.625rem', border: '1.5px dashed #e5e7eb', fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center' }}>
                         👆 먼저 코치를 선택하면 수업 프로그램이 표시됩니다
@@ -368,30 +416,28 @@ export default function MemberApplyPage() {
                         ⚠️ 등록된 수업 프로그램이 없습니다
                       </div>
                     ) : (
-                      <select
-                        style={s.input}
-                        value={programId}
-                        onChange={e => {
-                          const p = programs.find(x => x.id === e.target.value)
-                          if (p) { setProgramId(p.id); setDuration(p.unit_minutes || 60) }
-                          else { setProgramId(''); setDuration(60) }
-                        }}>
+                      <select style={s.input} value={programId} onChange={e => {
+                        const p = programs.find(x => x.id === e.target.value)
+                        if (p) { setProgramId(p.id); setDuration(p.unit_minutes || 60) }
+                        else { setProgramId(''); setDuration(60) }
+                      }}>
                         <option value="">프로그램을 선택하세요</option>
                         {programs.map(p => (
                           <option key={p.id} value={p.id}>
-                            {p.coach_id ? '★ ' : ''}{p.name} ({p.unit_minutes}분)
+                            {p.coach_id ? '★ ' : ''}{p.name} ({p.unit_minutes}분{p.max_students > 1 ? ` · 최대 ${p.max_students}명` : ''})
                           </option>
                         ))}
                       </select>
                     )}
-
-                    {/* 선택된 프로그램 정보 배너 */}
                     {programId && (
                       <div style={{ marginTop: '0.5rem', padding: '0.625rem 0.875rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.625rem', fontSize: '0.78rem', color: '#15803d', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span>✅</span>
                         <span>
                           <strong>{programs.find(p => p.id === programId)?.name}</strong>
-                          {' · '}{programs.find(p => p.id === programId)?.unit_minutes}분 수업
+                          {' · '}{programs.find(p => p.id === programId)?.unit_minutes}분
+                          {(programs.find(p => p.id === programId)?.max_students ?? 1) > 1 &&
+                            <span style={{ color: '#1d4ed8' }}> · 그룹 최대 {programs.find(p => p.id === programId)?.max_students}명</span>
+                          }
                         </span>
                       </div>
                     )}
@@ -406,9 +452,17 @@ export default function MemberApplyPage() {
             </div>
           )}
 
-          {/* ── STEP 2: 달력 ── */}
+          {/* ── STEP 2: 날짜 선택 ── */}
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* ✅ 추가: STEP 2 안내 배너 */}
+              <div style={{ padding: '0.75rem 1rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.875rem', fontSize: '0.8rem', color: '#1d4ed8' }}>
+                <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 첫 수업 날짜와 시간을 선택하세요</div>
+                <div style={{ color: '#3b82f6', lineHeight: 1.5 }}>
+                  이 날짜를 기준으로 반복 수업 일정이 자동 생성됩니다.<br/>
+                  다음 단계에서 추가 요일을 선택할 수 있어요.
+                </div>
+              </div>
               <div style={s.card}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <button onClick={() => setWeekOffset(w => w-1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>← 이전</button>
@@ -419,7 +473,7 @@ export default function MemberApplyPage() {
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.625rem', fontSize: '0.7rem', color: '#6b7280' }}>
                   <span style={{ color: '#15803d' }}>○ 가능</span>
-                  <span style={{ color: '#b91c1c' }}>✕ 수업있음</span>
+                  <span style={{ color: '#b91c1c' }}>✕ {(selectedProgram?.max_students ?? 1) > 1 ? '정원마감' : '수업있음'}</span>
                   <span style={{ color: '#854d0e' }}>… 신청대기</span>
                   <span style={{ color: '#7c3aed' }}>휴 코치휴무</span>
                 </div>
@@ -478,6 +532,17 @@ export default function MemberApplyPage() {
           {/* ── STEP 3: 반복 설정 ── */}
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* ✅ 추가: STEP 3 안내 배너 */}
+              <div style={{ padding: '0.75rem 1rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', fontSize: '0.8rem', color: '#15803d' }}>
+                <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                  🔁 첫 수업: {selectedDate && fmtDate(selectedDate)} {selectedTime}
+                </div>
+                <div style={{ color: '#16a34a', lineHeight: 1.5 }}>
+                  이 요일은 이미 포함되어 있어요.<br/>
+                  <strong>추가 요일</strong>을 선택하면 해당 요일도 매주 신청돼요. (선택 안 해도 됩니다)<br/>
+                  휴무일이나 정원이 찬 날짜는 자동으로 제외됩니다.
+                </div>
+              </div>
               <div style={s.card}>
                 <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', color: '#111827' }}>반복 요일 선택</h2>
                 <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.875rem' }}>
@@ -505,7 +570,6 @@ export default function MemberApplyPage() {
                   </div>
                 )}
 
-                {/* 요일 선택 버튼 */}
                 <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1rem' }}>
                   {DAYS_LABEL.map((day, idx) => {
                     const dow    = idx === 6 ? 0 : idx + 1
@@ -520,7 +584,7 @@ export default function MemberApplyPage() {
                   })}
                 </div>
 
-                {/* ── 자동 생성 일정 목록 ── */}
+                {/* 자동 생성 일정 */}
                 {generatedDates.length > 0 ? (
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
@@ -535,7 +599,7 @@ export default function MemberApplyPage() {
                         const excluded = excludedIdxs.has(i)
                         const rank = generatedDates.slice(0, i).filter((_, j) => !excludedIdxs.has(j)).length + 1
                         return (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.625rem', borderRadius: '0.5rem', background: excluded ? '#fef2f2' : '#f0fdf4', border: `1px solid ${excluded ? '#fecaca' : '#bbf7d0'}`, opacity: excluded ? 0.65 : 1, transition: 'all 0.15s' }}>
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.625rem', borderRadius: '0.5rem', background: excluded ? '#fef2f2' : '#f0fdf4', border: `1px solid ${excluded ? '#fecaca' : '#bbf7d0'}`, opacity: excluded ? 0.65 : 1 }}>
                             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: excluded ? '#9ca3af' : '#15803d', minWidth: '28px', textDecoration: excluded ? 'line-through' : 'none' }}>
                               {excluded ? '제외' : `${rank}회`}
                             </span>
@@ -556,10 +620,23 @@ export default function MemberApplyPage() {
                         🔄 전체 복원
                       </button>
                     )}
+                    {/* ✅ 추가: 자동 제외된 날짜 안내 */}
+                    {skippedDates.length > 0 && (
+                      <div style={{ marginTop: '0.75rem', padding: '0.625rem 0.875rem', background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '0.625rem' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#854d0e', marginBottom: '4px' }}>
+                          ⚠️ 아래 날짜는 자동 제외되었습니다
+                        </div>
+                        {skippedDates.map((s, i) => (
+                          <div key={i} style={{ fontSize: '0.72rem', color: '#92400e', lineHeight: 1.6 }}>
+                            • {s.date} {s.time} — {s.reason}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '1.5rem', color: '#9ca3af', background: '#f9fafb', borderRadius: '0.75rem', fontSize: '0.85rem' }}>
-                    반복 요일을 선택해주세요
+                    선택한 날짜 기준으로 일정이 생성됩니다
                   </div>
                 )}
               </div>
@@ -661,6 +738,20 @@ export default function MemberApplyPage() {
                     <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                       신청일: {new Date(app.requested_at).toLocaleDateString('ko-KR')}
                     </div>
+                    {/* ✅ 추가: pending_coach 상태에서만 취소 버튼 표시 */}
+                    {app.status === 'pending_coach' && (
+                      <button
+                        onClick={() => handleCancel(app.id)}
+                        disabled={cancelling === app.id}
+                        style={{ marginTop: '0.625rem', width: '100%', padding: '0.5rem', borderRadius: '0.625rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontSize: '0.78rem', fontWeight: 700, cursor: cancelling === app.id ? 'not-allowed' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                        {cancelling === app.id ? '취소 중...' : '✕ 신청 취소'}
+                      </button>
+                    )}
+                    {app.status === 'pending_admin' && (
+                      <div style={{ marginTop: '0.5rem', padding: '0.4rem 0.75rem', background: '#eff6ff', borderRadius: '0.5rem', fontSize: '0.72rem', color: '#1d4ed8' }}>
+                        ℹ️ 코치 확인 완료. 관리자 최종 승인 대기 중입니다. 취소는 관리자에게 문의하세요.
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -669,7 +760,6 @@ export default function MemberApplyPage() {
         </div>
       )}
 
-      {/* 하단 네비 */}
       <MemberBottomNav />
     </div>
   )
