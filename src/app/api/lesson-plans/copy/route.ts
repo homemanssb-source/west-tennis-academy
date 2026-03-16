@@ -111,7 +111,6 @@ export async function POST(req: NextRequest) {
   let createdSlots = 0
   let conflictSlots = 0
   let skippedSlots = 0
-  const planErrors: string[] = []
 
   for (const plan of sourcePlans) {
     const planKey = `${plan.member_id}_${plan.coach_id}`
@@ -141,10 +140,7 @@ export async function POST(req: NextRequest) {
         .select('id')
         .single()
 
-      if (planErr || !newPlan) {
-        planErrors.push(planErr?.message ?? 'unknown')
-        continue
-      }
+      if (planErr || !newPlan) continue
       newPlanId = newPlan.id
       copiedPlans++
     }
@@ -153,13 +149,14 @@ export async function POST(req: NextRequest) {
     const slots = (plan.slots ?? []).filter((s: any) => !s.is_makeup && !['cancelled','draft'].includes(s.status))
     if (slots.length === 0) continue
 
-    // 요일+시간 패턴 카운트
+    // 요일+시간 패턴 카운트 — KST 변환 후 추출
     const patternCount: Record<string, { count: number; duration: number }> = {}
     for (const slot of slots) {
-      const d = new Date(slot.scheduled_at)
-      const dow = d.getDay()
-      const hh  = String(d.getHours()).padStart(2, '0')
-      const mm  = String(d.getMinutes()).padStart(2, '0')
+      const utc = new Date(slot.scheduled_at)
+      const kst = new Date(utc.getTime() + 9 * 60 * 60 * 1000)
+      const dow = kst.getUTCDay()
+      const hh  = String(kst.getUTCHours()).padStart(2, '0')
+      const mm  = String(kst.getUTCMinutes()).padStart(2, '0')
       const key = `${dow}_${hh}:${mm}`
       if (!patternCount[key]) patternCount[key] = { count: 0, duration: slot.duration_minutes }
       patternCount[key].count++
@@ -257,11 +254,6 @@ export async function POST(req: NextRequest) {
     toMonthId:    to_month_id,
     draftOpen:    createdSlots > 0,
     message:      parts.join(', '),
-    _debug: {
-      sourcePlansCount: sourcePlans.length,
-      firstPlanId: sourcePlans[0]?.id,
-      firstPlanSlots: sourcePlans[0]?.slots?.length,
-      planErrors,
-    }
+
   })
 }

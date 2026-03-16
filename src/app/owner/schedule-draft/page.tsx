@@ -306,17 +306,20 @@ function SlotCard({ slot, onConfirm, onDelete, saving }: {
 }) {
   const { full } = fmtSlot(slot.scheduled_at)
   const isConflict = slot.has_conflict
+  const memberName = (slot as any).lesson_plan?.member?.name ?? slot.member_name ?? '-'
+  const coachName  = (slot as any).lesson_plan?.coach?.name  ?? slot.coach_name  ?? '-'
+  const lessonType = (slot as any).lesson_plan?.lesson_type  ?? slot.lesson_type  ?? ''
 
   return (
     <div style={{ background: 'white', border: `1.5px solid ${isConflict ? '#fecaca' : '#e5e7eb'}`, borderLeft: `4px solid ${isConflict ? '#b91c1c' : '#16A34A'}`, borderRadius: '0.875rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px' }}>
           {isConflict && <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>휴무충돌</span>}
-          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>{slot.member_name}</span>
-          <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{slot.coach_name} 코치</span>
+          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>{memberName}</span>
+          <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{coachName} 코치</span>
         </div>
         <div style={{ fontSize: '0.8rem', color: isConflict ? '#b91c1c' : '#374151', fontWeight: isConflict ? 700 : 400, fontFamily: 'Noto Sans KR, sans-serif' }}>
-          📅 {full} · {slot.lesson_type} · {slot.duration_minutes}분
+          📅 {full} · {lessonType} · {slot.duration_minutes}분
         </div>
       </div>
       <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
