@@ -43,10 +43,14 @@ export async function POST(req: NextRequest) {
 
   if (coach_id) query = query.eq('coach_id', coach_id)
 
-  const { data: sourcePlans } = await query
+  const { data: sourcePlans, error: plansErr } = await query
+
+  console.log('[copy] from_month_id:', from_month_id)
+  console.log('[copy] sourcePlans count:', sourcePlans?.length, 'error:', plansErr?.message)
+  console.log('[copy] first plan slots:', JSON.stringify(sourcePlans?.[0]?.slots?.slice(0,2)))
 
   if (!sourcePlans || sourcePlans.length === 0) {
-    return NextResponse.json({ error: '복사할 플랜이 없습니다' }, { status: 404 })
+    return NextResponse.json({ error: '복사할 플랜이 없습니다', debug: plansErr?.message }, { status: 404 })
   }
 
   // ── 대상 월에 이미 있는 플랜 확인 (중복 방지) ────────────────────────
