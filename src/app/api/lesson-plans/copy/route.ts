@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
   let createdSlots = 0
   let conflictSlots = 0
   let skippedSlots = 0
+  const planErrors: string[] = []
 
   for (const plan of sourcePlans) {
     const planKey = `${plan.member_id}_${plan.coach_id}`
@@ -140,7 +141,10 @@ export async function POST(req: NextRequest) {
         .select('id')
         .single()
 
-      if (planErr || !newPlan) continue
+      if (planErr || !newPlan) {
+        planErrors.push(planErr?.message ?? 'unknown')
+        continue
+      }
       newPlanId = newPlan.id
       copiedPlans++
     }
@@ -257,6 +261,7 @@ export async function POST(req: NextRequest) {
       sourcePlansCount: sourcePlans.length,
       firstPlanId: sourcePlans[0]?.id,
       firstPlanSlots: sourcePlans[0]?.slots?.length,
+      planErrors,
     }
   })
 }
