@@ -1,10 +1,13 @@
 // src/app/api/member-draft/route.ts
+// ✅ [FIX] plan 조회 .single() → .maybeSingle() + 복수 플랜 대응
+// ✅ [FIX] 수정 요청 알림을 코치 + 운영자/admin 모두에게 발송
+// ✅ [FIX] 중복 요청 방지 쿼리 안정화
+// ✅ [NEW] 아이디어: 'change' 요청 시 희망 날짜(hope_date) 필드 수신
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
 // GET /api/member-draft?month_id=xxx
-// 회원 본인의 다음달 draft 슬롯 조회 (draft_open=true인 달만)
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session || session.role !== 'member') {
@@ -14,7 +17,6 @@ export async function GET(req: NextRequest) {
   const monthId = req.nextUrl.searchParams.get('month_id')
   if (!monthId) return NextResponse.json({ error: 'month_id 필요' }, { status: 400 })
 
-  // draft_open 여부 확인
   const { data: month } = await supabaseAdmin
     .from('months')
     .select('id, year, month, draft_open')
@@ -24,7 +26,7 @@ export async function GET(req: NextRequest) {
   if (!month) return NextResponse.json({ error: '해당 월 없음' }, { status: 404 })
   if (!month.draft_open) return NextResponse.json({ draftOpen: false, slots: [] })
 
-  // 본인 플랜 조회
+  // 본인 플랜 전체 조회 (복수 플랜 지원)
   const { data: plans } = await supabaseAdmin
     .from('lesson_plans')
     .select('id, lesson_type, unit_minutes, coach:coach_id(id, name)')
@@ -47,7 +49,7 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 기존 수정 요청 조회 (이 달에 대한 pending 요청)
+  // 기존 수정 요청 조회
   const { data: requests } = await supabaseAdmin
     .from('lesson_applications')
     .select('id, requested_at, request_type, draft_slot_id, status, coach_note, admin_note')
@@ -56,13 +58,11 @@ export async function GET(req: NextRequest) {
     .in('request_type', ['change', 'exclude', 'add'])
     .in('status', ['pending_coach', 'pending_admin', 'approved', 'rejected'])
 
-  // 슬롯에 플랜 정보 합치기
   const planMap = new Map(plans.map((p: any) => [p.id, p]))
   const slotsWithPlan = (slots ?? []).map((s: any) => ({
     ...s,
     lesson_type:    planMap.get(s.lesson_plan_id)?.lesson_type ?? '',
     coach_name:     planMap.get(s.lesson_plan_id)?.coach?.name ?? '',
-    // 이 슬롯에 대한 기존 요청 여부
     existing_request: (requests ?? []).find((r: any) => r.draft_slot_id === s.id) ?? null,
   }))
 
@@ -75,14 +75,20 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/member-draft
-// 회원이 draft 슬롯에 대한 수정 요청
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session || session.role !== 'member') {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
 
-  const { month_id, request_type, draft_slot_id, requested_at, memo } = await req.json()
+  const {
+    month_id,
+    request_type,
+    draft_slot_id,
+    requested_at,
+    memo,
+    hope_date,    // ✅ [NEW] 변경 희망 날짜 (change 요청 시)
+  } = await req.json()
 
   if (!month_id || !request_type) {
     return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
@@ -113,19 +119,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 본인 플랜에서 coach_id 조회
-  const { data: plan } = await supabaseAdmin
-    .from('lesson_plans')
-    .select('id, coach_id')
-    .eq('member_id', session.id)
-    .eq('month_id', month_id)
-    .single()
+  // ✅ [FIX] 복수 플랜 대응: .single() → 첫 번째 플랜 사용 + draft_slot_id로 정확한 플랜 찾기
+  let plan: any = null
+
+  if (draft_slot_id) {
+    // 슬롯이 있으면 슬롯의 lesson_plan_id로 코치 정보 조회 (정확)
+    const { data: slotPlan } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('lesson_plan:lesson_plan_id(id, coach_id)')
+      .eq('id', draft_slot_id)
+      .single()
+    plan = (slotPlan?.lesson_plan as any) ?? null
+  } else {
+    // add 요청처럼 슬롯 없는 경우: 첫 번째 플랜 사용
+    const { data: plans } = await supabaseAdmin
+      .from('lesson_plans')
+      .select('id, coach_id')
+      .eq('member_id', session.id)
+      .eq('month_id', month_id)
+      .limit(1)
+    plan = plans?.[0] ?? null
+  }
 
   if (!plan) {
     return NextResponse.json({ error: '해당 월 플랜 없음' }, { status: 404 })
   }
 
-  // 중복 요청 방지 (같은 슬롯에 이미 pending 요청 있으면 거절)
+  // 중복 요청 방지 (같은 슬롯에 이미 pending 요청)
   if (draft_slot_id) {
     const { data: existing } = await supabaseAdmin
       .from('lesson_applications')
@@ -140,44 +160,74 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 요청 생성
+  // ✅ [NEW] hope_date를 admin_note에 포함
+  const typeLabel = request_type === 'add' ? '날짜 추가' :
+                    request_type === 'change' ? '날짜 변경' : '날짜 제외'
+
+  const adminNoteparts: string[] = []
+  if (memo) adminNoteparts.push(memo)
+  if (hope_date && request_type === 'change') {
+    adminNoteparts.push(`희망 날짜: ${hope_date}`)
+  }
+
   const { data, error } = await supabaseAdmin
     .from('lesson_applications')
     .insert({
-      member_id:     session.id,
-      coach_id:      plan.coach_id,
+      member_id:        session.id,
+      coach_id:         plan.coach_id,
       month_id,
       request_type,
-      draft_slot_id: draft_slot_id ?? null,
-      requested_at:  requested_at ?? new Date().toISOString(),
-      status:        'pending_coach',
-      lesson_type:   request_type === 'add' ? '추가요청' :
-                     request_type === 'change' ? '날짜변경요청' : '제외요청',
+      draft_slot_id:    draft_slot_id ?? null,
+      requested_at:     requested_at ?? new Date().toISOString(),
+      status:           'pending_coach',
+      lesson_type:      request_type === 'add' ? '추가요청' :
+                        request_type === 'change' ? '날짜변경요청' : '제외요청',
       duration_minutes: 60,
-      admin_note:    memo ?? null,
+      admin_note:       adminNoteparts.length > 0 ? adminNoteparts.join(' / ') : null,
     })
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 운영자/코치에게 알림
-  const typeLabel = request_type === 'add' ? '날짜 추가' :
-                    request_type === 'change' ? '날짜 변경' : '날짜 제외'
+  // ✅ [FIX] 알림: 코치 + 운영자/admin 모두에게 발송
+  const notifBody = `${session.name}님이 수업 ${typeLabel}을 요청했습니다.${hope_date && request_type === 'change' ? ` (희망 날짜: ${hope_date})` : ''}`
 
-  await supabaseAdmin.from('notifications').insert({
-    profile_id: plan.coach_id,
-    title:      `📝 다음달 수업 ${typeLabel} 요청`,
-    body:       `${session.name}님이 수업 ${typeLabel}을 요청했습니다.`,
-    type:       'info',
-    link:       '/owner/schedule-draft',
-  })
+  const notifInserts: any[] = [
+    {
+      profile_id: plan.coach_id,
+      title:      `📝 다음달 수업 ${typeLabel} 요청`,
+      body:       notifBody,
+      type:       'info',
+      link:       '/owner/schedule-draft',
+    },
+  ]
+
+  // 운영자/admin에게도 알림
+  const { data: admins } = await supabaseAdmin
+    .from('profiles')
+    .select('id')
+    .in('role', ['owner', 'admin'])
+    .eq('is_active', true)
+
+  for (const admin of admins ?? []) {
+    if (admin.id !== plan.coach_id) {  // 코치가 owner/admin일 때 중복 방지
+      notifInserts.push({
+        profile_id: admin.id,
+        title:      `📝 다음달 수업 ${typeLabel} 요청`,
+        body:       notifBody,
+        type:       'info',
+        link:       '/owner/schedule-draft',
+      })
+    }
+  }
+
+  await supabaseAdmin.from('notifications').insert(notifInserts)
 
   return NextResponse.json({ ok: true, id: data.id })
 }
 
 // DELETE /api/member-draft?request_id=xxx
-// 회원이 본인 요청 취소
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session || session.role !== 'member') {
@@ -187,7 +237,6 @@ export async function DELETE(req: NextRequest) {
   const requestId = req.nextUrl.searchParams.get('request_id')
   if (!requestId) return NextResponse.json({ error: 'request_id 필요' }, { status: 400 })
 
-  // 본인 요청이고 pending 상태인지 확인
   const { data: req_ } = await supabaseAdmin
     .from('lesson_applications')
     .select('id, status')
