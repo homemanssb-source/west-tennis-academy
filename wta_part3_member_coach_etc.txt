@@ -1,4 +1,1396 @@
-===== src\app\member\apply\page.tsx =====
+
+===== app\coach\applications\page.tsx =====
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+
+interface App {
+  id: string
+  requested_at: string
+  duration_minutes: number
+  lesson_type: string
+  status: string
+  coach_note: string | null
+  applicant_name?: string
+  member: { id: string; name: string; phone: string }
+  month: { year: number; month: number }
+}
+
+const DAYS = ['일','월','화','수','목','금','토']
+
+export default function CoachApplicationsPage() {
+  const [apps,       setApps]       = useState<App[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [selected,   setSelected]   = useState<App | null>(null)
+  const [note,       setNote]       = useState('')
+  const [saving,     setSaving]     = useState(false)
+  const [tab,        setTab]        = useState<'pending'|'done'>('pending')
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const [bulkNote,   setBulkNote]   = useState('')
+  const [bulkModal,  setBulkModal]  = useState<'approve'|'reject'|null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    const res = await fetch('/api/lesson-applications')
+    const d = await res.json()
+    setApps(Array.isArray(d) ? d : [])
+    setCheckedIds(new Set())
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleAction = async (action: 'coach_approve' | 'coach_reject') => {
+    if (!selected) return
+    setSaving(true)
+    await fetch(`/api/lesson-applications/${selected.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, coach_note: note || null }),
+    })
+    setSaving(false)
+    setSelected(null)
+    setNote('')
+    load()
+  }
+
+  const handleBulkAction = async (action: 'coach_approve' | 'coach_reject') => {
+    setSaving(true)
+    const ids = Array.from(checkedIds)
+    await Promise.all(ids.map(id =>
+      fetch(`/api/lesson-applications/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, coach_note: bulkNote || null }),
+      })
+    ))
+    setSaving(false)
+    setBulkModal(null)
+    setBulkNote('')
+    load()
+  }
+
+  const fmtDt = (dt: string) => {
+    const d = new Date(dt)
+    return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+  }
+
+  // 신청자 표시 이름: 가족 신청이면 "회원명 (가족명)", 본인 신청이면 "회원명"
+  const displayName = (a: App) =>
+    a.applicant_name ? `${a.member?.name} (${a.applicant_name})` : a.member?.name
+
+  const pending  = apps.filter(a => a.status === 'pending_coach')
+  const done     = apps.filter(a => a.status !== 'pending_coach')
+  const current  = tab === 'pending' ? pending : done
+  const allChecked = pending.length > 0 && pending.every(a => checkedIds.has(a.id))
+
+  const toggleCheck = (id: string) => {
+    setCheckedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (allChecked) setCheckedIds(new Set())
+    else setCheckedIds(new Set(pending.map(a => a.id)))
+  }
+
+  const s = {
+    tab: (active: boolean, color = '#16A34A') => ({
+      flex: 1, padding: '0.5rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' as const,
+      fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 700, fontSize: '0.85rem',
+      background: active ? color : '#f3f4f6', color: active ? 'white' : '#6b7280',
+    }),
+  }
+
+  return (
+    <div className="mobile-wrap" style={{ background: '#f9fafb', minHeight: '100vh' }}>
+      {/* 헤더 */}
+      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
+        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>수업 신청 확인</div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button onClick={() => setTab('pending')} style={s.tab(tab === 'pending')}>
+            확인 대기 {pending.length > 0 && `(${pending.length})`}
+          </button>
+          <button onClick={() => setTab('done')} style={s.tab(tab === 'done', '#6b7280')}>
+            처리 완료
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding: '1.25rem', paddingBottom: '10rem' }}>
+
+        {/* 일괄 처리 바 */}
+        {tab === 'pending' && pending.length > 0 && (
+          <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', padding: '0.75rem 1rem', marginBottom: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+            <input type="checkbox" checked={allChecked} onChange={toggleAll}
+              style={{ width: '16px', height: '16px', accentColor: '#16A34A', cursor: 'pointer' }} />
+            <span style={{ fontSize: '0.8rem', color: '#374151', fontWeight: 600, flex: 1 }}>
+              {checkedIds.size > 0 ? `${checkedIds.size}개 선택됨` : '전체 선택'}
+            </span>
+            {checkedIds.size > 0 && (
+              <>
+                <button onClick={() => { setBulkModal('approve'); setBulkNote('') }}
+                  style={{ padding: '0.375rem 0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                  일괄 승인
+                </button>
+                <button onClick={() => { setBulkModal('reject'); setBulkNote('') }}
+                  style={{ padding: '0.375rem 0.875rem', background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                  일괄 거절
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중..</div>
+        ) : current.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎾</div>
+            <p>{tab === 'pending' ? '확인할 신청이 없습니다' : '처리 내역이 없습니다'}</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+            {current.map(a => (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }}>
+                {tab === 'pending' && (
+                  <div style={{ paddingTop: '1rem' }}>
+                    <input type="checkbox" checked={checkedIds.has(a.id)} onChange={() => toggleCheck(a.id)}
+                      style={{ width: '16px', height: '16px', accentColor: '#16A34A', cursor: 'pointer' }} />
+                  </div>
+                )}
+                <div style={{ flex: 1, background: 'white', border: `1.5px solid ${tab === 'pending' ? '#fde68a' : '#f3f4f6'}`, borderRadius: '1rem', padding: '1rem 1.25rem', cursor: tab === 'pending' ? 'pointer' : 'default' }}
+                  onClick={() => tab === 'pending' ? (setSelected(a), setNote('')) : null}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
+                    <span style={{ fontWeight: 700, color: '#111827' }}>{displayName(a)}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{a.member?.phone}</span>
+                    {a.status !== 'pending_coach' && (
+                      <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px',
+                        background: a.status === 'rejected' ? '#fee2e2' : '#dcfce7',
+                        color: a.status === 'rejected' ? '#b91c1c' : '#15803d' }}>
+                        {a.status === 'rejected' ? '거절' : '승인완료'}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#374151', fontWeight: 600 }}>{fmtDt(a.requested_at)}</div>
+                  <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{a.duration_minutes}분 · {a.lesson_type} · {a.month?.year}년 {a.month?.month}월</div>
+                  {tab === 'pending' && (
+                    <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#854d0e', fontWeight: 600 }}>탭하여 승인/거절 →</div>
+                  )}
+                  {a.coach_note && (
+                    <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#6b7280', background: '#f9fafb', padding: '0.5rem 0.75rem', borderRadius: '0.5rem' }}>
+                      메모: {a.coach_note}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 개별 처리 모달 */}
+      {selected && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', paddingBottom: '6rem' }}>
+            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
+            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>수업 신청 처리</h2>
+            <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1rem' }}>
+              <div style={{ fontWeight: 700, color: '#111827' }}>{displayName(selected)}</div>
+              <div style={{ fontSize: '0.85rem', color: '#374151', marginTop: '2px' }}>{fmtDt(selected.requested_at)}</div>
+              <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{selected.duration_minutes}분 · {selected.lesson_type}</div>
+            </div>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>메모 (선택)</label>
+              <input
+                style={{ width: '100%', padding: '0.625rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', boxSizing: 'border-box' as const, outline: 'none' }}
+                placeholder="회원에게 전달할 메모"
+                value={note} onChange={e => setNote(e.target.value)}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '0.625rem' }}>
+              <button onClick={() => handleAction('coach_approve')} disabled={saving}
+                style={{ flex: 2, padding: '0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                {saving ? '처리 중..' : '✅ 승인 → 관리자 전달'}
+              </button>
+              <button onClick={() => handleAction('coach_reject')} disabled={saving}
+                style={{ flex: 1, padding: '0.875rem', background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                거절
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 일괄 처리 모달 */}
+      {bulkModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setBulkModal(null) }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', paddingBottom: '6rem' }}>
+            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
+            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+              {bulkModal === 'approve' ? '일괄 승인' : '일괄 거절'}
+            </h2>
+            <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1rem' }}>
+              선택한 <strong style={{ color: bulkModal === 'approve' ? '#16A34A' : '#b91c1c' }}>{checkedIds.size}개</strong> 신청을
+              {bulkModal === 'approve' ? ' 승인' : ' 거절'}합니다.
+            </p>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>공통 메모 (선택)</label>
+              <input
+                style={{ width: '100%', padding: '0.625rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', boxSizing: 'border-box' as const, outline: 'none' }}
+                placeholder="전체 회원에게 전달할 메모"
+                value={bulkNote} onChange={e => setBulkNote(e.target.value)}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '0.625rem' }}>
+              <button onClick={() => setBulkModal(null)}
+                style={{ flex: 1, padding: '0.875rem', background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                취소
+              </button>
+              <button onClick={() => handleBulkAction(bulkModal === 'approve' ? 'coach_approve' : 'coach_reject')} disabled={saving}
+                style={{ flex: 2, padding: '0.875rem', background: bulkModal === 'approve' ? '#16A34A' : '#b91c1c', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                {saving ? '처리 중..' : `${checkedIds.size}개 ${bulkModal === 'approve' ? '승인' : '거절'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 하단 네비 - 버그 수정 + 납부 추가 */}
+      <div className="bottom-nav">
+        <Link href="/coach" className="bottom-nav-item">
+          <span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span>
+        </Link>
+        <Link href="/coach/applications" className="bottom-nav-item active" style={{ position: 'relative' }}>
+          <span style={{ fontSize: '1.25rem' }}>📋</span>
+          <span>신청확인</span>
+          {pending.length > 0 && (
+            <span style={{ position: 'absolute', top: '4px', right: '8px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: '9999px' }}>
+              {pending.length}
+            </span>
+          )}
+        </Link>
+        <Link href="/coach/payment" className="bottom-nav-item">
+          <span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span>
+        </Link>
+        <Link href="/coach/blocks" className="bottom-nav-item">
+          <span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span>
+        </Link>
+        <Link href="/coach/schedule" className="bottom-nav-item">
+          <span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span>
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+===== app\coach\blocks\page.tsx =====
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import CoachBottomNav from '@/components/CoachBottomNav'
+
+interface Block {
+  id: string
+  block_date: string | null
+  block_start: string | null
+  block_end: string | null
+  reason: string | null
+  repeat_weekly: boolean
+  day_of_week: number | null
+}
+
+const DAYS = ['일','월','화','수','목','금','토']
+const TIMES = Array.from({length: 29}, (_, i) => {
+  const h = Math.floor(i/2) + 7
+  const m = i % 2 === 0 ? '00' : '30'
+  return `${String(h).padStart(2,'0')}:${m}`
+})
+
+export default function CoachHolidaysPage() {
+  const [blocks,  setBlocks]  = useState<Block[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving,  setSaving]  = useState(false)
+  const [showForm, setShowForm] = useState(false)
+
+  const [mode,       setMode]       = useState<'weekly'|'date'>('weekly')
+  const [dayOfWeek,  setDayOfWeek]  = useState(1)
+  const [blockDate,  setBlockDate]  = useState('')
+  const [blockStart, setBlockStart] = useState('09:00')
+  const [blockEnd,   setBlockEnd]   = useState('18:00')
+  const [reason,     setReason]     = useState('')
+
+  const load = async () => {
+    setLoading(true)
+    const res = await fetch('/api/coach-blocks')
+    const d = await res.json()
+    setBlocks(Array.isArray(d) ? d : [])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    const body = mode === 'weekly'
+      ? { repeat_weekly: true, day_of_week: dayOfWeek, block_start: blockStart, block_end: blockEnd, reason }
+      : { repeat_weekly: false, block_date: blockDate, block_start: blockStart, block_end: blockEnd, reason }
+
+    const res = await fetch('/api/coach-blocks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const d = await res.json()
+    setSaving(false)
+    console.log('저장 응답:', JSON.stringify(d))
+    if (d.error) { alert('저장 실패: ' + d.error + '\n\n전송 데이터: ' + JSON.stringify(body)); return }
+    setShowForm(false)
+    setReason('')
+    load()
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('삭제하시겠습니까?')) return
+    await fetch('/api/coach-blocks', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    load()
+  }
+
+  const weekly = blocks.filter(b => b.repeat_weekly)
+  const single = blocks.filter(b => !b.repeat_weekly)
+
+  const s = {
+    input: { width: '100%', padding: '0.625rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white', boxSizing: 'border-box' as const, outline: 'none', color: '#111827' },
+    label: { fontSize: '0.75rem', fontWeight: 700 as const, color: '#6b7280', display: 'block' as const, marginBottom: '6px' },
+    btn:   { padding: '0.5rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', cursor: 'pointer' as const, fontSize: '0.8rem', fontWeight: 600, fontFamily: 'Noto Sans KR, sans-serif' },
+    btnOn: { padding: '0.5rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #16A34A', background: '#f0fdf4', color: '#15803d', cursor: 'pointer' as const, fontSize: '0.8rem', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif' },
+  }
+
+  return (
+    <div className="mobile-wrap" style={{ background: '#f9fafb', minHeight: '100vh' }}>
+      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <Link href="/coach" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
+          <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', flex: 1 }}>휴무 관리</h1>
+          <button onClick={() => setShowForm(true)}
+            style={{ padding: '0.5rem 1rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.625rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+            + 추가
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding: '1.25rem', paddingBottom: '6rem' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', marginBottom: '0.5rem' }}>🔁 매주 반복 휴무</div>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '1rem', color: '#9ca3af' }}>불러오는 중..</div>
+          ) : weekly.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '1.5rem', color: '#9ca3af', background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', fontSize: '0.85rem' }}>
+              등록된 반복 휴무가 없습니다
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {weekly.map(b => (
+                <div key={b.id} style={{ background: 'white', border: '1.5px solid #fde68a', borderRadius: '1rem', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, color: '#111827', marginBottom: '2px' }}>매주 {DAYS[b.day_of_week!]}요일</div>
+                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                      {b.block_start ?? '종일'}{b.block_end ? ` ~ ${b.block_end}` : ''}{b.reason && ` · ${b.reason}`}
+                    </div>
+                  </div>
+                  <button onClick={() => handleDelete(b.id)}
+                    style={{ padding: '0.375rem 0.75rem', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+                    삭제
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', marginBottom: '0.5rem' }}>📅 특정 날짜 휴무</div>
+          {!loading && single.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '1.5rem', color: '#9ca3af', background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', fontSize: '0.85rem' }}>
+              등록된 날짜 휴무가 없습니다
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {single.map(b => (
+                <div key={b.id} style={{ background: 'white', border: '1.5px solid #f3f4f6', borderRadius: '1rem', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, color: '#111827', marginBottom: '2px' }}>{b.block_date}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                      {b.block_start ?? '종일'}{b.block_end ? ` ~ ${b.block_end}` : ''}{b.reason && ` · ${b.reason}`}
+                    </div>
+                  </div>
+                  <button onClick={() => handleDelete(b.id)}
+                    style={{ padding: '0.375rem 0.75rem', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+                    삭제
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', paddingBottom: '5rem' }}>
+            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
+            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>휴무 추가</h2>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+              <button onClick={() => setMode('weekly')} style={{ ...(mode === 'weekly' ? s.btnOn : s.btn), flex: 1 }}>🔁 매주 반복</button>
+              <button onClick={() => setMode('date')}   style={{ ...(mode === 'date'   ? s.btnOn : s.btn), flex: 1 }}>📅 특정 날짜</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              {mode === 'weekly' ? (
+                <div>
+                  <label style={s.label}>휴무 요일</label>
+                  <div style={{ display: 'flex', gap: '0.375rem' }}>
+                    {DAYS.map((d, i) => (
+                      <button key={i} onClick={() => setDayOfWeek(i)}
+                        style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: dayOfWeek === i ? '#16A34A' : '#f3f4f6', color: dayOfWeek === i ? 'white' : '#6b7280' }}>
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label style={s.label}>날짜</label>
+                  <input type="date" style={s.input} value={blockDate} onChange={e => setBlockDate(e.target.value)} />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={s.label}>시작 시간</label>
+                  <select style={s.input} value={blockStart} onChange={e => setBlockStart(e.target.value)}>
+                    <option value="">종일</option>
+                    {TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={s.label}>종료 시간</label>
+                  <select style={s.input} value={blockEnd} onChange={e => setBlockEnd(e.target.value)}>
+                    <option value="">종일</option>
+                    {TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={s.label}>사유 (선택)</label>
+                <input style={s.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="예: 개인 사정, 연수 등" />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.625rem', marginTop: '1.25rem' }}>
+              <button onClick={() => setShowForm(false)}
+                style={{ flex: 1, padding: '0.875rem', background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                취소
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                style={{ flex: 2, padding: '0.875rem', background: saving ? '#e5e7eb' : '#16A34A', color: saving ? '#9ca3af' : 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                {saving ? '저장 중..' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <CoachBottomNav />
+    </div>
+  )
+}
+
+===== app\coach\page.tsx =====
+import { redirect } from 'next/navigation'
+import { getSession } from '@/lib/session'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import Link from 'next/link'
+import NotificationBell from '@/components/notifications/NotificationBell'
+import CoachBottomNav from '@/components/CoachBottomNav'
+
+export default async function CoachHomePage() {
+  const session = await getSession()
+  if (!session || !['owner','coach'].includes(session.role)) redirect('/auth/coach')
+
+  // ✅ 수정: UTC 기준 → KST 기준 날짜 (자정 00:00~09:00 사이 하루 전날 뜨는 버그 수정)
+  const kst   = new Date(Date.now() + 9 * 60 * 60 * 1000)
+  const today = kst.toISOString().split('T')[0]
+  const start = `${today}T00:00:00+09:00`
+  const end   = `${today}T23:59:59+09:00`
+
+  // ✅ draft/cancelled 제외 — 초안은 확정 전이라 코치 홈에 표시 안 함
+  const { data: slots } = await supabaseAdmin
+    .from('lesson_slots')
+    .select(`
+      id, scheduled_at, duration_minutes, status, slot_type, memo,
+      lesson_plan:lesson_plan_id (
+        id, lesson_type,
+        member:member_id ( id, name, phone ),
+        coach:coach_id ( id, name )
+      )
+    `)
+    .gte('scheduled_at', start)
+    .lte('scheduled_at', end)
+    .not('status', 'in', '("draft","cancelled")')
+    .order('scheduled_at', { ascending: true })
+
+  const mySlots = (slots ?? []).filter((s: any) => s.lesson_plan?.coach?.id === session.id)
+
+  const STATUS_STYLE: Record<string, { bg: string; border: string; color: string; label: string }> = {
+    scheduled: { bg: '#f0fdf4', border: '#4ade80', color: '#15803d', label: '예정' },
+    completed: { bg: '#eff6ff', border: '#60a5fa', color: '#1d4ed8', label: '완료' },
+    absent:    { bg: '#fef2f2', border: '#f87171', color: '#b91c1c', label: '결석' },
+    makeup:    { bg: '#fdf4ff', border: '#c084fc', color: '#7e22ce', label: '보강' },
+  }
+
+  const fmtTime = (dt: string) => new Date(dt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+  return (
+    <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: '#1d4ed8', padding: '2rem 1.25rem 1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: 'white' }}>WTA</div>
+            <div style={{ color: 'rgba(255,255,255,.7)', fontSize: '0.75rem' }}>코치 대시보드</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <NotificationBell />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>🎾 {session.name}</div>
+              <div style={{ color: 'rgba(255,255,255,.6)', fontSize: '0.75rem' }}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.75rem', padding: '1rem 1.25rem 0' }}>
+        {[
+          { label: '전체', value: mySlots.length, color: '#1d4ed8', bg: '#eff6ff' },
+          { label: '완료', value: mySlots.filter((s:any) => s.status === 'completed').length, color: '#15803d', bg: '#f0fdf4' },
+          { label: '예정', value: mySlots.filter((s:any) => s.status === 'scheduled').length, color: '#854d0e', bg: '#fef9c3' },
+        ].map(s => (
+          <div key={s.label} style={{ background: s.bg, borderRadius: '0.875rem', padding: '0.875rem', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.75rem', fontWeight: 700, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: s.color }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ padding: '1rem 1.25rem 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
+          <Link href="/coach/blocks" style={{ textDecoration: 'none' }}>
+            <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.875rem', padding: '0.875rem', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.25rem', marginBottom: '2px' }}>🚫</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c' }}>휴무 관리</div>
+            </div>
+          </Link>
+          <Link href="/coach/schedule" style={{ textDecoration: 'none' }}>
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.25rem', marginBottom: '2px' }}>📅</div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>전체 스케줄</div>
+            </div>
+          </Link>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, padding: '1rem 1.25rem 6rem' }}>
+        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>오늘 수업</div>
+        {mySlots.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem 0', color: '#9ca3af' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎾</div>
+            <p style={{ fontSize: '0.875rem' }}>오늘 예정된 수업이 없습니다</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+            {mySlots.map((s: any) => {
+              const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
+              return (
+                <div key={s.id} style={{ background: st.bg, borderLeft: `4px solid ${st.border}`, borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '48px' }}>{fmtTime(s.scheduled_at)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: `${st.border}33`, color: st.color }}>{st.label}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <CoachBottomNav />
+    </div>
+  )
+}
+
+===== app\coach\payment\page.tsx =====
+'use client'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import CoachBottomNav from '@/components/CoachBottomNav'
+
+interface Plan {
+  id: string
+  lesson_type: string
+  unit_minutes: number
+  total_count: number
+  completed_count: number
+  payment_status: 'unpaid' | 'paid'
+  amount: number
+  member: { id: string; name: string; phone: string }
+  month:  { id: string; year: number; month: number }
+}
+interface Month { id: string; year: number; month: number }
+
+export default function CoachPaymentPage() {
+  const [plans,     setPlans]     = useState<Plan[]>([])
+  const [months,    setMonths]    = useState<Month[]>([])
+  const [monthId,   setMonthId]   = useState('')
+  const [loading,   setLoading]   = useState(true)
+  const [filter,    setFilter]    = useState<'all' | 'unpaid' | 'paid'>('all')
+
+  useEffect(() => {
+    fetch('/api/months').then(r => r.json()).then(d => {
+      const list = Array.isArray(d) ? d : []
+      setMonths(list)
+      if (list.length > 0) setMonthId(list[0].id)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!monthId) return
+    setLoading(true)
+    fetch(`/api/coach/payment?month_id=${monthId}`)
+      .then(r => r.json())
+      .then(d => { setPlans(Array.isArray(d) ? d : []); setLoading(false) })
+  }, [monthId])
+
+  const fmt = (n: number) => (n || 0).toLocaleString('ko-KR')
+
+  const filtered = plans.filter(p =>
+    filter === 'all'    ? true :
+    filter === 'unpaid' ? p.payment_status === 'unpaid' :
+    p.payment_status === 'paid'
+  )
+
+  const totalAmount  = plans.reduce((s, p) => s + (p.amount || 0), 0)
+  const paidAmount   = plans.filter(p => p.payment_status === 'paid').reduce((s, p) => s + (p.amount || 0), 0)
+  const unpaidAmount = plans.filter(p => p.payment_status === 'unpaid').reduce((s, p) => s + (p.amount || 0), 0)
+  const paidCount    = plans.filter(p => p.payment_status === 'paid').length
+  const unpaidCount  = plans.filter(p => p.payment_status === 'unpaid').length
+  const selectedMonth = months.find(m => m.id === monthId)
+
+  return (
+    <div className="mobile-wrap" style={{ background: '#f9fafb', minHeight: '100vh' }}>
+      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <Link href="/coach" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
+          <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.2rem', fontWeight: 700, color: '#111827', flex: 1 }}>💰 납부 현황</h1>
+        </div>
+        <div style={{ marginTop: '0.75rem' }}>
+          <select value={monthId} onChange={e => setMonthId(e.target.value)}
+            style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white', color: '#374151', outline: 'none' }}>
+            {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div style={{ padding: '1.25rem 1.25rem 5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {!loading && (
+          <div style={{ background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)', borderRadius: '1.25rem', padding: '1.25rem', color: 'white' }}>
+            <div style={{ fontSize: '0.75rem', opacity: 0.75, marginBottom: '0.25rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+              {selectedMonth ? `${selectedMonth.year}년 ${selectedMonth.month}월` : ''} 총 수업료
+            </div>
+            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.75rem', fontWeight: 700, marginBottom: '1rem' }}>
+              {fmt(totalAmount)}<span style={{ fontSize: '1rem', fontWeight: 400, marginLeft: '4px' }}>원</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: '0.875rem', padding: '0.75rem' }}>
+                <div style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '0.25rem', fontFamily: 'Noto Sans KR, sans-serif' }}>✅ 납부 완료</div>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700 }}>{fmt(paidAmount)}원</div>
+                <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '2px', fontFamily: 'Noto Sans KR, sans-serif' }}>{paidCount}명</div>
+              </div>
+              <div style={{ background: 'rgba(239,68,68,0.25)', borderRadius: '0.875rem', padding: '0.75rem' }}>
+                <div style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '0.25rem', fontFamily: 'Noto Sans KR, sans-serif' }}>⏳ 미납</div>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700 }}>{fmt(unpaidAmount)}원</div>
+                <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '2px', fontFamily: 'Noto Sans KR, sans-serif' }}>{unpaidCount}명</div>
+              </div>
+            </div>
+            {totalAmount > 0 && (
+              <div style={{ marginTop: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.75, marginBottom: '0.375rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                  <span>납부율</span>
+                  <span>{Math.round(paidAmount / totalAmount * 100)}%</span>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '9999px', height: '6px', overflow: 'hidden' }}>
+                  <div style={{ background: '#4ade80', height: '100%', borderRadius: '9999px', width: `${Math.round(paidAmount / totalAmount * 100)}%`, transition: 'width 0.5s ease' }} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '0.5rem', background: 'white', borderRadius: '0.875rem', border: '1.5px solid #f3f4f6', padding: '0.375rem' }}>
+          {([
+            { key: 'all',    label: `전체 (${plans.length})` },
+            { key: 'unpaid', label: `미납 (${unpaidCount})` },
+            { key: 'paid',   label: `납부 (${paidCount})` },
+          ] as const).map(tab => (
+            <button key={tab.key} onClick={() => setFilter(tab.key)}
+              style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: 'none', fontWeight: 700, fontSize: '0.8rem', fontFamily: 'Noto Sans KR, sans-serif', cursor: 'pointer', background: filter === tab.key ? (tab.key === 'unpaid' ? '#fef2f2' : tab.key === 'paid' ? '#f0fdf4' : '#f3f4f6') : 'transparent', color: filter === tab.key ? (tab.key === 'unpaid' ? '#b91c1c' : tab.key === 'paid' ? '#16A34A' : '#374151') : '#9ca3af' }}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>불러오는 중...</div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>💳</div>
+            <p style={{ fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>해당하는 내역이 없습니다</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+            {filtered.map(p => (
+              <div key={p.id} style={{ background: 'white', borderRadius: '1rem', border: `1.5px solid ${p.payment_status === 'unpaid' ? '#fecaca' : '#bbf7d0'}`, padding: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: p.payment_status === 'unpaid' ? '#fef2f2' : '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
+                    {p.payment_status === 'unpaid' ? '⏳' : '✅'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>{p.member?.name}</span>
+                      <span style={{ fontSize: '0.7rem', color: '#9ca3af', fontFamily: 'Noto Sans KR, sans-serif' }}>{p.lesson_type}</span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                      {p.total_count}회 · {p.unit_minutes}분
+                      <span style={{ marginLeft: '0.5rem', color: '#9ca3af' }}>{p.member?.phone}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: p.payment_status === 'unpaid' ? '#b91c1c' : '#16A34A' }}>
+                      {fmt(p.amount)}원
+                    </div>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', marginTop: '4px', display: 'inline-block', background: p.payment_status === 'unpaid' ? '#fef2f2' : '#f0fdf4', color: p.payment_status === 'unpaid' ? '#b91c1c' : '#16A34A', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                      {p.payment_status === 'unpaid' ? '미납' : '납부'}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <CoachBottomNav />
+    </div>
+  )
+}
+
+===== app\coach\pin-change\page.tsx =====
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+export default function CoachPinChangePage() {
+  const router = useRouter()
+  const [newPin, setNewPin]       = useState('')
+  const [confirm, setConfirm]     = useState('')
+  const [error, setError]         = useState('')
+  const [loading, setLoading]     = useState(false)
+
+  const handleSubmit = async () => {
+    setError('')
+    if (newPin.length !== 6)    return setError('PIN은 6자리여야 합니다')
+    if (newPin !== confirm)     return setError('PIN이 일치하지 않습니다')
+    if (newPin === '123456')    return setError('임시 PIN은 사용할 수 없습니다')
+
+    setLoading(true)
+    const res = await fetch('/api/auth/change-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_pin: newPin }),
+    })
+    const data = await res.json()
+    setLoading(false)
+    if (!res.ok) return setError(data.error)
+    router.replace('/coach')
+  }
+
+  return (
+    <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: '#1d4ed8', padding: '3rem 1.5rem 2rem', textAlign: 'center' }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🔑</div>
+        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: 'white' }}>PIN 변경 필요</div>
+        <p style={{ color: 'rgba(255,255,255,.75)', fontSize: '0.8rem', marginTop: '0.5rem' }}>첫 로그인 시 PIN을 변경해야 합니다</p>
+      </div>
+
+      <div style={{ flex: 1, padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>새 PIN 6자리</label>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            {Array.from({length:6}).map((_,i) => (
+              <div key={i} className={`pin-box ${newPin.length > i ? 'filled' : ''} ${newPin.length === i ? 'active' : ''}`}>
+                {newPin.length > i ? '●' : ''}
+              </div>
+            ))}
+          </div>
+          <input className="input-base" placeholder="숫자 6자리" value={newPin}
+            onChange={e => setNewPin(e.target.value.replace(/\D/g,'').slice(0,6))}
+            inputMode="numeric" maxLength={6} />
+        </div>
+
+        <div>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>PIN 확인</label>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            {Array.from({length:6}).map((_,i) => (
+              <div key={i} className={`pin-box ${confirm.length > i ? 'filled' : ''} ${confirm.length === i ? 'active' : ''}`}>
+                {confirm.length > i ? '●' : ''}
+              </div>
+            ))}
+          </div>
+          <input className="input-base" placeholder="PIN 한번 더" value={confirm}
+            onChange={e => setConfirm(e.target.value.replace(/\D/g,'').slice(0,6))}
+            inputMode="numeric" maxLength={6} />
+        </div>
+
+        {error && (
+          <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.75rem', padding: '0.875rem', color: '#b91c1c', fontSize: '0.875rem', fontWeight: 600 }}>
+            {error}
+          </div>
+        )}
+
+        <button onClick={handleSubmit} disabled={loading}
+          style={{ padding: '1rem', borderRadius: '0.75rem', border: 'none', background: '#1d4ed8', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: '1rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+          {loading ? '변경 중...' : 'PIN 변경 완료'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+
+===== app\coach\schedule\page.tsx =====
+'use client'
+
+import { useEffect, useState, useCallback } from 'react'
+import CoachBottomNav from '@/components/CoachBottomNav'
+
+interface Slot {
+  id: string
+  scheduled_at: string
+  duration_minutes: number
+  status: string
+  slot_type: string
+  memo: string | null
+  lesson_plan: {
+    id: string
+    lesson_type: string
+    member: { id: string; name: string; phone: string }
+    coach:  { id: string; name: string }
+  }
+}
+
+const STATUS_STYLE: Record<string, { bg: string; border: string; color: string; label: string }> = {
+  scheduled: { bg: '#f0fdf4', border: '#4ade80', color: '#15803d', label: '예정' },
+  completed: { bg: '#eff6ff', border: '#60a5fa', color: '#1d4ed8', label: '완료' },
+  absent:    { bg: '#fef2f2', border: '#f87171', color: '#b91c1c', label: '결석' },
+  makeup:    { bg: '#fdf4ff', border: '#c084fc', color: '#7e22ce', label: '보강' },
+}
+
+const DAY_KO = ['일','월','화','수','목','금','토']
+
+function getWeekDates(baseDate: string) {
+  const d = new Date(baseDate)
+  const dow = d.getDay()
+  const monday = new Date(d)
+  monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(monday)
+    date.setDate(monday.getDate() + i)
+    return date.toISOString().split('T')[0]
+  })
+}
+
+// ✅ KST 기준 today
+function getTodayKST() {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
+}
+
+export default function CoachSchedulePage() {
+  const today = getTodayKST()
+
+  const [tab,            setTab]            = useState<'day'|'week'>('day')
+  const [date,           setDate]           = useState(today)
+  const [coachId,        setCoachId]        = useState('')
+  const [slots,          setSlots]          = useState<Slot[]>([])
+  const [weekSlots,      setWeekSlots]      = useState<Slot[]>([])
+  const [loading,        setLoading]        = useState(false)
+  const [selected,       setSelected]       = useState<Slot | null>(null)
+  const [saving,         setSaving]         = useState(false)
+  const [memo,           setMemo]           = useState('')
+  const [showMakeup,     setShowMakeup]     = useState(false)
+  const [makeupDate,     setMakeupDate]     = useState('')
+  const [makeupTime,     setMakeupTime]     = useState('')
+  const [weekOffset,     setWeekOffset]     = useState(0)
+  const [showReschedule, setShowReschedule] = useState(false)
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleTime, setRescheduleTime] = useState('')
+
+  useEffect(() => {
+    fetch('/api/session').then(r => r.json()).then(d => {
+      if (d?.id) setCoachId(d.id)
+    })
+  }, [])
+
+  const load = useCallback(async () => {
+    if (!coachId) return
+    setLoading(true)
+    const res = await fetch(`/api/lesson-slots?date=${date}&coach_id=${coachId}`)
+    const data = await res.json()
+    setSlots((Array.isArray(data) ? data : []).filter(
+      (s: Slot) => s.lesson_plan?.coach?.id === coachId
+    ))
+    setLoading(false)
+  }, [date, coachId])
+
+  const loadWeek = useCallback(async () => {
+    if (!coachId) return
+    setLoading(true)
+    const base = new Date(today)
+    base.setDate(base.getDate() + weekOffset * 7)
+    const weekDates = getWeekDates(base.toISOString().split('T')[0])
+    const res = await fetch(`/api/lesson-slots?from=${weekDates[0]}&to=${weekDates[6]}&coach_id=${coachId}`)
+    const data = await res.json()
+    setWeekSlots((Array.isArray(data) ? data : []).filter(
+      (s: Slot) => s.lesson_plan?.coach?.id === coachId
+    ))
+    setLoading(false)
+  }, [coachId, weekOffset, today])
+
+  useEffect(() => { if (tab === 'day')  load() },     [load, tab])
+  useEffect(() => { if (tab === 'week') loadWeek() }, [loadWeek, tab])
+
+  const reload = () => tab === 'day' ? load() : loadWeek()
+
+  const closeModal = () => {
+    setSelected(null)
+    setMemo('')
+    setShowMakeup(false)
+    setShowReschedule(false)
+  }
+
+  const handleStatus = async (status: string) => {
+    if (!selected) return
+    if (status === 'makeup') { setShowMakeup(true); setShowReschedule(false); return }
+    setSaving(true)
+    await fetch(`/api/lesson-slots/${selected.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, memo: memo || null }),
+    })
+    setSaving(false)
+    closeModal()
+    reload()
+  }
+
+  const handleCancel = async () => {
+    if (!selected) return
+    const reason = prompt('취소 사유 (선택사항)')
+    if (reason === null) return
+    setSaving(true)
+    await fetch('/api/lesson-slots/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot_id: selected.id, reason }),
+    })
+    setSaving(false)
+    closeModal()
+    reload()
+  }
+
+  const handleMakeupSubmit = async () => {
+    if (!selected || !makeupDate || !makeupTime) return
+    setSaving(true)
+    await fetch('/api/makeup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        original_slot_id: selected.id,
+        makeup_datetime: `${makeupDate}T${makeupTime}:00+09:00`,
+      }),
+    })
+    setSaving(false)
+    setShowMakeup(false)
+    setMakeupDate('')
+    setMakeupTime('')
+    closeModal()
+    reload()
+  }
+
+  const handleRescheduleOpen = () => {
+    if (!selected) return
+    // 현재 KST 시간을 기본값으로
+    const kst = new Date(new Date(selected.scheduled_at).getTime())
+    setRescheduleDate(kst.toISOString().split('T')[0])
+    setRescheduleTime(`${String(kst.getHours()).padStart(2,'0')}:${String(kst.getMinutes()).padStart(2,'0')}`)
+    setShowReschedule(true)
+    setShowMakeup(false)
+  }
+
+  const handleRescheduleSubmit = async () => {
+    if (!selected || !rescheduleDate || !rescheduleTime) return
+    setSaving(true)
+    const res = await fetch(`/api/lesson-slots/${selected.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduled_at: `${rescheduleDate}T${rescheduleTime}:00+09:00` }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) { alert(data.error ?? '수정에 실패했습니다'); return }
+    closeModal()
+    reload()
+  }
+
+  const fmtTime = (dt: string) => {
+    const d = new Date(dt)
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+  }
+  const changeDate = (days: number) => {
+    const d = new Date(date)
+    d.setDate(d.getDate() + days)
+    setDate(d.toISOString().split('T')[0])
+  }
+
+  const base = new Date(today)
+  base.setDate(base.getDate() + weekOffset * 7)
+  const weekDates = getWeekDates(base.toISOString().split('T')[0])
+  const slotsByDate: Record<string, Slot[]> = {}
+  weekDates.forEach(d => { slotsByDate[d] = [] })
+  weekSlots.forEach(s => {
+    const d = s.scheduled_at.split('T')[0]
+    if (slotsByDate[d]) slotsByDate[d].push(s)
+  })
+
+  const openSlot = (s: Slot) => {
+    setSelected(s)
+    setMemo(s.memo ?? '')
+    setShowMakeup(false)
+    setShowReschedule(false)
+  }
+
+  return (
+    <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
+
+      {/* 헤더 */}
+      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
+        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>스케줄</div>
+
+        <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.75rem' }}>
+          {(['day','week'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: 'none', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', background: tab === t ? '#1d4ed8' : '#f3f4f6', color: tab === t ? 'white' : '#6b7280' }}>
+              {t === 'day' ? '📅 일간' : '📆 주간'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'day' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button onClick={() => changeDate(-1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>‹</button>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              style={{ flex: 1, padding: '0.5rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', textAlign: 'center' }} />
+            <button onClick={() => changeDate(1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>›</button>
+          </div>
+        )}
+
+        {tab === 'week' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button onClick={() => setWeekOffset(w => w-1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>‹</button>
+            <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', fontWeight: 700, color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
+              {weekDates[0].slice(5).replace('-','/')} ~ {weekDates[6].slice(5).replace('-','/')}
+            </div>
+            <button onClick={() => setWeekOffset(w => w+1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>›</button>
+          </div>
+        )}
+      </div>
+
+      {/* 본문 */}
+      <div style={{ flex: 1, padding: '1rem 1.25rem 6rem', overflowY: 'auto' }}>
+
+        {/* 일간 뷰 */}
+        {tab === 'day' && (
+          loading
+            ? <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
+            : slots.length === 0
+              ? <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📅</div>
+                  <p style={{ fontSize: '0.875rem' }}>이 날 수업이 없습니다</p>
+                </div>
+              : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                  {slots.map(s => {
+                    const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
+                    return (
+                      <div key={s.id} onClick={() => openSlot(s)}
+                        style={{ background: st.bg, borderLeft: `4px solid ${st.border}`, borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '48px' }}>{fmtTime(s.scheduled_at)}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
+                          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
+                          {s.memo && <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '2px' }}>📝 {s.memo}</div>}
+                        </div>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: `${st.border}33`, color: st.color, flexShrink: 0 }}>{st.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+        )}
+
+        {/* 주간 뷰 */}
+        {tab === 'week' && (
+          loading
+            ? <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {weekDates.map(d => {
+                  const daySlots = slotsByDate[d] ?? []
+                  const dateObj  = new Date(d)
+                  const isToday  = d === today
+                  const dow      = dateObj.getDay()
+                  return (
+                    <div key={d}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
+                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', background: isToday ? '#1d4ed8' : '#f3f4f6', flexShrink: 0 }}>
+                          <span style={{ fontSize: '0.6rem', fontWeight: 700, color: isToday ? 'rgba(255,255,255,.8)' : dow === 0 ? '#b91c1c' : dow === 6 ? '#1d4ed8' : '#6b7280' }}>{DAY_KO[dow]}</span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isToday ? 'white' : dow === 0 ? '#b91c1c' : dow === 6 ? '#1d4ed8' : '#374151', lineHeight: 1 }}>{dateObj.getDate()}</span>
+                        </div>
+                        <div style={{ flex: 1, height: '1px', background: '#f3f4f6' }} />
+                        {daySlots.length > 0 && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280' }}>{daySlots.length}건</span>}
+                      </div>
+                      {daySlots.length === 0
+                        ? <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: '#d1d5db' }}>수업 없음</div>
+                        : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                            {daySlots.sort((a,b) => a.scheduled_at.localeCompare(b.scheduled_at)).map(s => {
+                              const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
+                              return (
+                                <div key={s.id} onClick={() => openSlot(s)}
+                                  style={{ background: st.bg, borderLeft: `3px solid ${st.border}`, borderRadius: '0 0.75rem 0.75rem 0', padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer' }}>
+                                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '0.875rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '42px' }}>{fmtTime(s.scheduled_at)}</div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
+                                    <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
+                                  </div>
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '9999px', background: `${st.border}33`, color: st.color, flexShrink: 0 }}>{st.label}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                      }
+                    </div>
+                  )
+                })}
+              </div>
+        )}
+      </div>
+
+      <CoachBottomNav />
+
+      {/* ── 수업 처리 모달 ── */}
+      {selected && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) closeModal() }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div style={{
+            background: 'white',
+            width: '100%',
+            maxWidth: '390px',
+            borderRadius: '1.5rem 1.5rem 0 0',
+            padding: '1.25rem 1.25rem 2rem',
+            // ✅ 모달 내용 많을 때 스크롤
+            maxHeight: '90vh',
+            overflowY: 'auto',
+          }}>
+            {/* 드래그 핸들 */}
+            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }} />
+
+            {/* 제목 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>수업 처리</h2>
+              <button onClick={closeModal} style={{ background: 'none', border: 'none', fontSize: '1.25rem', color: '#9ca3af', cursor: 'pointer', padding: '0 0.25rem' }}>✕</button>
+            </div>
+
+            {/* 수업 정보 */}
+            <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '0.875rem 1rem', marginBottom: '1rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>{selected.lesson_plan?.member?.name}</div>
+              <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '3px' }}>
+                {fmtTime(selected.scheduled_at)} · {selected.duration_minutes}분 · {selected.lesson_plan?.lesson_type}
+              </div>
+            </div>
+
+            {/* 메모 */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>메모 (선택)</label>
+              <input className="input-base" placeholder="특이사항 입력" value={memo} onChange={e => setMemo(e.target.value)} />
+            </div>
+
+            {/* 상태 버튼 2x2 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              {[
+                { status: 'completed', label: '✅ 완료',  bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+                { status: 'absent',    label: '❌ 결석',  bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
+                { status: 'makeup',    label: '🔁 보강',  bg: '#fdf4ff', color: '#7e22ce', border: '#e9d5ff' },
+                { status: 'scheduled', label: '🔄 예정',  bg: '#f0fdf4', color: '#15803d', border: '#86efac' },
+              ].map(btn => (
+                <button key={btn.status} onClick={() => handleStatus(btn.status)} disabled={saving}
+                  style={{ padding: '0.75rem', borderRadius: '0.75rem', border: `1.5px solid ${btn.border}`, background: btn.bg, color: btn.color, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', opacity: saving ? 0.6 : 1 }}>
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+
+            {/* ✅ 날짜/시간 수정 버튼 (scheduled 상태만) */}
+            {selected.status === 'scheduled' && (
+              <button onClick={handleRescheduleOpen} disabled={saving}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #fde68a', background: '#fffbeb', color: '#92400e', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                📝 날짜 · 시간 수정
+              </button>
+            )}
+
+            {/* 날짜/시간 수정 폼 */}
+            {showReschedule && (
+              <div style={{ background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '0.875rem', padding: '1rem', marginBottom: '0.5rem' }}>
+                <div style={{ fontWeight: 700, color: '#92400e', marginBottom: '0.875rem', fontSize: '0.875rem' }}>📝 수업 일정 수정</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.625rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '4px' }}>날짜</label>
+                    <input type="date" value={rescheduleDate} onChange={e => setRescheduleDate(e.target.value)}
+                      style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #fde68a', borderRadius: '0.5rem', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.85rem', boxSizing: 'border-box' as const }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '4px' }}>시간</label>
+                    <input type="time" value={rescheduleTime} onChange={e => setRescheduleTime(e.target.value)}
+                      style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #fde68a', borderRadius: '0.5rem', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.85rem', boxSizing: 'border-box' as const }} />
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#92400e', background: '#fef3c7', padding: '0.5rem 0.625rem', borderRadius: '0.5rem', marginBottom: '0.625rem' }}>
+                  ⚠️ 수정 시 회원에게 변경 알림이 발송됩니다
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => setShowReschedule(false)}
+                    style={{ flex: 1, padding: '0.625rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', background: 'white', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>
+                    취소
+                  </button>
+                  <button onClick={handleRescheduleSubmit} disabled={!rescheduleDate || !rescheduleTime || saving}
+                    style={{ flex: 1, padding: '0.625rem', border: 'none', borderRadius: '0.625rem', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', color: 'white', cursor: (!rescheduleDate || !rescheduleTime || saving) ? 'not-allowed' : 'pointer', background: (!rescheduleDate || !rescheduleTime || saving) ? '#d1d5db' : '#d97706' }}>
+                    {saving ? '수정 중...' : '수정 확정'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 보강 폼 */}
+            {showMakeup && (
+              <div style={{ background: '#fdf4ff', border: '1.5px solid #c084fc', borderRadius: '0.875rem', padding: '1rem', marginBottom: '0.5rem' }}>
+                <div style={{ fontWeight: 700, color: '#7e22ce', marginBottom: '0.875rem', fontSize: '0.875rem' }}>📅 보강 날짜 선택</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.625rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '4px' }}>날짜</label>
+                    <input type="date" value={makeupDate} onChange={e => setMakeupDate(e.target.value)}
+                      style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #e9d5ff', borderRadius: '0.5rem', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.85rem', boxSizing: 'border-box' as const }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '4px' }}>시간</label>
+                    <input type="time" value={makeupTime} onChange={e => setMakeupTime(e.target.value)}
+                      style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #e9d5ff', borderRadius: '0.5rem', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.85rem', boxSizing: 'border-box' as const }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => setShowMakeup(false)}
+                    style={{ flex: 1, padding: '0.625rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', background: 'white', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>
+                    취소
+                  </button>
+                  <button onClick={handleMakeupSubmit} disabled={!makeupDate || !makeupTime || saving}
+                    style={{ flex: 1, padding: '0.625rem', border: 'none', borderRadius: '0.625rem', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', color: 'white', cursor: (!makeupDate || !makeupTime || saving) ? 'not-allowed' : 'pointer', background: (!makeupDate || !makeupTime || saving) ? '#d1d5db' : '#7e22ce' }}>
+                    {saving ? '처리 중...' : '보강 확정'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 수업 취소 버튼 */}
+            {selected.status !== 'completed' && (
+              <button onClick={handleCancel} disabled={saving}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', opacity: saving ? 0.6 : 1 }}>
+                🗑 수업 취소 (회원 알림 발송)
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+===== app\layout.tsx =====
+import type { Metadata } from 'next'
+import './globals.css'
+
+export const metadata: Metadata = {
+  title: '서부 테니스 아카데미',
+  description: '서부 테니스 아카데미 레슨 관리 앱',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'WTA',
+  },
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="ko">
+      <head>
+        <meta name="application-name" content="WTA" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="WTA" />
+        <meta name="theme-color" content="#16A34A" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icon-512.svg" />
+        <link rel="icon" type="image/svg+xml" href="/icon-512.svg" />
+      </head>
+      <body>{children}</body>
+    </html>
+  )
+}
+
+
+===== app\member\apply\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -842,7 +2234,7 @@ export default function MemberApplyPage() {
   )
 }
 
-===== src\app\member\family\page.tsx =====
+===== app\member\family\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1020,7 +2412,7 @@ export default function FamilyPage() {
   )
 }
 
-===== src\app\member\makeup\page.tsx =====
+===== app\member\makeup\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1155,7 +2547,7 @@ export default function MemberMakeupPage() {
 }
 
 
-===== src\app\member\page.tsx =====
+===== app\member\page.tsx =====
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -1297,7 +2689,7 @@ export default async function MemberHomePage() {
   )
 }
 
-===== src\app\member\payment\page.tsx =====
+===== app\member\payment\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1378,11 +2770,11 @@ export default function MemberPaymentPage() {
   )
 }
 
-===== src\app\member\pin-change\page.tsx =====
+===== app\member\pin-change\page.tsx =====
 export { default } from '@/app/coach/pin-change/page'
 
 
-===== src\app\member\schedule\page.tsx =====
+===== app\member\schedule\page.tsx =====
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1707,1528 +3099,7 @@ export default function MemberSchedulePage() {
   )
 }
 
-===== src\app\coach\applications\page.tsx =====
-'use client'
-
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-
-interface App {
-  id: string
-  requested_at: string
-  duration_minutes: number
-  lesson_type: string
-  status: string
-  coach_note: string | null
-  member: { id: string; name: string; phone: string }
-  month: { year: number; month: number }
-}
-
-const DAYS = ['일','월','화','수','목','금','토']
-
-export default function CoachApplicationsPage() {
-  const [apps,       setApps]       = useState<App[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [selected,   setSelected]   = useState<App | null>(null)
-  const [note,       setNote]       = useState('')
-  const [saving,     setSaving]     = useState(false)
-  const [tab,        setTab]        = useState<'pending'|'done'>('pending')
-  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
-  const [bulkNote,   setBulkNote]   = useState('')
-  const [bulkModal,  setBulkModal]  = useState<'approve'|'reject'|null>(null)
-
-  const load = async () => {
-    setLoading(true)
-    const res = await fetch('/api/lesson-applications')
-    const d = await res.json()
-    setApps(Array.isArray(d) ? d : [])
-    setCheckedIds(new Set())
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
-
-  const handleAction = async (action: 'coach_approve' | 'coach_reject') => {
-    if (!selected) return
-    setSaving(true)
-    await fetch(`/api/lesson-applications/${selected.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, coach_note: note || null }),
-    })
-    setSaving(false)
-    setSelected(null)
-    setNote('')
-    load()
-  }
-
-  const handleBulkAction = async (action: 'coach_approve' | 'coach_reject') => {
-    setSaving(true)
-    const ids = Array.from(checkedIds)
-    await Promise.all(ids.map(id =>
-      fetch(`/api/lesson-applications/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, coach_note: bulkNote || null }),
-      })
-    ))
-    setSaving(false)
-    setBulkModal(null)
-    setBulkNote('')
-    load()
-  }
-
-  const fmtDt = (dt: string) => {
-    const d = new Date(dt)
-    return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
-  }
-
-  const pending  = apps.filter(a => a.status === 'pending_coach')
-  const done     = apps.filter(a => a.status !== 'pending_coach')
-  const current  = tab === 'pending' ? pending : done
-  const allChecked = pending.length > 0 && pending.every(a => checkedIds.has(a.id))
-
-  const toggleCheck = (id: string) => {
-    setCheckedIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
-  const toggleAll = () => {
-    if (allChecked) setCheckedIds(new Set())
-    else setCheckedIds(new Set(pending.map(a => a.id)))
-  }
-
-  const s = {
-    tab: (active: boolean, color = '#16A34A') => ({
-      flex: 1, padding: '0.5rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer' as const,
-      fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 700, fontSize: '0.85rem',
-      background: active ? color : '#f3f4f6', color: active ? 'white' : '#6b7280',
-    }),
-  }
-
-  return (
-    <div className="mobile-wrap" style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      {/* 헤더 */}
-      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>수업 신청 확인</div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={() => setTab('pending')} style={s.tab(tab === 'pending')}>
-            확인 대기 {pending.length > 0 && `(${pending.length})`}
-          </button>
-          <button onClick={() => setTab('done')} style={s.tab(tab === 'done', '#6b7280')}>
-            처리 완료
-          </button>
-        </div>
-      </div>
-
-      <div style={{ padding: '1.25rem', paddingBottom: '10rem' }}>
-
-        {/* 일괄 처리 바 */}
-        {tab === 'pending' && pending.length > 0 && (
-          <div style={{ background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', padding: '0.75rem 1rem', marginBottom: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-            <input type="checkbox" checked={allChecked} onChange={toggleAll}
-              style={{ width: '16px', height: '16px', accentColor: '#16A34A', cursor: 'pointer' }} />
-            <span style={{ fontSize: '0.8rem', color: '#374151', fontWeight: 600, flex: 1 }}>
-              {checkedIds.size > 0 ? `${checkedIds.size}개 선택됨` : '전체 선택'}
-            </span>
-            {checkedIds.size > 0 && (
-              <>
-                <button onClick={() => { setBulkModal('approve'); setBulkNote('') }}
-                  style={{ padding: '0.375rem 0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                  일괄 승인
-                </button>
-                <button onClick={() => { setBulkModal('reject'); setBulkNote('') }}
-                  style={{ padding: '0.375rem 0.875rem', background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                  일괄 거절
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중..</div>
-        ) : current.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎾</div>
-            <p>{tab === 'pending' ? '확인할 신청이 없습니다' : '처리 내역이 없습니다'}</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-            {current.map(a => (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }}>
-                {tab === 'pending' && (
-                  <div style={{ paddingTop: '1rem' }}>
-                    <input type="checkbox" checked={checkedIds.has(a.id)} onChange={() => toggleCheck(a.id)}
-                      style={{ width: '16px', height: '16px', accentColor: '#16A34A', cursor: 'pointer' }} />
-                  </div>
-                )}
-                <div style={{ flex: 1, background: 'white', border: `1.5px solid ${tab === 'pending' ? '#fde68a' : '#f3f4f6'}`, borderRadius: '1rem', padding: '1rem 1.25rem', cursor: tab === 'pending' ? 'pointer' : 'default' }}
-                  onClick={() => tab === 'pending' ? (setSelected(a), setNote('')) : null}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: 700, color: '#111827' }}>{a.member?.name}</span>
-                    <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{a.member?.phone}</span>
-                    {a.status !== 'pending_coach' && (
-                      <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px',
-                        background: a.status === 'rejected' ? '#fee2e2' : '#dcfce7',
-                        color: a.status === 'rejected' ? '#b91c1c' : '#15803d' }}>
-                        {a.status === 'rejected' ? '거절' : '승인완료'}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: '#374151', fontWeight: 600 }}>{fmtDt(a.requested_at)}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{a.duration_minutes}분 · {a.lesson_type} · {a.month?.year}년 {a.month?.month}월</div>
-                  {tab === 'pending' && (
-                    <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#854d0e', fontWeight: 600 }}>탭하여 승인/거절 →</div>
-                  )}
-                  {a.coach_note && (
-                    <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#6b7280', background: '#f9fafb', padding: '0.5rem 0.75rem', borderRadius: '0.5rem' }}>
-                      메모: {a.coach_note}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 개별 처리 모달 */}
-      {selected && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', paddingBottom: '6rem' }}>
-            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
-            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>수업 신청 처리</h2>
-            <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1rem' }}>
-              <div style={{ fontWeight: 700, color: '#111827' }}>{selected.member?.name}</div>
-              <div style={{ fontSize: '0.85rem', color: '#374151', marginTop: '2px' }}>{fmtDt(selected.requested_at)}</div>
-              <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{selected.duration_minutes}분 · {selected.lesson_type}</div>
-            </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>메모 (선택)</label>
-              <input
-                style={{ width: '100%', padding: '0.625rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', boxSizing: 'border-box' as const, outline: 'none' }}
-                placeholder="회원에게 전달할 메모"
-                value={note} onChange={e => setNote(e.target.value)}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '0.625rem' }}>
-              <button onClick={() => handleAction('coach_approve')} disabled={saving}
-                style={{ flex: 2, padding: '0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                {saving ? '처리 중..' : '✅ 승인 → 관리자 전달'}
-              </button>
-              <button onClick={() => handleAction('coach_reject')} disabled={saving}
-                style={{ flex: 1, padding: '0.875rem', background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                거절
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 일괄 처리 모달 */}
-      {bulkModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) setBulkModal(null) }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', paddingBottom: '6rem' }}>
-            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
-            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-              {bulkModal === 'approve' ? '일괄 승인' : '일괄 거절'}
-            </h2>
-            <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1rem' }}>
-              선택한 <strong style={{ color: bulkModal === 'approve' ? '#16A34A' : '#b91c1c' }}>{checkedIds.size}개</strong> 신청을
-              {bulkModal === 'approve' ? ' 승인' : ' 거절'}합니다.
-            </p>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>공통 메모 (선택)</label>
-              <input
-                style={{ width: '100%', padding: '0.625rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', boxSizing: 'border-box' as const, outline: 'none' }}
-                placeholder="전체 회원에게 전달할 메모"
-                value={bulkNote} onChange={e => setBulkNote(e.target.value)}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '0.625rem' }}>
-              <button onClick={() => setBulkModal(null)}
-                style={{ flex: 1, padding: '0.875rem', background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                취소
-              </button>
-              <button onClick={() => handleBulkAction(bulkModal === 'approve' ? 'coach_approve' : 'coach_reject')} disabled={saving}
-                style={{ flex: 2, padding: '0.875rem', background: bulkModal === 'approve' ? '#16A34A' : '#b91c1c', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                {saving ? '처리 중..' : `${checkedIds.size}개 ${bulkModal === 'approve' ? '승인' : '거절'}`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 하단 네비 - 버그 수정 + 납부 추가 */}
-      <div className="bottom-nav">
-        <Link href="/coach" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span>
-        </Link>
-        <Link href="/coach/applications" className="bottom-nav-item active" style={{ position: 'relative' }}>
-          <span style={{ fontSize: '1.25rem' }}>📋</span>
-          <span>신청확인</span>
-          {pending.length > 0 && (
-            <span style={{ position: 'absolute', top: '4px', right: '8px', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: '9999px' }}>
-              {pending.length}
-            </span>
-          )}
-        </Link>
-        <Link href="/coach/payment" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>💰</span><span>납부</span>
-        </Link>
-        <Link href="/coach/blocks" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>🚫</span><span>휴무</span>
-        </Link>
-        <Link href="/coach/schedule" className="bottom-nav-item">
-          <span style={{ fontSize: '1.25rem' }}>📅</span><span>스케줄</span>
-        </Link>
-      </div>
-    </div>
-  )
-}
-
-===== src\app\coach\blocks\page.tsx =====
-'use client'
-
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import CoachBottomNav from '@/components/CoachBottomNav'
-
-interface Block {
-  id: string
-  block_date: string | null
-  block_start: string | null
-  block_end: string | null
-  reason: string | null
-  repeat_weekly: boolean
-  day_of_week: number | null
-}
-
-const DAYS = ['일','월','화','수','목','금','토']
-const TIMES = Array.from({length: 29}, (_, i) => {
-  const h = Math.floor(i/2) + 7
-  const m = i % 2 === 0 ? '00' : '30'
-  return `${String(h).padStart(2,'0')}:${m}`
-})
-
-export default function CoachHolidaysPage() {
-  const [blocks,  setBlocks]  = useState<Block[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving,  setSaving]  = useState(false)
-  const [showForm, setShowForm] = useState(false)
-
-  const [mode,       setMode]       = useState<'weekly'|'date'>('weekly')
-  const [dayOfWeek,  setDayOfWeek]  = useState(1)
-  const [blockDate,  setBlockDate]  = useState('')
-  const [blockStart, setBlockStart] = useState('09:00')
-  const [blockEnd,   setBlockEnd]   = useState('18:00')
-  const [reason,     setReason]     = useState('')
-
-  const load = async () => {
-    setLoading(true)
-    const res = await fetch('/api/coach-blocks')
-    const d = await res.json()
-    setBlocks(Array.isArray(d) ? d : [])
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
-
-  const handleSave = async () => {
-    setSaving(true)
-    const body = mode === 'weekly'
-      ? { repeat_weekly: true, day_of_week: dayOfWeek, block_start: blockStart, block_end: blockEnd, reason }
-      : { repeat_weekly: false, block_date: blockDate, block_start: blockStart, block_end: blockEnd, reason }
-
-    const res = await fetch('/api/coach-blocks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const d = await res.json()
-    setSaving(false)
-    console.log('저장 응답:', JSON.stringify(d))
-    if (d.error) { alert('저장 실패: ' + d.error + '\n\n전송 데이터: ' + JSON.stringify(body)); return }
-    setShowForm(false)
-    setReason('')
-    load()
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('삭제하시겠습니까?')) return
-    await fetch('/api/coach-blocks', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    })
-    load()
-  }
-
-  const weekly = blocks.filter(b => b.repeat_weekly)
-  const single = blocks.filter(b => !b.repeat_weekly)
-
-  const s = {
-    input: { width: '100%', padding: '0.625rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white', boxSizing: 'border-box' as const, outline: 'none', color: '#111827' },
-    label: { fontSize: '0.75rem', fontWeight: 700 as const, color: '#6b7280', display: 'block' as const, marginBottom: '6px' },
-    btn:   { padding: '0.5rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', cursor: 'pointer' as const, fontSize: '0.8rem', fontWeight: 600, fontFamily: 'Noto Sans KR, sans-serif' },
-    btnOn: { padding: '0.5rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #16A34A', background: '#f0fdf4', color: '#15803d', cursor: 'pointer' as const, fontSize: '0.8rem', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif' },
-  }
-
-  return (
-    <div className="mobile-wrap" style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Link href="/coach" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
-          <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', flex: 1 }}>휴무 관리</h1>
-          <button onClick={() => setShowForm(true)}
-            style={{ padding: '0.5rem 1rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.625rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-            + 추가
-          </button>
-        </div>
-      </div>
-
-      <div style={{ padding: '1.25rem', paddingBottom: '6rem' }}>
-        <div style={{ marginBottom: '1.25rem' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', marginBottom: '0.5rem' }}>🔁 매주 반복 휴무</div>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '1rem', color: '#9ca3af' }}>불러오는 중..</div>
-          ) : weekly.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '1.5rem', color: '#9ca3af', background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', fontSize: '0.85rem' }}>
-              등록된 반복 휴무가 없습니다
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {weekly.map(b => (
-                <div key={b.id} style={{ background: 'white', border: '1.5px solid #fde68a', borderRadius: '1rem', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, color: '#111827', marginBottom: '2px' }}>매주 {DAYS[b.day_of_week!]}요일</div>
-                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                      {b.block_start ?? '종일'}{b.block_end ? ` ~ ${b.block_end}` : ''}{b.reason && ` · ${b.reason}`}
-                    </div>
-                  </div>
-                  <button onClick={() => handleDelete(b.id)}
-                    style={{ padding: '0.375rem 0.75rem', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
-                    삭제
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', marginBottom: '0.5rem' }}>📅 특정 날짜 휴무</div>
-          {!loading && single.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '1.5rem', color: '#9ca3af', background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', fontSize: '0.85rem' }}>
-              등록된 날짜 휴무가 없습니다
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {single.map(b => (
-                <div key={b.id} style={{ background: 'white', border: '1.5px solid #f3f4f6', borderRadius: '1rem', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, color: '#111827', marginBottom: '2px' }}>{b.block_date}</div>
-                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                      {b.block_start ?? '종일'}{b.block_end ? ` ~ ${b.block_end}` : ''}{b.reason && ` · ${b.reason}`}
-                    </div>
-                  </div>
-                  <button onClick={() => handleDelete(b.id)}
-                    style={{ padding: '0.375rem 0.75rem', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
-                    삭제
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {showForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) setShowForm(false) }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', paddingBottom: '5rem' }}>
-            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
-            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>휴무 추가</h2>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-              <button onClick={() => setMode('weekly')} style={{ ...(mode === 'weekly' ? s.btnOn : s.btn), flex: 1 }}>🔁 매주 반복</button>
-              <button onClick={() => setMode('date')}   style={{ ...(mode === 'date'   ? s.btnOn : s.btn), flex: 1 }}>📅 특정 날짜</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-              {mode === 'weekly' ? (
-                <div>
-                  <label style={s.label}>휴무 요일</label>
-                  <div style={{ display: 'flex', gap: '0.375rem' }}>
-                    {DAYS.map((d, i) => (
-                      <button key={i} onClick={() => setDayOfWeek(i)}
-                        style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', background: dayOfWeek === i ? '#16A34A' : '#f3f4f6', color: dayOfWeek === i ? 'white' : '#6b7280' }}>
-                        {d}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label style={s.label}>날짜</label>
-                  <input type="date" style={s.input} value={blockDate} onChange={e => setBlockDate(e.target.value)} />
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={s.label}>시작 시간</label>
-                  <select style={s.input} value={blockStart} onChange={e => setBlockStart(e.target.value)}>
-                    <option value="">종일</option>
-                    {TIMES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={s.label}>종료 시간</label>
-                  <select style={s.input} value={blockEnd} onChange={e => setBlockEnd(e.target.value)}>
-                    <option value="">종일</option>
-                    {TIMES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label style={s.label}>사유 (선택)</label>
-                <input style={s.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="예: 개인 사정, 연수 등" />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.625rem', marginTop: '1.25rem' }}>
-              <button onClick={() => setShowForm(false)}
-                style={{ flex: 1, padding: '0.875rem', background: 'white', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                취소
-              </button>
-              <button onClick={handleSave} disabled={saving}
-                style={{ flex: 2, padding: '0.875rem', background: saving ? '#e5e7eb' : '#16A34A', color: saving ? '#9ca3af' : 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                {saving ? '저장 중..' : '저장'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <CoachBottomNav />
-    </div>
-  )
-}
-
-===== src\app\coach\page.tsx =====
-// src/app/coach/page.tsx
-import { redirect } from 'next/navigation'
-import { getSession } from '@/lib/session'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import Link from 'next/link'
-import NotificationBell from '@/components/notifications/NotificationBell'
-import CoachBottomNav from '@/components/CoachBottomNav'
-
-export default async function CoachHomePage() {
-  const session = await getSession()
-  if (!session || !['owner','coach'].includes(session.role)) redirect('/auth/coach')
-
-  const today = new Date().toISOString().split('T')[0]
-  const start = `${today}T00:00:00+09:00`
-  const end   = `${today}T23:59:59+09:00`
-
-  // ✅ draft/cancelled 제외 — 초안은 확정 전이라 코치 홈에 표시 안 함
-  const { data: slots } = await supabaseAdmin
-    .from('lesson_slots')
-    .select(`
-      id, scheduled_at, duration_minutes, status, slot_type, memo,
-      lesson_plan:lesson_plan_id (
-        id, lesson_type,
-        member:member_id ( id, name, phone ),
-        coach:coach_id ( id, name )
-      )
-    `)
-    .gte('scheduled_at', start)
-    .lte('scheduled_at', end)
-    .not('status', 'in', '("draft","cancelled")')
-    .order('scheduled_at', { ascending: true })
-
-  const mySlots = (slots ?? []).filter((s: any) => s.lesson_plan?.coach?.id === session.id)
-
-  const STATUS_STYLE: Record<string, { bg: string; border: string; color: string; label: string }> = {
-    scheduled: { bg: '#f0fdf4', border: '#4ade80', color: '#15803d', label: '예정' },
-    completed: { bg: '#eff6ff', border: '#60a5fa', color: '#1d4ed8', label: '완료' },
-    absent:    { bg: '#fef2f2', border: '#f87171', color: '#b91c1c', label: '결석' },
-    makeup:    { bg: '#fdf4ff', border: '#c084fc', color: '#7e22ce', label: '보강' },
-  }
-
-  const fmtTime = (dt: string) => new Date(dt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
-
-  return (
-    <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: '#1d4ed8', padding: '2rem 1.25rem 1.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: 'white' }}>WTA</div>
-            <div style={{ color: 'rgba(255,255,255,.7)', fontSize: '0.75rem' }}>코치 대시보드</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <NotificationBell />
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>🎾 {session.name}</div>
-              <div style={{ color: 'rgba(255,255,255,.6)', fontSize: '0.75rem' }}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.75rem', padding: '1rem 1.25rem 0' }}>
-        {[
-          { label: '전체', value: mySlots.length, color: '#1d4ed8', bg: '#eff6ff' },
-          { label: '완료', value: mySlots.filter((s:any) => s.status === 'completed').length, color: '#15803d', bg: '#f0fdf4' },
-          { label: '예정', value: mySlots.filter((s:any) => s.status === 'scheduled').length, color: '#854d0e', bg: '#fef9c3' },
-        ].map(s => (
-          <div key={s.label} style={{ background: s.bg, borderRadius: '0.875rem', padding: '0.875rem', textAlign: 'center' }}>
-            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.75rem', fontWeight: 700, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: s.color }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ padding: '1rem 1.25rem 0' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
-          <Link href="/coach/blocks" style={{ textDecoration: 'none' }}>
-            <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.875rem', padding: '0.875rem', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.25rem', marginBottom: '2px' }}>🚫</div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c' }}>휴무 관리</div>
-            </div>
-          </Link>
-          <Link href="/coach/schedule" style={{ textDecoration: 'none' }}>
-            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.25rem', marginBottom: '2px' }}>📅</div>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>전체 스케줄</div>
-            </div>
-          </Link>
-        </div>
-      </div>
-
-      <div style={{ flex: 1, padding: '1rem 1.25rem 6rem' }}>
-        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>오늘 수업</div>
-        {mySlots.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem 0', color: '#9ca3af' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎾</div>
-            <p style={{ fontSize: '0.875rem' }}>오늘 예정된 수업이 없습니다</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-            {mySlots.map((s: any) => {
-              const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
-              return (
-                <div key={s.id} style={{ background: st.bg, borderLeft: `4px solid ${st.border}`, borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '48px' }}>{fmtTime(s.scheduled_at)}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
-                  </div>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: `${st.border}33`, color: st.color }}>{st.label}</span>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      <CoachBottomNav />
-    </div>
-  )
-}
-
-===== src\app\coach\payment\page.tsx =====
-'use client'
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import CoachBottomNav from '@/components/CoachBottomNav'
-
-interface Plan {
-  id: string
-  lesson_type: string
-  unit_minutes: number
-  total_count: number
-  completed_count: number
-  payment_status: 'unpaid' | 'paid'
-  amount: number
-  member: { id: string; name: string; phone: string }
-  month:  { id: string; year: number; month: number }
-}
-interface Month { id: string; year: number; month: number }
-
-export default function CoachPaymentPage() {
-  const [plans,     setPlans]     = useState<Plan[]>([])
-  const [months,    setMonths]    = useState<Month[]>([])
-  const [monthId,   setMonthId]   = useState('')
-  const [loading,   setLoading]   = useState(true)
-  const [filter,    setFilter]    = useState<'all' | 'unpaid' | 'paid'>('all')
-
-  useEffect(() => {
-    fetch('/api/months').then(r => r.json()).then(d => {
-      const list = Array.isArray(d) ? d : []
-      setMonths(list)
-      if (list.length > 0) setMonthId(list[0].id)
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!monthId) return
-    setLoading(true)
-    fetch(`/api/coach/payment?month_id=${monthId}`)
-      .then(r => r.json())
-      .then(d => { setPlans(Array.isArray(d) ? d : []); setLoading(false) })
-  }, [monthId])
-
-  const fmt = (n: number) => (n || 0).toLocaleString('ko-KR')
-
-  const filtered = plans.filter(p =>
-    filter === 'all'    ? true :
-    filter === 'unpaid' ? p.payment_status === 'unpaid' :
-    p.payment_status === 'paid'
-  )
-
-  const totalAmount  = plans.reduce((s, p) => s + (p.amount || 0), 0)
-  const paidAmount   = plans.filter(p => p.payment_status === 'paid').reduce((s, p) => s + (p.amount || 0), 0)
-  const unpaidAmount = plans.filter(p => p.payment_status === 'unpaid').reduce((s, p) => s + (p.amount || 0), 0)
-  const paidCount    = plans.filter(p => p.payment_status === 'paid').length
-  const unpaidCount  = plans.filter(p => p.payment_status === 'unpaid').length
-  const selectedMonth = months.find(m => m.id === monthId)
-
-  return (
-    <div className="mobile-wrap" style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Link href="/coach" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
-          <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.2rem', fontWeight: 700, color: '#111827', flex: 1 }}>💰 납부 현황</h1>
-        </div>
-        <div style={{ marginTop: '0.75rem' }}>
-          <select value={monthId} onChange={e => setMonthId(e.target.value)}
-            style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white', color: '#374151', outline: 'none' }}>
-            {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div style={{ padding: '1.25rem 1.25rem 5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {!loading && (
-          <div style={{ background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)', borderRadius: '1.25rem', padding: '1.25rem', color: 'white' }}>
-            <div style={{ fontSize: '0.75rem', opacity: 0.75, marginBottom: '0.25rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-              {selectedMonth ? `${selectedMonth.year}년 ${selectedMonth.month}월` : ''} 총 수업료
-            </div>
-            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.75rem', fontWeight: 700, marginBottom: '1rem' }}>
-              {fmt(totalAmount)}<span style={{ fontSize: '1rem', fontWeight: 400, marginLeft: '4px' }}>원</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-              <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: '0.875rem', padding: '0.75rem' }}>
-                <div style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '0.25rem', fontFamily: 'Noto Sans KR, sans-serif' }}>✅ 납부 완료</div>
-                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700 }}>{fmt(paidAmount)}원</div>
-                <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '2px', fontFamily: 'Noto Sans KR, sans-serif' }}>{paidCount}명</div>
-              </div>
-              <div style={{ background: 'rgba(239,68,68,0.25)', borderRadius: '0.875rem', padding: '0.75rem' }}>
-                <div style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '0.25rem', fontFamily: 'Noto Sans KR, sans-serif' }}>⏳ 미납</div>
-                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700 }}>{fmt(unpaidAmount)}원</div>
-                <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '2px', fontFamily: 'Noto Sans KR, sans-serif' }}>{unpaidCount}명</div>
-              </div>
-            </div>
-            {totalAmount > 0 && (
-              <div style={{ marginTop: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.75, marginBottom: '0.375rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                  <span>납부율</span>
-                  <span>{Math.round(paidAmount / totalAmount * 100)}%</span>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '9999px', height: '6px', overflow: 'hidden' }}>
-                  <div style={{ background: '#4ade80', height: '100%', borderRadius: '9999px', width: `${Math.round(paidAmount / totalAmount * 100)}%`, transition: 'width 0.5s ease' }} />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'white', borderRadius: '0.875rem', border: '1.5px solid #f3f4f6', padding: '0.375rem' }}>
-          {([
-            { key: 'all',    label: `전체 (${plans.length})` },
-            { key: 'unpaid', label: `미납 (${unpaidCount})` },
-            { key: 'paid',   label: `납부 (${paidCount})` },
-          ] as const).map(tab => (
-            <button key={tab.key} onClick={() => setFilter(tab.key)}
-              style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: 'none', fontWeight: 700, fontSize: '0.8rem', fontFamily: 'Noto Sans KR, sans-serif', cursor: 'pointer', background: filter === tab.key ? (tab.key === 'unpaid' ? '#fef2f2' : tab.key === 'paid' ? '#f0fdf4' : '#f3f4f6') : 'transparent', color: filter === tab.key ? (tab.key === 'unpaid' ? '#b91c1c' : tab.key === 'paid' ? '#16A34A' : '#374151') : '#9ca3af' }}>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>불러오는 중...</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>💳</div>
-            <p style={{ fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>해당하는 내역이 없습니다</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-            {filtered.map(p => (
-              <div key={p.id} style={{ background: 'white', borderRadius: '1rem', border: `1.5px solid ${p.payment_status === 'unpaid' ? '#fecaca' : '#bbf7d0'}`, padding: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: p.payment_status === 'unpaid' ? '#fef2f2' : '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
-                    {p.payment_status === 'unpaid' ? '⏳' : '✅'}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>{p.member?.name}</span>
-                      <span style={{ fontSize: '0.7rem', color: '#9ca3af', fontFamily: 'Noto Sans KR, sans-serif' }}>{p.lesson_type}</span>
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                      {p.total_count}회 · {p.unit_minutes}분
-                      <span style={{ marginLeft: '0.5rem', color: '#9ca3af' }}>{p.member?.phone}</span>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: p.payment_status === 'unpaid' ? '#b91c1c' : '#16A34A' }}>
-                      {fmt(p.amount)}원
-                    </div>
-                    <div style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', marginTop: '4px', display: 'inline-block', background: p.payment_status === 'unpaid' ? '#fef2f2' : '#f0fdf4', color: p.payment_status === 'unpaid' ? '#b91c1c' : '#16A34A', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                      {p.payment_status === 'unpaid' ? '미납' : '납부'}
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <CoachBottomNav />
-    </div>
-  )
-}
-
-===== src\app\coach\pin-change\page.tsx =====
-'use client'
-
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-
-export default function CoachPinChangePage() {
-  const router = useRouter()
-  const [newPin, setNewPin]       = useState('')
-  const [confirm, setConfirm]     = useState('')
-  const [error, setError]         = useState('')
-  const [loading, setLoading]     = useState(false)
-
-  const handleSubmit = async () => {
-    setError('')
-    if (newPin.length !== 6)    return setError('PIN은 6자리여야 합니다')
-    if (newPin !== confirm)     return setError('PIN이 일치하지 않습니다')
-    if (newPin === '123456')    return setError('임시 PIN은 사용할 수 없습니다')
-
-    setLoading(true)
-    const res = await fetch('/api/auth/change-pin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ new_pin: newPin }),
-    })
-    const data = await res.json()
-    setLoading(false)
-    if (!res.ok) return setError(data.error)
-    router.replace('/coach')
-  }
-
-  return (
-    <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: '#1d4ed8', padding: '3rem 1.5rem 2rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🔑</div>
-        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: 'white' }}>PIN 변경 필요</div>
-        <p style={{ color: 'rgba(255,255,255,.75)', fontSize: '0.8rem', marginTop: '0.5rem' }}>첫 로그인 시 PIN을 변경해야 합니다</p>
-      </div>
-
-      <div style={{ flex: 1, padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>새 PIN 6자리</label>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            {Array.from({length:6}).map((_,i) => (
-              <div key={i} className={`pin-box ${newPin.length > i ? 'filled' : ''} ${newPin.length === i ? 'active' : ''}`}>
-                {newPin.length > i ? '●' : ''}
-              </div>
-            ))}
-          </div>
-          <input className="input-base" placeholder="숫자 6자리" value={newPin}
-            onChange={e => setNewPin(e.target.value.replace(/\D/g,'').slice(0,6))}
-            inputMode="numeric" maxLength={6} />
-        </div>
-
-        <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>PIN 확인</label>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            {Array.from({length:6}).map((_,i) => (
-              <div key={i} className={`pin-box ${confirm.length > i ? 'filled' : ''} ${confirm.length === i ? 'active' : ''}`}>
-                {confirm.length > i ? '●' : ''}
-              </div>
-            ))}
-          </div>
-          <input className="input-base" placeholder="PIN 한번 더" value={confirm}
-            onChange={e => setConfirm(e.target.value.replace(/\D/g,'').slice(0,6))}
-            inputMode="numeric" maxLength={6} />
-        </div>
-
-        {error && (
-          <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.75rem', padding: '0.875rem', color: '#b91c1c', fontSize: '0.875rem', fontWeight: 600 }}>
-            {error}
-          </div>
-        )}
-
-        <button onClick={handleSubmit} disabled={loading}
-          style={{ padding: '1rem', borderRadius: '0.75rem', border: 'none', background: '#1d4ed8', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: '1rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-          {loading ? '변경 중...' : 'PIN 변경 완료'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-
-===== src\app\coach\schedule\page.tsx =====
-'use client'
-
-import { useEffect, useState, useCallback } from 'react'
-import CoachBottomNav from '@/components/CoachBottomNav'
-
-interface Slot {
-  id: string
-  scheduled_at: string
-  duration_minutes: number
-  status: string
-  slot_type: string
-  memo: string | null
-  lesson_plan: {
-    id: string
-    lesson_type: string
-    member: { id: string; name: string; phone: string }
-    coach:  { id: string; name: string }
-  }
-}
-
-const STATUS_STYLE: Record<string, { bg: string; border: string; color: string; label: string }> = {
-  scheduled: { bg: '#f0fdf4', border: '#4ade80', color: '#15803d', label: '예정' },
-  completed: { bg: '#eff6ff', border: '#60a5fa', color: '#1d4ed8', label: '완료' },
-  absent:    { bg: '#fef2f2', border: '#f87171', color: '#b91c1c', label: '결석' },
-  makeup:    { bg: '#fdf4ff', border: '#c084fc', color: '#7e22ce', label: '보강' },
-}
-
-const DAY_KO = ['일','월','화','수','목','금','토']
-
-function getWeekDates(baseDate: string) {
-  const d = new Date(baseDate)
-  const dow = d.getDay()
-  const monday = new Date(d)
-  monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
-  return Array.from({ length: 7 }, (_, i) => {
-    const date = new Date(monday)
-    date.setDate(monday.getDate() + i)
-    return date.toISOString().split('T')[0]
-  })
-}
-
-export default function CoachSchedulePage() {
-  const today = new Date().toISOString().split('T')[0]
-  const [tab,     setTab]     = useState<'day'|'week'>('day')
-  const [date,    setDate]    = useState(today)
-  const [coachId, setCoachId] = useState('')
-  const [slots,   setSlots]   = useState<Slot[]>([])
-  const [weekSlots, setWeekSlots] = useState<Slot[]>([])
-  const [loading,   setLoading]   = useState(false)
-  const [selected,  setSelected]  = useState<Slot | null>(null)
-  const [saving,    setSaving]    = useState(false)
-  const [memo,      setMemo]      = useState('')
-  const [showMakeup,   setShowMakeup]   = useState(false)
-  const [makeupDate,   setMakeupDate]   = useState('')
-  const [makeupTime,   setMakeupTime]   = useState('')
-  const [weekOffset,   setWeekOffset]   = useState(0)
-
-  // 코치 본인 ID 조회 (세션 API)
-  useEffect(() => {
-    fetch('/api/session').then(r => r.json()).then(d => {
-      if (d?.id) setCoachId(d.id)
-    })
-  }, [])
-
-  // 일간 로드
-  const load = useCallback(async () => {
-    if (!coachId) return
-    setLoading(true)
-    const res = await fetch(`/api/lesson-slots?date=${date}&coach_id=${coachId}`)
-    const data = await res.json()
-    // 본인 코치 슬롯만 (API 필터 + 클라이언트 이중 필터)
-    const filtered = (Array.isArray(data) ? data : []).filter(
-      (s: Slot) => s.lesson_plan?.coach?.id === coachId
-    )
-    setSlots(filtered)
-    setLoading(false)
-  }, [date, coachId])
-
-  // 주간 로드
-  const loadWeek = useCallback(async () => {
-    if (!coachId) return
-    setLoading(true)
-    const base = new Date(today)
-    base.setDate(base.getDate() + weekOffset * 7)
-    const weekDates = getWeekDates(base.toISOString().split('T')[0])
-    const from = weekDates[0]
-    const to   = weekDates[6]
-    const res  = await fetch(`/api/lesson-slots?from=${from}&to=${to}&coach_id=${coachId}`)
-    const data = await res.json()
-    const filtered = (Array.isArray(data) ? data : []).filter(
-      (s: Slot) => s.lesson_plan?.coach?.id === coachId
-    )
-    setWeekSlots(filtered)
-    setLoading(false)
-  }, [coachId, weekOffset, today])
-
-  useEffect(() => { if (tab === 'day')  load() },     [load, tab])
-  useEffect(() => { if (tab === 'week') loadWeek() }, [loadWeek, tab])
-
-  const handleCancel = async () => {
-    if (!selected) return
-    const reason = prompt('취소 사유 (선택사항)')
-    if (reason === null) return
-    setSaving(true)
-    await fetch('/api/lesson-slots/cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slot_id: selected.id, reason }),
-    })
-    setSaving(false)
-    setSelected(null)
-    setMemo('')
-    tab === 'day' ? load() : loadWeek()
-  }
-
-  const handleStatus = async (status: string) => {
-    if (!selected) return
-    if (status === 'makeup') { setShowMakeup(true); return }
-    setSaving(true)
-    await fetch(`/api/lesson-slots/${selected.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, memo: memo || null }),
-    })
-    setSaving(false)
-    setSelected(null)
-    setMemo('')
-    tab === 'day' ? load() : loadWeek()
-  }
-
-  const handleMakeupSubmit = async () => {
-    if (!selected || !makeupDate || !makeupTime) return
-    setSaving(true)
-    await fetch('/api/makeup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        original_slot_id: selected.id,
-        makeup_datetime: `${makeupDate}T${makeupTime}:00+09:00`,
-      }),
-    })
-    setSaving(false)
-    setShowMakeup(false)
-    setSelected(null)
-    setMakeupDate('')
-    setMakeupTime('')
-    tab === 'day' ? load() : loadWeek()
-  }
-
-  const fmtTime = (dt: string) => new Date(dt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
-  const changeDate = (days: number) => {
-    const d = new Date(date)
-    d.setDate(d.getDate() + days)
-    setDate(d.toISOString().split('T')[0])
-  }
-
-  // 주간 날짜 목록
-  const base = new Date(today)
-  base.setDate(base.getDate() + weekOffset * 7)
-  const weekDates = getWeekDates(base.toISOString().split('T')[0])
-
-  // 날짜별 슬롯 그룹
-  const slotsByDate: Record<string, Slot[]> = {}
-  weekDates.forEach(d => { slotsByDate[d] = [] })
-  weekSlots.forEach(s => {
-    const d = s.scheduled_at.split('T')[0]
-    if (slotsByDate[d]) slotsByDate[d].push(s)
-  })
-
-  return (
-    <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* 헤더 */}
-      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>스케줄</div>
-
-        {/* 탭 */}
-        <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.75rem' }}>
-          <button onClick={() => setTab('day')}
-            style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: 'none', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', background: tab === 'day' ? '#1d4ed8' : '#f3f4f6', color: tab === 'day' ? 'white' : '#6b7280' }}>
-            📅 일간
-          </button>
-          <button onClick={() => setTab('week')}
-            style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: 'none', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', background: tab === 'week' ? '#1d4ed8' : '#f3f4f6', color: tab === 'week' ? 'white' : '#6b7280' }}>
-            📆 주간
-          </button>
-        </div>
-
-        {/* 일간 날짜 선택 */}
-        {tab === 'day' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <button onClick={() => changeDate(-1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>‹</button>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-              style={{ flex: 1, padding: '0.5rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', textAlign: 'center' }} />
-            <button onClick={() => changeDate(1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>›</button>
-          </div>
-        )}
-
-        {/* 주간 네비게이션 */}
-        {tab === 'week' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <button onClick={() => setWeekOffset(w => w-1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>‹</button>
-            <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', fontWeight: 700, color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
-              {weekDates[0].slice(5).replace('-','/')} ~ {weekDates[6].slice(5).replace('-','/')}
-            </div>
-            <button onClick={() => setWeekOffset(w => w+1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>›</button>
-          </div>
-        )}
-      </div>
-
-      <div style={{ flex: 1, padding: '1rem 1.25rem 6rem', overflowY: 'auto' }}>
-
-        {/* ── 일간 뷰 ── */}
-        {tab === 'day' && (
-          loading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
-          ) : slots.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📅</div>
-              <p style={{ fontSize: '0.875rem' }}>이 날 수업이 없습니다</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-              {slots.map(s => {
-                const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
-                return (
-                  <div key={s.id} onClick={() => { setSelected(s); setMemo(s.memo ?? ''); setShowMakeup(false) }}
-                    style={{ background: st.bg, borderLeft: `4px solid ${st.border}`, borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-                    <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '48px' }}>{fmtTime(s.scheduled_at)}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
-                      {s.memo && <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '2px' }}>📝 {s.memo}</div>}
-                    </div>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: `${st.border}33`, color: st.color, flexShrink: 0 }}>{st.label}</span>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        )}
-
-        {/* ── 주간 뷰 ── */}
-        {tab === 'week' && (
-          loading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {weekDates.map(d => {
-                const daySlots = slotsByDate[d] ?? []
-                const dateObj  = new Date(d)
-                const isToday  = d === today
-                const dow      = dateObj.getDay()
-                return (
-                  <div key={d}>
-                    {/* 날짜 헤더 */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
-                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', background: isToday ? '#1d4ed8' : '#f3f4f6', flexShrink: 0 }}>
-                        <span style={{ fontSize: '0.6rem', fontWeight: 700, color: isToday ? 'rgba(255,255,255,.8)' : dow === 0 ? '#b91c1c' : dow === 6 ? '#1d4ed8' : '#6b7280' }}>{DAY_KO[dow]}</span>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isToday ? 'white' : dow === 0 ? '#b91c1c' : dow === 6 ? '#1d4ed8' : '#374151', lineHeight: 1 }}>{dateObj.getDate()}</span>
-                      </div>
-                      <div style={{ flex: 1, height: '1px', background: '#f3f4f6' }} />
-                      {daySlots.length > 0 && (
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{daySlots.length}건</span>
-                      )}
-                    </div>
-
-                    {/* 슬롯 목록 */}
-                    {daySlots.length === 0 ? (
-                      <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: '#d1d5db', fontFamily: 'Noto Sans KR, sans-serif' }}>수업 없음</div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                        {daySlots
-                          .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
-                          .map(s => {
-                            const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
-                            return (
-                              <div key={s.id} onClick={() => { setSelected(s); setMemo(s.memo ?? ''); setShowMakeup(false) }}
-                                style={{ background: st.bg, borderLeft: `3px solid ${st.border}`, borderRadius: '0 0.75rem 0.75rem 0', padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer' }}>
-                                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '0.875rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '42px' }}>{fmtTime(s.scheduled_at)}</div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
-                                  <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
-                                </div>
-                                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '9999px', background: `${st.border}33`, color: st.color, flexShrink: 0 }}>{st.label}</span>
-                              </div>
-                            )
-                          })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )
-        )}
-      </div>
-
-      <CoachBottomNav />
-
-      {/* 수업 처리 모달 */}
-      {selected && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) { setSelected(null); setMemo(''); setShowMakeup(false) } }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem' }}>
-            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
-            <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>수업 처리</h2>
-            <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1rem' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>{selected.lesson_plan?.member?.name}</div>
-              <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>{fmtTime(selected.scheduled_at)} · {selected.duration_minutes}분 · {selected.lesson_plan?.lesson_type}</div>
-            </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>메모 (선택)</label>
-              <input className="input-base" placeholder="특이사항 입력" value={memo} onChange={e => setMemo(e.target.value)} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
-              {[
-                { status: 'completed', label: '✅ 완료',  bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-                { status: 'absent',    label: '❌ 결석',  bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
-                { status: 'makeup',    label: '🔁 보강',  bg: '#fdf4ff', color: '#7e22ce', border: '#e9d5ff' },
-                { status: 'scheduled', label: '🔄 예정',  bg: '#f0fdf4', color: '#15803d', border: '#86efac' },
-              ].map(btn => (
-                <button key={btn.status} onClick={() => handleStatus(btn.status)} disabled={saving}
-                  style={{ padding: '0.75rem', borderRadius: '0.75rem', border: `1.5px solid ${btn.border}`, background: btn.bg, color: btn.color, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                  {btn.label}
-                </button>
-              ))}
-            </div>
-            {showMakeup && (
-              <div style={{ marginTop: '1rem', background: '#fdf4ff', border: '1.5px solid #c084fc', borderRadius: '0.875rem', padding: '1rem' }}>
-                <div style={{ fontWeight: 700, color: '#7e22ce', marginBottom: '0.75rem', fontSize: '0.875rem' }}>📅 보강 날짜 선택</div>
-                <input type="date" value={makeupDate} onChange={e => setMakeupDate(e.target.value)}
-                  style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #e9d5ff', borderRadius: '0.5rem', marginBottom: '0.5rem', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', boxSizing: 'border-box' as const }} />
-                <input type="time" value={makeupTime} onChange={e => setMakeupTime(e.target.value)}
-                  style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #e9d5ff', borderRadius: '0.5rem', marginBottom: '0.75rem', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', boxSizing: 'border-box' as const }} />
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => setShowMakeup(false)} style={{ flex: 1, padding: '0.625rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', background: 'white', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>취소</button>
-                  <button onClick={handleMakeupSubmit} disabled={!makeupDate || !makeupTime || saving}
-                    style={{ flex: 1, padding: '0.625rem', border: 'none', borderRadius: '0.625rem', background: (!makeupDate || !makeupTime || saving) ? '#d1d5db' : '#7e22ce', color: 'white', cursor: (!makeupDate || !makeupTime || saving) ? 'not-allowed' : 'pointer', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>
-                    보강 확정
-                  </button>
-                </div>
-              </div>
-            )}
-            {selected.status !== 'completed' && (
-              <button onClick={handleCancel} disabled={saving}
-                style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                🗑 수업 취소 (회원 알림 발송)
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-===== src\app\payment\list\page.tsx =====
-export { default } from '@/app/owner/payment/page'
-
-
-===== src\app\payment\page.tsx =====
-import { redirect } from 'next/navigation'
-import { getSession } from '@/lib/session'
-import Link from 'next/link'
-import LogoutButton from '@/components/LogoutButton'
-import NotificationBell from '@/components/notifications/NotificationBell'
-
-export default async function PaymentHomePage() {
-  const session = await getSession()
-  if (!session || !['owner','payment'].includes(session.role)) redirect('/auth/payment')
-
-  const menus = [
-    { emoji: '💰', label: '납부 관리',   sub: '납부 현황 확인 및 상태 변경', href: '/payment/list' },
-    { emoji: '📷', label: '영수증 관리', sub: '카드·현금 영수증 사진 첨부',   href: '/payment/receipts' },
-  ]
-
-  return (
-    <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      <div style={{ background: '#92400e', padding: '2rem 1.5rem 1.5rem' }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.75rem', fontWeight: 700, color: 'white' }}>WTA</div>
-            <div style={{ color: 'rgba(255,255,255,.7)', fontSize: '0.8rem' }}>결제담당 대시보드</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <NotificationBell />
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>💳 {session.name}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        {menus.map(m => (
-          <Link key={m.href} href={m.href} style={{ textDecoration: 'none' }}>
-            <div style={{ background: 'white', border: '1.5px solid #f3f4f6', borderRadius: '1rem', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.875rem', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
-              <div style={{ fontSize: '1.75rem' }}>{m.emoji}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>{m.label}</div>
-                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>{m.sub}</div>
-              </div>
-              <div style={{ color: '#d1d5db' }}>›</div>
-            </div>
-          </Link>
-        ))}
-
-        <div style={{ marginTop: '1rem', textAlign: 'center' }}><LogoutButton /></div>
-      </div>
-    </div>
-  )
-}
-
-
-
-===== src\app\payment\pin-change\page.tsx =====
-export { default } from '@/app/coach/pin-change/page'
-
-
-===== src\app\payment\receipts\page.tsx =====
-'use client'
-
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-
-interface Plan {
-  id: string
-  payment_status: string
-  amount: number
-  lesson_type: string
-  member: { name: string }
-  coach: { name: string }
-  month: { year: number; month: number }
-}
-
-interface Receipt {
-  id: string
-  image_url: string
-  amount: number | null
-  memo: string | null
-  created_at: string
-  uploader: { name: string }
-}
-
-export default function ReceiptsPage() {
-  const [plans,    setPlans]    = useState<Plan[]>([])
-  const [selected, setSelected] = useState<Plan | null>(null)
-  const [receipts, setReceipts] = useState<Receipt[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [saving,   setSaving]   = useState(false)
-  const [preview,  setPreview]  = useState<string>('')
-  const [amount,   setAmount]   = useState('')
-  const [memo,     setMemo]     = useState('')
-
-  useEffect(() => {
-    fetch('/api/payment').then(r => r.json()).then(d => {
-      setPlans(Array.isArray(d) ? d : [])
-      setLoading(false)
-    })
-  }, [])
-
-  const loadReceipts = async (planId: string) => {
-    const res = await fetch(`/api/receipts?plan_id=${planId}`)
-    const data = await res.json()
-    setReceipts(Array.isArray(data) ? data : [])
-  }
-
-  const handleSelectPlan = (plan: Plan) => {
-    setSelected(plan)
-    setPreview('')
-    setAmount(String(plan.amount || ''))
-    setMemo('')
-    loadReceipts(plan.id)
-  }
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onloadend = () => setPreview(reader.result as string)
-    reader.readAsDataURL(file)
-  }
-
-  const handleSubmit = async () => {
-    if (!selected || !preview) return alert('영수증 이미지를 선택해주세요')
-    setSaving(true)
-    const res = await fetch('/api/receipts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lesson_plan_id: selected.id, image_url: preview, amount: Number(amount) || null, memo }),
-    })
-    setSaving(false)
-    if (!res.ok) { const d = await res.json(); return alert(d.error) }
-    setPreview('')
-    setMemo('')
-    loadReceipts(selected.id)
-    // 플랜 상태 갱신
-    setPlans(prev => prev.map(p => p.id === selected.id ? { ...p, payment_status: 'paid' } : p))
-    setSelected(prev => prev ? { ...prev, payment_status: 'paid' } : prev)
-  }
-
-  const fmt = (n: number) => n?.toLocaleString('ko-KR')
-
-  return (
-    <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', position: 'sticky', top: 0, zIndex: 40 }}>
-        <Link href="/payment" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>‹</Link>
-        <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>영수증 관리</h1>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', maxWidth: '900px', margin: '0 auto', padding: '1.5rem', gap: '1rem' }}>
-
-        {/* 납부 목록 */}
-        <div>
-          <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#6b7280', fontSize: '0.85rem', marginBottom: '0.75rem' }}>납부 목록</div>
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-              {plans.map(p => (
-                <div key={p.id} onClick={() => handleSelectPlan(p)}
-                  style={{ background: 'white', border: `1.5px solid ${selected?.id === p.id ? '#f59e0b' : '#f3f4f6'}`, borderRadius: '1rem', padding: '1rem', cursor: 'pointer', boxShadow: selected?.id === p.id ? '0 0 0 2px #fde68a' : 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{p.member?.name}</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: p.payment_status === 'paid' ? '#dcfce7' : '#fee2e2', color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
-                      {p.payment_status === 'paid' ? '완납' : '미납'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{p.month?.year}년 {p.month?.month}월 · {p.lesson_type}</div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '4px' }}>{fmt(p.amount)}원</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 영수증 첨부 */}
-        {selected && (
-          <div>
-            <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#6b7280', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{selected.member?.name} - {selected.month?.year}년 {selected.month?.month}월</div>
-            <div style={{ background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', padding: '1.25rem', marginBottom: '0.75rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>영수증 이미지</label>
-                  <label style={{ display: 'block', border: '2px dashed #e5e7eb', borderRadius: '0.875rem', padding: '1.5rem', textAlign: 'center', cursor: 'pointer', background: '#f9fafb' }}>
-                    {preview ? (
-                      <img src={preview} alt="영수증" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', objectFit: 'contain' }} />
-                    ) : (
-                      <div>
-                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📷</div>
-                        <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>이미지를 선택하세요</div>
-                      </div>
-                    )}
-                    <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
-                  </label>
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>결제 금액</label>
-                  <input className="input-base" type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>메모</label>
-                  <input className="input-base" placeholder="카드, 현금 등" value={memo} onChange={e => setMemo(e.target.value)} />
-                </div>
-                <button onClick={handleSubmit} disabled={saving} style={{ padding: '0.875rem', borderRadius: '0.75rem', border: 'none', background: '#92400e', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                  {saving ? '등록 중...' : '✅ 납부 완료 처리'}
-                </button>
-              </div>
-            </div>
-
-            {/* 기존 영수증 */}
-            {receipts.length > 0 && (
-              <div style={{ background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', padding: '1.25rem' }}>
-                <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.75rem' }}>등록된 영수증</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                  {receipts.map(r => (
-                    <div key={r.id} style={{ display: 'flex', gap: '0.875rem', alignItems: 'center', padding: '0.75rem', background: '#f9fafb', borderRadius: '0.75rem' }}>
-                      <img src={r.image_url} alt="영수증" style={{ width: '60px', height: '60px', borderRadius: '0.5rem', objectFit: 'cover', flexShrink: 0 }} />
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#111827' }}>{r.amount ? `${fmt(r.amount)}원` : '-'}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{r.uploader?.name} · {new Date(r.created_at).toLocaleDateString('ko-KR')}</div>
-                        {r.memo && <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{r.memo}</div>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-
-===== src\app\layout.tsx =====
-import type { Metadata } from 'next'
-import './globals.css'
-
-export const metadata: Metadata = {
-  title: '서부 테니스 아카데미',
-  description: '서부 테니스 아카데미 레슨 관리 앱',
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'WTA',
-  },
-}
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return (
-    <html lang="ko">
-      <head>
-        <meta name="application-name" content="WTA" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="WTA" />
-        <meta name="theme-color" content="#16A34A" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icon-512.svg" />
-        <link rel="icon" type="image/svg+xml" href="/icon-512.svg" />
-      </head>
-      <body>{children}</body>
-    </html>
-  )
-}
-
-
-===== src\app\page.tsx =====
+===== app\page.tsx =====
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -3416,3 +3287,854 @@ export default async function RootPage() {
   )
 }
 
+===== app\payment\list\page.tsx =====
+export { default } from '@/app/owner/payment/page'
+
+
+===== app\payment\page.tsx =====
+import { redirect } from 'next/navigation'
+import { getSession } from '@/lib/session'
+import Link from 'next/link'
+import LogoutButton from '@/components/LogoutButton'
+import NotificationBell from '@/components/notifications/NotificationBell'
+
+export default async function PaymentHomePage() {
+  const session = await getSession()
+  if (!session || !['owner','payment'].includes(session.role)) redirect('/auth/payment')
+
+  const menus = [
+    { emoji: '💰', label: '납부 관리',   sub: '납부 현황 확인 및 상태 변경', href: '/payment/list' },
+    { emoji: '📷', label: '영수증 관리', sub: '카드·현금 영수증 사진 첨부',   href: '/payment/receipts' },
+  ]
+
+  return (
+    <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
+      <div style={{ background: '#92400e', padding: '2rem 1.5rem 1.5rem' }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.75rem', fontWeight: 700, color: 'white' }}>WTA</div>
+            <div style={{ color: 'rgba(255,255,255,.7)', fontSize: '0.8rem' }}>결제담당 대시보드</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <NotificationBell />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>💳 {session.name}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {menus.map(m => (
+          <Link key={m.href} href={m.href} style={{ textDecoration: 'none' }}>
+            <div style={{ background: 'white', border: '1.5px solid #f3f4f6', borderRadius: '1rem', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.875rem', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+              <div style={{ fontSize: '1.75rem' }}>{m.emoji}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>{m.label}</div>
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>{m.sub}</div>
+              </div>
+              <div style={{ color: '#d1d5db' }}>›</div>
+            </div>
+          </Link>
+        ))}
+
+        <div style={{ marginTop: '1rem', textAlign: 'center' }}><LogoutButton /></div>
+      </div>
+    </div>
+  )
+}
+
+
+
+===== app\payment\pin-change\page.tsx =====
+export { default } from '@/app/coach/pin-change/page'
+
+
+===== app\payment\receipts\page.tsx =====
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+
+interface Plan {
+  id: string
+  payment_status: string
+  amount: number
+  lesson_type: string
+  member: { name: string }
+  coach: { name: string }
+  month: { year: number; month: number }
+}
+
+interface Receipt {
+  id: string
+  image_url: string
+  amount: number | null
+  memo: string | null
+  created_at: string
+  uploader: { name: string }
+}
+
+export default function ReceiptsPage() {
+  const [plans,    setPlans]    = useState<Plan[]>([])
+  const [selected, setSelected] = useState<Plan | null>(null)
+  const [receipts, setReceipts] = useState<Receipt[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [preview,  setPreview]  = useState<string>('')
+  const [amount,   setAmount]   = useState('')
+  const [memo,     setMemo]     = useState('')
+
+  useEffect(() => {
+    fetch('/api/payment').then(r => r.json()).then(d => {
+      setPlans(Array.isArray(d) ? d : [])
+      setLoading(false)
+    })
+  }, [])
+
+  const loadReceipts = async (planId: string) => {
+    const res = await fetch(`/api/receipts?plan_id=${planId}`)
+    const data = await res.json()
+    setReceipts(Array.isArray(data) ? data : [])
+  }
+
+  const handleSelectPlan = (plan: Plan) => {
+    setSelected(plan)
+    setPreview('')
+    setAmount(String(plan.amount || ''))
+    setMemo('')
+    loadReceipts(plan.id)
+  }
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => setPreview(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  const handleSubmit = async () => {
+    if (!selected || !preview) return alert('영수증 이미지를 선택해주세요')
+    setSaving(true)
+    const res = await fetch('/api/receipts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lesson_plan_id: selected.id, image_url: preview, amount: Number(amount) || null, memo }),
+    })
+    setSaving(false)
+    if (!res.ok) { const d = await res.json(); return alert(d.error) }
+    setPreview('')
+    setMemo('')
+    loadReceipts(selected.id)
+    // 플랜 상태 갱신
+    setPlans(prev => prev.map(p => p.id === selected.id ? { ...p, payment_status: 'paid' } : p))
+    setSelected(prev => prev ? { ...prev, payment_status: 'paid' } : prev)
+  }
+
+  const fmt = (n: number) => n?.toLocaleString('ko-KR')
+
+  return (
+    <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
+      <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', position: 'sticky', top: 0, zIndex: 40 }}>
+        <Link href="/payment" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>‹</Link>
+        <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827' }}>영수증 관리</h1>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', maxWidth: '900px', margin: '0 auto', padding: '1.5rem', gap: '1rem' }}>
+
+        {/* 납부 목록 */}
+        <div>
+          <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#6b7280', fontSize: '0.85rem', marginBottom: '0.75rem' }}>납부 목록</div>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              {plans.map(p => (
+                <div key={p.id} onClick={() => handleSelectPlan(p)}
+                  style={{ background: 'white', border: `1.5px solid ${selected?.id === p.id ? '#f59e0b' : '#f3f4f6'}`, borderRadius: '1rem', padding: '1rem', cursor: 'pointer', boxShadow: selected?.id === p.id ? '0 0 0 2px #fde68a' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{p.member?.name}</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: p.payment_status === 'paid' ? '#dcfce7' : '#fee2e2', color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
+                      {p.payment_status === 'paid' ? '완납' : '미납'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{p.month?.year}년 {p.month?.month}월 · {p.lesson_type}</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '4px' }}>{fmt(p.amount)}원</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 영수증 첨부 */}
+        {selected && (
+          <div>
+            <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#6b7280', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{selected.member?.name} - {selected.month?.year}년 {selected.month?.month}월</div>
+            <div style={{ background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', padding: '1.25rem', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>영수증 이미지</label>
+                  <label style={{ display: 'block', border: '2px dashed #e5e7eb', borderRadius: '0.875rem', padding: '1.5rem', textAlign: 'center', cursor: 'pointer', background: '#f9fafb' }}>
+                    {preview ? (
+                      <img src={preview} alt="영수증" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', objectFit: 'contain' }} />
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📷</div>
+                        <div style={{ fontSize: '0.8rem', color: '#9ca3af' }}>이미지를 선택하세요</div>
+                      </div>
+                    )}
+                    <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
+                  </label>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>결제 금액</label>
+                  <input className="input-base" type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>메모</label>
+                  <input className="input-base" placeholder="카드, 현금 등" value={memo} onChange={e => setMemo(e.target.value)} />
+                </div>
+                <button onClick={handleSubmit} disabled={saving} style={{ padding: '0.875rem', borderRadius: '0.75rem', border: 'none', background: '#92400e', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                  {saving ? '등록 중...' : '✅ 납부 완료 처리'}
+                </button>
+              </div>
+            </div>
+
+            {/* 기존 영수증 */}
+            {receipts.length > 0 && (
+              <div style={{ background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', padding: '1.25rem' }}>
+                <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.75rem' }}>등록된 영수증</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                  {receipts.map(r => (
+                    <div key={r.id} style={{ display: 'flex', gap: '0.875rem', alignItems: 'center', padding: '0.75rem', background: '#f9fafb', borderRadius: '0.75rem' }}>
+                      <img src={r.image_url} alt="영수증" style={{ width: '60px', height: '60px', borderRadius: '0.5rem', objectFit: 'cover', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#111827' }}>{r.amount ? `${fmt(r.amount)}원` : '-'}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{r.uploader?.name} · {new Date(r.created_at).toLocaleDateString('ko-KR')}</div>
+                        {r.memo && <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{r.memo}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+===== components\CoachBottomNav.tsx =====
+'use client'
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+
+const navItems = [
+  { href: '/coach',              emoji: '🏠', label: '홈' },
+  { href: '/coach/applications', emoji: '📋', label: '신청확인' },
+  { href: '/coach/payment',      emoji: '💰', label: '납부' },
+  { href: '/coach/blocks',       emoji: '🚫', label: '휴무' },
+  { href: '/coach/schedule',     emoji: '📅', label: '스케줄' },
+]
+
+export default function CoachBottomNav() {
+  const pathname = usePathname()
+
+  const isActive = (href: string) => {
+    if (href === '/coach') return pathname === '/coach'
+    return pathname.startsWith(href)
+  }
+
+  return (
+    <div className="bottom-nav">
+      {navItems.map(item => (
+        <Link
+          key={item.href}
+          href={item.href}
+          className={`bottom-nav-item${isActive(item.href) ? ' active' : ''}`}
+        >
+          <span style={{ fontSize: '1.25rem' }}>{item.emoji}</span>
+          <span>{item.label}</span>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+
+===== components\LoginForm.tsx =====
+'use client'
+import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+
+interface Props {
+  role: string
+  label: string
+  color: string
+  emoji: string
+}
+
+export default function LoginForm({ role, label, color, emoji }: Props) {
+  const router = useRouter()
+  const [phone, setPhone]   = useState('')
+  const [pin, setPin]       = useState('')
+  const [error, setError]   = useState('')
+  const [loading, setLoading] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handlePhone = (v: string) => {
+    const num = v.replace(/\D/g, '').slice(0, 11)
+    const fmt = num.length <= 3 ? num
+      : num.length <= 7 ? `${num.slice(0,3)}-${num.slice(3)}`
+      : `${num.slice(0,3)}-${num.slice(3,7)}-${num.slice(7)}`
+    setPhone(fmt)
+  }
+
+  const handleSubmit = async () => {
+    setError('')
+    if (phone.replace(/-/g,'').length < 10) return setError('전화번호를 입력해주세요')
+    if (pin.length !== 6) return setError('PIN 6자리를 입력해주세요')
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, pin, role }),
+      })
+      const data = await res.json()
+      if (!res.ok) return setError(data.error ?? '로그인 실패')
+      router.replace(data.redirect)
+    } catch {
+      setError('서버 오류가 발생했습니다')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="mobile-wrap flex flex-col">
+      {/* 헤더 */}
+      <div style={{ background: color }} className="px-6 pt-14 pb-10 text-center text-white">
+        <div className="text-5xl mb-3">{emoji}</div>
+        <div className="font-title text-3xl font-bold tracking-widest mb-1">WTA</div>
+        <p className="text-sm opacity-80">{label}</p>
+      </div>
+
+      {/* 폼 */}
+      <div className="flex-1 px-6 py-8 flex flex-col gap-5">
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">전화번호</label>
+          <input
+            className="input-base"
+            placeholder="010-0000-0000"
+            value={phone}
+            onChange={e => handlePhone(e.target.value)}
+            inputMode="numeric"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">PIN 6자리</label>
+          {/* PIN 박스 - 클릭하면 숨겨진 input 포커스 */}
+          <div
+            className="flex gap-2 cursor-pointer"
+            onClick={() => inputRef.current?.focus()}
+          >
+            {Array.from({length: 6}).map((_, i) => (
+              <div
+                key={i}
+                className={`pin-box ${pin.length > i ? 'filled' : ''} ${pin.length === i ? 'active' : ''}`}
+              >
+                {pin.length > i ? '●' : ''}
+              </div>
+            ))}
+          </div>
+          {/* 숨겨진 input - 실제 입력 처리 */}
+          <input
+            ref={inputRef}
+            type="password"
+            inputMode="numeric"
+            maxLength={6}
+            value={pin}
+            onChange={e => setPin(e.target.value.replace(/\D/g,'').slice(0,6))}
+            style={{
+              position: 'absolute',
+              opacity: 0,
+              pointerEvents: 'none',
+              width: 1,
+              height: 1,
+            }}
+            autoComplete="off"
+          />
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-sm font-semibold">
+            {error}
+          </div>
+        )}
+
+        <button
+          className="btn-primary mt-2"
+          onClick={handleSubmit}
+          disabled={loading}
+        >
+          {loading ? '로그인 중...' : '로그인'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+===== components\LogoutButton.tsx =====
+'use client'
+export default function LogoutButton() {
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    window.location.href = '/auth/owner'
+  }
+  return (
+    <button
+      onClick={handleLogout}
+      style={{ background: 'transparent', border: '1.5px solid #e5e7eb', borderRadius: '0.75rem', padding: '0.625rem 1.5rem', color: '#9ca3af', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}
+    >
+      로그아웃
+    </button>
+  )
+}
+
+===== components\MemberBottomNav.tsx =====
+'use client'
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+
+interface Props {
+  pendingAppCount?: number
+}
+
+const navItems = [
+  { href: '/member',          emoji: '🏠', label: '홈' },
+  { href: '/member/schedule', emoji: '📅', label: '스케줄' },
+  { href: '/member/apply',    emoji: '🎾', label: '신청' },
+  { href: '/member/payment',  emoji: '💰', label: '납부' },
+  { href: '/member/family',   emoji: '👨‍👩‍👧', label: '가족' },
+]
+
+export default function MemberBottomNav({ pendingAppCount = 0 }: Props) {
+  const pathname = usePathname()
+
+  const isActive = (href: string) => {
+    if (href === '/member') return pathname === '/member'
+    return pathname.startsWith(href)
+  }
+
+  return (
+    <div className="bottom-nav">
+      {navItems.map(item => (
+        <Link
+          key={item.href}
+          href={item.href}
+          className={`bottom-nav-item${isActive(item.href) ? ' active' : ''}`}
+          style={{ position: 'relative' }}
+        >
+          <span style={{ fontSize: '1.25rem' }}>{item.emoji}</span>
+          <span>{item.label}</span>
+          {item.href === '/member/apply' && pendingAppCount > 0 && (
+            <span style={{
+              position: 'absolute', top: '4px', right: '8px',
+              background: '#ef4444', color: 'white',
+              fontSize: '0.6rem', fontWeight: 700,
+              padding: '1px 5px', borderRadius: '9999px',
+            }}>
+              {pendingAppCount}
+            </span>
+          )}
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+
+===== components\notifications\NotificationBell.tsx =====
+'use client'
+
+import { useEffect, useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { usePush } from '@/lib/usePush'
+
+interface Notification {
+  id: string
+  title: string
+  body: string
+  type: string
+  is_read: boolean
+  link: string | null
+  created_at: string
+}
+
+const TYPE_STYLE: Record<string, { bg: string; color: string; emoji: string }> = {
+  info:    { bg: '#eff6ff', color: '#1d4ed8', emoji: 'ℹ️' },
+  success: { bg: '#f0fdf4', color: '#15803d', emoji: '✅' },
+  warning: { bg: '#fef9c3', color: '#854d0e', emoji: '⚠️' },
+  error:   { bg: '#fef2f2', color: '#b91c1c', emoji: '❌' },
+}
+
+export default function NotificationBell() {
+  const router = useRouter()
+  const { supported, subscribed, subscribe, unsubscribe } = usePush()
+  const [notifs,      setNotifs]      = useState<Notification[]>([])
+  const [open,        setOpen]        = useState(false)
+  const [loading,     setLoading]     = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
+  const bellRef = useRef<HTMLButtonElement>(null)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
+
+  const unread = notifs.filter(n => !n.is_read).length
+
+  const load = async () => {
+    setLoading(true)
+    const res = await fetch('/api/notifications')
+    const data = await res.json()
+    setNotifs(Array.isArray(data) ? data : [])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  const markAllRead = async () => {
+    await fetch('/api/notifications', { method: 'PATCH' })
+    setNotifs(prev => prev.map(n => ({ ...n, is_read: true })))
+  }
+
+  const handleClick = async (n: Notification) => {
+    if (n.link) {
+      setOpen(false)
+      router.push(n.link)
+    }
+  }
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    await fetch(`/api/notifications/${id}`, { method: 'DELETE' })
+    setNotifs(prev => prev.filter(n => n.id !== id))
+  }
+
+  const handlePushToggle = async () => {
+    setPushLoading(true)
+    try {
+      if (subscribed) await unsubscribe()
+      else await subscribe()
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
+  // 벨 버튼 위치를 기준으로 드롭다운 좌표 계산
+  const handleBellClick = async () => {
+    const next = !open
+    if (next && bellRef.current) {
+      const rect = bellRef.current.getBoundingClientRect()
+      setDropdownPos({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      })
+      await load()
+      await markAllRead()
+    }
+    setOpen(next)
+  }
+
+  const fmt = (dt: string) => {
+    const diff = Math.floor((Date.now() - new Date(dt).getTime()) / 1000)
+    if (diff < 60) return '방금'
+    if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
+    return `${Math.floor(diff / 86400)}일 전`
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+
+        {/* 푸시 알림 버튼 */}
+        {supported && (
+          <button
+            onClick={handlePushToggle}
+            disabled={pushLoading}
+            title={subscribed ? '푸시 알림 끄기' : '푸시 알림 켜기'}
+            style={{
+              background: subscribed ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
+              border: `1.5px solid ${subscribed ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)'}`,
+              borderRadius: '0.625rem',
+              padding: '0.35rem 0.6rem',
+              cursor: pushLoading ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              color: 'white',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ fontSize: '0.85rem' }}>{subscribed ? '🔔' : '🔕'}</span>
+            <span>{pushLoading ? '...' : subscribed ? 'ON' : 'OFF'}</span>
+          </button>
+        )}
+
+        {/* 벨 버튼 */}
+        <button
+          ref={bellRef}
+          onClick={handleBellClick}
+          style={{
+            position: 'relative',
+            background: 'rgba(255,255,255,0.15)',
+            border: '1.5px solid rgba(255,255,255,0.3)',
+            borderRadius: '0.75rem',
+            width: '2.5rem',
+            height: '2.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '1.1rem',
+          }}
+        >
+          🔔
+          {unread > 0 && (
+            <span style={{
+              position: 'absolute',
+              top: '-4px',
+              right: '-4px',
+              background: '#ef4444',
+              color: 'white',
+              fontSize: '0.6rem',
+              fontWeight: 700,
+              minWidth: '16px',
+              height: '16px',
+              borderRadius: '9999px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 3px',
+            }}>
+              {unread}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* 드롭다운 — position: fixed 로 뷰포트 기준 배치 → 짤림 없음 */}
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
+          <div style={{
+            position: 'fixed',
+            top: dropdownPos.top,
+            right: dropdownPos.right,
+            width: '320px',
+            maxWidth: 'calc(100vw - 1rem)',
+            background: 'white',
+            borderRadius: '1rem',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+            zIndex: 50,
+            overflow: 'hidden',
+          }}>
+            {/* 헤더 */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.875rem 1rem',
+              borderBottom: '1px solid #f3f4f6',
+            }}>
+              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>알림</span>
+              {notifs.length > 0 && (
+                <button
+                  onClick={async () => {
+                    await Promise.all(notifs.map(n =>
+                      fetch(`/api/notifications/${n.id}`, { method: 'DELETE' })
+                    ))
+                    setNotifs([])
+                  }}
+                  style={{ fontSize: '0.72rem', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  전체 삭제
+                </button>
+              )}
+            </div>
+
+            {/* 알림 목록 */}
+            <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
+              {loading ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
+                  로딩 중...
+                </div>
+              ) : notifs.length === 0 ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
+                  알림이 없습니다
+                </div>
+              ) : (
+                notifs.map(n => {
+                  const st = TYPE_STYLE[n.type] ?? TYPE_STYLE.info
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => handleClick(n)}
+                      style={{
+                        padding: '0.875rem 1rem',
+                        borderBottom: '1px solid #f9fafb',
+                        cursor: n.link ? 'pointer' : 'default',
+                        background: n.is_read ? 'white' : '#f0f9ff',
+                        display: 'flex',
+                        gap: '0.75rem',
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      <span style={{ fontSize: '1rem', flexShrink: 0, marginTop: '1px' }}>{st.emoji}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: n.is_read ? 500 : 700, fontSize: '0.8rem', color: '#111827' }}>{n.title}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px', lineHeight: 1.4 }}>{n.body}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '4px' }}>{fmt(n.created_at)}</div>
+                      </div>
+                      {/* 단건 삭제 버튼 */}
+                      <button
+                        onClick={e => handleDelete(e, n.id)}
+                        title="삭제"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: '#d1d5db',
+                          fontSize: '0.85rem',
+                          padding: '2px 4px',
+                          borderRadius: '4px',
+                          flexShrink: 0,
+                          lineHeight: 1,
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                        onMouseLeave={e => (e.currentTarget.style.color = '#d1d5db')}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+===== components\notifications\PushSubscribeButton.tsx =====
+'use client'
+
+import { useEffect, useState } from 'react'
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)))
+}
+
+export default function PushSubscribeButton() {
+  const [supported, setSupported] = useState(false)
+  const [subscribed, setSubscribed] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    setSupported(true)
+    navigator.serviceWorker.ready.then(reg => {
+      reg.pushManager.getSubscription().then(sub => {
+        setSubscribed(!!sub)
+      })
+    }).catch(() => {})
+  }, [])
+
+  if (!supported) return null
+
+  const subscribe = async () => {
+    setLoading(true)
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
+        ),
+      })
+      const json = sub.toJSON()
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+      })
+      setSubscribed(true)
+      alert('✅ 푸시 알림이 설정되었습니다!')
+    } catch (e) {
+      console.error(e)
+      alert('알림 설정 실패. 브라우저 권한을 확인해주세요.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const unsubscribe = async () => {
+    setLoading(true)
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.getSubscription()
+      if (sub) {
+        await fetch('/api/push/subscribe', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        })
+        await sub.unsubscribe()
+      }
+      setSubscribed(false)
+      alert('알림이 해제되었습니다.')
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={subscribed ? unsubscribe : subscribe}
+      disabled={loading}
+      title={subscribed ? '푸시 알림 해제' : '푸시 알림 켜기'}
+      style={{
+        background: subscribed ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.15)',
+        border: '1.5px solid rgba(255,255,255,0.4)',
+        borderRadius: '50%',
+        width: '36px',
+        height: '36px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: loading ? 'not-allowed' : 'pointer',
+        fontSize: '1rem',
+        transition: 'background 0.2s',
+        flexShrink: 0,
+      }}
+    >
+      {loading ? '⏳' : subscribed ? '🔔' : '🔕'}
+    </button>
+  )
+}

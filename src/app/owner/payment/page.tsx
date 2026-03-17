@@ -1,36 +1,29 @@
 'use client'
+// src/app/owner/payment/page.tsx
+// ✅ toss_paid 경고 + 미납 변경 시 confirm 추가
 
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 
 interface Slot {
-  id: string
-  scheduled_at: string
-  duration_minutes: number
-  status: string
-  is_makeup: boolean
+  id: string; scheduled_at: string; duration_minutes: number
+  status: string; is_makeup: boolean
 }
-
 interface LessonPlan {
-  id: string
-  payment_status: 'unpaid' | 'paid'
-  amount: number
-  lesson_type: string
-  total_count: number
-  completed_count: number
+  id: string; payment_status: 'unpaid' | 'paid'; amount: number
+  lesson_type: string; total_count: number; completed_count: number
   unit_minutes: number
+  toss_paid: boolean   // ✅ 토스 결제 여부
   member: { id: string; name: string; phone: string }
   coach:  { id: string; name: string }
   month:  { id: string; year: number; month: number }
   slots?: Slot[]
 }
-
 interface Month  { id: string; year: number; month: number }
 interface Member { id: string; name: string; phone: string }
 interface Coach  { id: string; name: string }
 
 const DAYS = ['일','월','화','수','목','금','토']
-
 const SLOT_STYLE: Record<string, { bg: string; border: string; color: string; label: string }> = {
   scheduled: { bg: '#f0fdf4', border: '#86efac', color: '#15803d', label: '예정' },
   completed: { bg: '#eff6ff', border: '#93c5fd', color: '#1d4ed8', label: '완료' },
@@ -40,27 +33,29 @@ const SLOT_STYLE: Record<string, { bg: string; border: string; color: string; la
 }
 
 export default function PaymentPage() {
-  const [plans,   setPlans]   = useState<LessonPlan[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filter,  setFilter]  = useState<'all'|'unpaid'|'paid'>('all')
+  const [plans,    setPlans]    = useState<LessonPlan[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [filter,   setFilter]   = useState<'all'|'unpaid'|'paid'>('all')
   const [selected, setSelected] = useState<LessonPlan | null>(null)
   const [detailTab, setDetailTab] = useState<'slots'|'pay'>('slots')
   const [slotsLoading, setSlotsLoading] = useState(false)
-  const [slots, setSlots] = useState<Slot[]>([])
-  const [saving,  setSaving]  = useState(false)
-  const [receipt, setReceipt] = useState<File | null>(null)
+  const [slots,    setSlots]    = useState<Slot[]>([])
+  const [saving,   setSaving]   = useState(false)
+  const [receipt,  setReceipt]  = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
   const [editAmount, setEditAmount] = useState(0)
-
-  const [showExtra, setShowExtra] = useState(false)
-  const [months,  setMonths]  = useState<Month[]>([])
-  const [members, setMembers] = useState<Member[]>([])
-  const [coaches, setCoaches] = useState<Coach[]>([])
-
-  // 회원 검색 입력 상태
-  const [memberSearch, setMemberSearch] = useState('')
+  const [showExtra,  setShowExtra]  = useState(false)
+  const [months,   setMonths]   = useState<Month[]>([])
+  const [members,  setMembers]  = useState<Member[]>([])
+  const [coaches,  setCoaches]  = useState<Coach[]>([])
+  const [memberSearch,   setMemberSearch]   = useState('')
   const [showMemberDrop, setShowMemberDrop] = useState(false)
   const memberRef = useRef<HTMLDivElement>(null)
+
+  // 토스 결제 링크 상태
+  const [payLink,     setPayLink]     = useState<string | null>(null)
+  const [linkLoading, setLinkLoading] = useState(false)
+  const [linkCopied,  setLinkCopied]  = useState(false)
 
   const [extraForm, setExtraForm] = useState({
     member_id: '', coach_id: '', month_id: '',
@@ -71,7 +66,7 @@ export default function PaymentPage() {
   const load = async () => {
     setLoading(true)
     const res = await fetch('/api/payment')
-    const d = await res.json()
+    const d   = await res.json()
     setPlans(Array.isArray(d) ? d : [])
     setLoading(false)
   }
@@ -83,21 +78,16 @@ export default function PaymentPage() {
     fetch('/api/coaches').then(r => r.json()).then(d => setCoaches(Array.isArray(d) ? d : []))
   }, [])
 
-  // 외부 클릭 시 드롭다운 닫기
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (memberRef.current && !memberRef.current.contains(e.target as Node)) {
-        setShowMemberDrop(false)
-      }
+      if (memberRef.current && !memberRef.current.contains(e.target as Node)) setShowMemberDrop(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   const filteredMembers = memberSearch
-    ? members.filter(m =>
-        m.name.includes(memberSearch) || (m.phone || '').includes(memberSearch)
-      )
+    ? members.filter(m => m.name.includes(memberSearch) || (m.phone || '').includes(memberSearch))
     : members
 
   const openDetail = async (plan: LessonPlan) => {
@@ -106,9 +96,11 @@ export default function PaymentPage() {
     setDetailTab('slots')
     setReceipt(null)
     setReceiptPreview(null)
+    setPayLink(null)
+    setLinkCopied(false)
     setSlotsLoading(true)
     const res = await fetch(`/api/lesson-plans/${plan.id}`)
-    const d = await res.json()
+    const d   = await res.json()
     setSlots(d.slots ?? [])
     setSlotsLoading(false)
   }
@@ -126,12 +118,23 @@ export default function PaymentPage() {
     load()
   }
 
+  // ✅ 토스 결제 완료 플랜 미납 변경 시 경고
   const handleUnpay = async () => {
     if (!selected) return
+
+    if (selected.toss_paid) {
+      const confirmed = confirm(
+        '⚠️ 이 플랜은 토스페이먼츠로 결제가 완료된 플랜입니다.\n\n' +
+        '미납으로 변경하면 실제 결제 내역과 불일치가 발생합니다.\n' +
+        '환불이 필요한 경우 토스페이먼츠 대시보드에서 별도로 처리해주세요.\n\n' +
+        '그래도 미납으로 변경하시겠습니까?'
+      )
+      if (!confirmed) return
+    }
+
     setSaving(true)
     await fetch(`/api/payment/${selected.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ payment_status: 'unpaid', amount: editAmount }),
     })
     setSaving(false)
@@ -139,17 +142,39 @@ export default function PaymentPage() {
     load()
   }
 
+  // 토스 결제 링크 생성
+  const handleGeneratePayLink = async () => {
+    if (!selected) return
+    setLinkLoading(true)
+    setPayLink(null)
+    setLinkCopied(false)
+    const res  = await fetch('/api/payment/toss', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan_id: selected.id }),
+    })
+    const data = await res.json()
+    setLinkLoading(false)
+    if (!res.ok) { alert(data.error || '링크 생성 실패'); return }
+    setPayLink(data.pay_url)
+  }
+
+  const handleCopyLink = () => {
+    if (!payLink) return
+    navigator.clipboard.writeText(payLink).then(() => {
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2500)
+    })
+  }
+
   const handleExtraSubmit = async () => {
     const { member_id, coach_id, month_id, lesson_type, unit_minutes, scheduled_date, scheduled_time, amount } = extraForm
     if (!member_id || !coach_id || !month_id || !scheduled_date || !scheduled_time) {
-      alert('모든 항목을 입력해주세요')
-      return
+      alert('모든 항목을 입력해주세요'); return
     }
     setSaving(true)
     const scheduled_at = `${scheduled_date}T${scheduled_time}:00+09:00`
     const res = await fetch('/api/lesson-plans/extra', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ member_id, coach_id, month_id, lesson_type, unit_minutes, scheduled_at, amount }),
     })
     const d = await res.json()
@@ -169,23 +194,21 @@ export default function PaymentPage() {
     return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
 
-  const filtered = filter === 'all' ? plans : plans.filter(p => p.payment_status === filter)
-  const fmt = (n: number) => (n || 0).toLocaleString('ko-KR')
-
-  const sortedSlots = [...slots].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
-  const actualTotal = slots.filter(s => s.status !== 'cancelled').length
+  const filtered       = filter === 'all' ? plans : plans.filter(p => p.payment_status === filter)
+  const fmt            = (n: number) => (n || 0).toLocaleString('ko-KR')
+  const sortedSlots    = [...slots].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+  const actualTotal    = slots.filter(s => s.status !== 'cancelled').length
   const completedCount = slots.filter(s => s.status === 'completed').length
-  const pct = actualTotal > 0 ? Math.round(completedCount / actualTotal * 100) : 0
+  const pct            = actualTotal > 0 ? Math.round(completedCount / actualTotal * 100) : 0
+  const unpaidCount    = plans.filter(p => p.payment_status === 'unpaid').length
+  const paidCount      = plans.filter(p => p.payment_status === 'paid').length
+  const unpaidTotal    = plans.filter(p => p.payment_status === 'unpaid').reduce((s, p) => s + (p.amount || 0), 0)
 
   const inputStyle = {
     width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb',
     borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif',
     background: 'white', boxSizing: 'border-box' as const, outline: 'none', color: '#111827',
   }
-
-  const unpaidCount = plans.filter(p => p.payment_status === 'unpaid').length
-  const paidCount   = plans.filter(p => p.payment_status === 'paid').length
-  const unpaidTotal = plans.filter(p => p.payment_status === 'unpaid').reduce((s, p) => s + (p.amount || 0), 0)
 
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
@@ -204,7 +227,7 @@ export default function PaymentPage() {
             <button key={f} onClick={() => setFilter(f)}
               style={{ padding: '0.375rem 0.875rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif',
                 background: filter === f ? '#16A34A' : '#f3f4f6',
-                color: filter === f ? 'white' : '#6b7280' }}>
+                color:      filter === f ? 'white'   : '#6b7280' }}>
               {f === 'all' ? '전체' : f === 'unpaid' ? '미납' : '납부'}
             </button>
           ))}
@@ -216,10 +239,10 @@ export default function PaymentPage() {
         {!loading && plans.length > 0 && (
           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             {[
-              { label: '전체 플랜', value: plans.length,       unit: '건', color: '#374151', bg: '#f3f4f6' },
-              { label: '미납',     value: unpaidCount,         unit: '건', color: '#b91c1c', bg: '#fee2e2' },
-              { label: '납부완료', value: paidCount,           unit: '건', color: '#15803d', bg: '#dcfce7' },
-              { label: '미납 금액', value: fmt(unpaidTotal),   unit: '원', color: '#b91c1c', bg: '#fef2f2' },
+              { label: '전체 플랜',  value: plans.length,    unit: '건', color: '#374151', bg: '#f3f4f6' },
+              { label: '미납',       value: unpaidCount,      unit: '건', color: '#b91c1c', bg: '#fee2e2' },
+              { label: '납부완료',   value: paidCount,        unit: '건', color: '#15803d', bg: '#dcfce7' },
+              { label: '미납 금액',  value: fmt(unpaidTotal), unit: '원', color: '#b91c1c', bg: '#fef2f2' },
             ].map(s => (
               <div key={s.label} style={{ background: s.bg, borderRadius: '0.75rem', padding: '0.625rem 1rem', textAlign: 'center' }}>
                 <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: s.color }}>{s.value}{s.unit}</div>
@@ -242,17 +265,22 @@ export default function PaymentPage() {
                   style={{ background: 'white', border: `1.5px solid ${p.payment_status === 'paid' ? '#86efac' : '#fecaca'}`,
                     borderRadius: '1rem', padding: '1rem 1.25rem', cursor: 'pointer', transition: 'box-shadow .15s' }}
                   onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
-                  onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
-                >
+                  onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 700, color: '#111827' }}>{p.member?.name}</span>
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 7px', borderRadius: '9999px',
                           background: p.payment_status === 'paid' ? '#dcfce7' : '#fee2e2',
-                          color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
+                          color:      p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
                           {p.payment_status === 'paid' ? '납부완료' : '미납'}
                         </span>
+                        {/* ✅ 토스 결제 배지 */}
+                        {p.toss_paid && (
+                          <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>
+                            💳 토스결제
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '6px' }}>
                         {p.month?.year}년 {p.month?.month}월 · {p.coach?.name} · {p.lesson_type}
@@ -281,18 +309,26 @@ export default function PaymentPage() {
         )}
       </div>
 
-      {/* 상세 모달 */}
+      {/* ── 상세 모달 ── */}
       {selected && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) { setSelected(null); setReceipt(null); setReceiptPreview(null) } }}>
+          onClick={e => { if (e.target === e.currentTarget) { setSelected(null); setReceipt(null); setReceiptPreview(null); setPayLink(null) } }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '520px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }} />
 
             <div style={{ marginBottom: '1rem' }}>
-              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>
-                {selected.member?.name} · {selected.month?.year}년 {selected.month?.month}월
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
+                <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>
+                  {selected.member?.name} · {selected.month?.year}년 {selected.month?.month}월
+                </span>
+                {/* ✅ 토스 결제 배지 */}
+                {selected.toss_paid && (
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>
+                    💳 토스결제
+                  </span>
+                )}
               </div>
-              <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
+              <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
                 {selected.coach?.name} · {selected.lesson_type} · {selected.unit_minutes}분
               </div>
             </div>
@@ -304,7 +340,7 @@ export default function PaymentPage() {
                   style={{ padding: '0.5rem 1.25rem', borderRadius: '0.75rem', fontWeight: 700, cursor: 'pointer',
                     border: `1.5px solid ${detailTab === t ? '#16A34A' : '#e5e7eb'}`,
                     background: detailTab === t ? '#f0fdf4' : 'white',
-                    color: detailTab === t ? '#16A34A' : '#6b7280',
+                    color:      detailTab === t ? '#16A34A' : '#6b7280',
                     fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
                   {t === 'slots' ? '📋 수업 목록' : '💳 납부 처리'}
                 </button>
@@ -317,8 +353,8 @@ export default function PaymentPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
                   {[
                     { label: '전체 수업', value: actualTotal,    color: '#374151', bg: '#f9fafb' },
-                    { label: '완료',     value: completedCount, color: '#1d4ed8', bg: '#eff6ff' },
-                    { label: '진행률',   value: `${pct}%`,      color: '#15803d', bg: '#f0fdf4' },
+                    { label: '완료',      value: completedCount, color: '#1d4ed8', bg: '#eff6ff' },
+                    { label: '진행률',    value: `${pct}%`,      color: '#15803d', bg: '#f0fdf4' },
                   ].map(s => (
                     <div key={s.label} style={{ background: s.bg, borderRadius: '0.75rem', padding: '0.625rem', textAlign: 'center' }}>
                       <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: s.color }}>{s.value}</div>
@@ -364,6 +400,21 @@ export default function PaymentPage() {
             {/* 납부 처리 탭 */}
             {detailTab === 'pay' && (
               <>
+                {/* ✅ 토스 결제 완료 경고 배너 */}
+                {selected.toss_paid && (
+                  <div style={{ background: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '0.875rem', padding: '0.875rem 1rem', marginBottom: '1rem', display: 'flex', gap: '0.625rem', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>💳</span>
+                    <div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e40af', marginBottom: '2px' }}>토스페이먼츠로 결제 완료된 플랜</div>
+                      <div style={{ fontSize: '0.72rem', color: '#3b82f6', lineHeight: 1.5 }}>
+                        이 플랜은 카드 결제가 완료되었습니다.<br/>
+                        미납으로 변경 시 실제 결제 내역과 불일치가 발생합니다.<br/>
+                        환불이 필요하면 토스페이먼츠 대시보드에서 별도 처리해주세요.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '1rem', marginBottom: '1rem' }}>
                   <div style={{ fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{selected.member?.name}</div>
                   <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
@@ -374,15 +425,61 @@ export default function PaymentPage() {
                   </div>
                 </div>
 
+                {/* 토스 결제 링크 생성 (미납 플랜만) */}
+                {selected.payment_status === 'unpaid' && (
+                  <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.875rem', padding: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1e40af', marginBottom: '0.625rem' }}>
+                      📲 카톡 결제 링크 전송
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#3b82f6', marginBottom: '0.75rem' }}>
+                      링크를 생성해서 회원에게 카톡으로 보내주세요.<br/>
+                      회원이 링크를 클릭하면 바로 카드 결제를 할 수 있습니다.
+                    </div>
+
+                    {!payLink ? (
+                      <button onClick={handleGeneratePayLink} disabled={linkLoading}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '0.75rem', border: 'none',
+                          background: linkLoading ? '#e5e7eb' : '#1d4ed8',
+                          color: linkLoading ? '#9ca3af' : 'white',
+                          fontWeight: 700, cursor: linkLoading ? 'not-allowed' : 'pointer',
+                          fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>
+                        {linkLoading ? '링크 생성 중...' : '🔗 결제 링크 생성'}
+                      </button>
+                    ) : (
+                      <div>
+                        <div style={{ background: 'white', border: '1.5px solid #bfdbfe', borderRadius: '0.625rem', padding: '0.625rem 0.875rem', marginBottom: '0.5rem', fontSize: '0.75rem', color: '#374151', wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                          {payLink}
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button onClick={handleCopyLink}
+                            style={{ flex: 1, padding: '0.625rem', borderRadius: '0.625rem', border: 'none',
+                              background: linkCopied ? '#15803d' : '#1d4ed8',
+                              color: 'white', fontWeight: 700, cursor: 'pointer',
+                              fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.82rem' }}>
+                            {linkCopied ? '✅ 복사됨!' : '📋 링크 복사'}
+                          </button>
+                          <button onClick={handleGeneratePayLink}
+                            style={{ padding: '0.625rem 0.875rem', borderRadius: '0.625rem', border: '1.5px solid #bfdbfe',
+                              background: 'white', color: '#1d4ed8', fontWeight: 700, cursor: 'pointer',
+                              fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.82rem' }}>
+                            재생성
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 금액 수정 */}
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>금액 수정</label>
-                  <input type="number" value={editAmount}
-                    onChange={e => setEditAmount(Number(e.target.value))}
+                  <input type="number" value={editAmount} onChange={e => setEditAmount(Number(e.target.value))}
                     style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', boxSizing: 'border-box' as const }} />
                 </div>
 
+                {/* 영수증 첨부 */}
                 <div style={{ marginBottom: '1.25rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>영수증 첨부 (납부 처리 시)</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>영수증 첨부 (현장 납부 처리 시)</label>
                   <label style={{ display: 'block', border: '2px dashed #e5e7eb', borderRadius: '0.875rem', padding: '1rem', textAlign: 'center', cursor: 'pointer', background: receiptPreview ? '#f0fdf4' : '#fafafa' }}>
                     <input type="file" accept="image/*,application/pdf" onChange={e => {
                       const file = e.target.files?.[0]
@@ -406,19 +503,25 @@ export default function PaymentPage() {
                   </label>
                 </div>
 
+                {/* 버튼 */}
                 <div style={{ display: 'flex', gap: '0.625rem' }}>
                   {selected.payment_status === 'unpaid' ? (
                     <button onClick={handlePay} disabled={saving}
                       style={{ flex: 1, padding: '0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                      {saving ? '처리중...' : '✅ 납부 완료 처리'}
+                      {saving ? '처리중...' : '✅ 현장 납부 완료 처리'}
                     </button>
                   ) : (
                     <button onClick={handleUnpay} disabled={saving}
-                      style={{ flex: 1, padding: '0.875rem', background: '#fef2f2', color: '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                      {saving ? '처리중...' : '↩ 미납으로 변경'}
+                      style={{ flex: 1, padding: '0.875rem',
+                        // ✅ 토스 결제된 경우 버튼 색상 강조
+                        background: selected.toss_paid ? '#fef3c7' : '#fef2f2',
+                        color:      selected.toss_paid ? '#92400e' : '#b91c1c',
+                        border:     `1.5px solid ${selected.toss_paid ? '#fde68a' : '#fecaca'}`,
+                        borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                      {saving ? '처리중...' : selected.toss_paid ? '⚠️ 미납으로 변경 (주의)' : '↩ 미납으로 변경'}
                     </button>
                   )}
-                  <button onClick={() => { setSelected(null); setReceipt(null); setReceiptPreview(null) }}
+                  <button onClick={() => { setSelected(null); setReceipt(null); setReceiptPreview(null); setPayLink(null) }}
                     style={{ padding: '0.875rem 1.25rem', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
                     닫기
                   </button>
@@ -436,103 +539,68 @@ export default function PaymentPage() {
           <div style={{ background: 'white', width: '100%', maxWidth: '480px', borderRadius: '1.5rem', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem' }}>+ 추가수업 등록</h2>
 
-            {/* 회원 검색 입력 방식 */}
             <div style={{ marginBottom: '0.875rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>회원 검색</label>
               <div ref={memberRef} style={{ position: 'relative' }}>
-                <input
-                  style={{ ...inputStyle, paddingRight: extraForm.member_id ? '2.5rem' : '0.75rem' }}
+                <input style={{ ...inputStyle, paddingRight: extraForm.member_id ? '2.5rem' : '0.75rem' }}
                   placeholder="이름 또는 전화번호로 검색..."
                   value={memberSearch}
-                  onChange={e => {
-                    setMemberSearch(e.target.value)
-                    setExtraForm(f => ({ ...f, member_id: '' }))
-                    setShowMemberDrop(true)
-                  }}
-                  onFocus={() => setShowMemberDrop(true)}
-                />
-                {extraForm.member_id && (
-                  <span style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#16A34A', fontWeight: 700, fontSize: '1rem' }}>✓</span>
-                )}
+                  onChange={e => { setMemberSearch(e.target.value); setExtraForm(f => ({ ...f, member_id: '' })); setShowMemberDrop(true) }}
+                  onFocus={() => setShowMemberDrop(true)} />
+                {extraForm.member_id && <span style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#16A34A', fontWeight: 700 }}>✓</span>}
                 {showMemberDrop && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                    background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxHeight: '200px', overflowY: 'auto', marginTop: '2px',
-                  }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxHeight: '200px', overflowY: 'auto', marginTop: '2px' }}>
                     {filteredMembers.length > 0 ? filteredMembers.map(m => (
-                      <div key={m.id}
-                        onMouseDown={() => {
-                          setExtraForm(f => ({ ...f, member_id: m.id }))
-                          setMemberSearch(`${m.name} (${m.phone})`)
-                          setShowMemberDrop(false)
-                        }}
-                        style={{ padding: '0.625rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', color: '#111827', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      <div key={m.id} onMouseDown={() => { setExtraForm(f => ({ ...f, member_id: m.id })); setMemberSearch(m.name); setShowMemberDrop(false) }}
+                        style={{ padding: '0.625rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6' }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#f0fdf4')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'white')}
-                      >
+                        onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
                         <span style={{ fontWeight: 600 }}>{m.name}</span>
-                        <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{m.phone}</span>
+                        <span style={{ color: '#9ca3af', marginLeft: '0.5rem', fontSize: '0.8rem' }}>{m.phone}</span>
                       </div>
                     )) : (
-                      <div style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#9ca3af', textAlign: 'center' }}>검색 결과 없음</div>
+                      <div style={{ padding: '0.75rem', fontSize: '0.875rem', color: '#9ca3af' }}>검색 결과 없음</div>
                     )}
                   </div>
                 )}
               </div>
             </div>
 
+            {[
+              { label: '코치',   options: coaches.map(c => ({ v: c.id, l: `${c.name} 코치` })), value: extraForm.coach_id, onChange: (v: string) => setExtraForm(f => ({ ...f, coach_id: v })) },
+              { label: '수업월', options: months.map(m => ({ v: m.id, l: `${m.year}년 ${m.month}월` })), value: extraForm.month_id, onChange: (v: string) => setExtraForm(f => ({ ...f, month_id: v })) },
+            ].map(field => (
+              <div key={field.label} style={{ marginBottom: '0.875rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>{field.label}</label>
+                <select style={inputStyle} value={field.value} onChange={e => field.onChange(e.target.value)}>
+                  <option value="">선택해주세요</option>
+                  {field.options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                </select>
+              </div>
+            ))}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>날짜</label>
+                <input type="date" style={inputStyle} value={extraForm.scheduled_date} onChange={e => setExtraForm(f => ({ ...f, scheduled_date: e.target.value }))} />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>시간</label>
+                <input type="time" style={inputStyle} value={extraForm.scheduled_time} onChange={e => setExtraForm(f => ({ ...f, scheduled_time: e.target.value }))} />
+              </div>
+            </div>
+
             <div style={{ marginBottom: '0.875rem' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>코치</label>
-              <select value={extraForm.coach_id} onChange={e => setExtraForm(f => ({ ...f, coach_id: e.target.value }))} style={inputStyle}>
-                <option value="">선택</option>
-                {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 코치</option>)}
-              </select>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>금액 (원)</label>
+              <input type="number" style={inputStyle} value={extraForm.amount || ''} onChange={e => setExtraForm(f => ({ ...f, amount: Number(e.target.value) }))} placeholder="0" />
             </div>
 
-            <div style={{ marginBottom: '0.875rem' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>수업 월</label>
-              <select value={extraForm.month_id} onChange={e => setExtraForm(f => ({ ...f, month_id: e.target.value }))} style={inputStyle}>
-                <option value="">선택</option>
-                {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
-              </select>
-            </div>
-
-            <div style={{ marginBottom: '0.875rem' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>수업 종류</label>
-              <input value={extraForm.lesson_type} onChange={e => setExtraForm(f => ({ ...f, lesson_type: e.target.value }))} style={inputStyle} />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem', marginBottom: '0.875rem' }}>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>시간(분)</label>
-                <input type="number" value={extraForm.unit_minutes} onChange={e => setExtraForm(f => ({ ...f, unit_minutes: Number(e.target.value) }))} style={inputStyle} />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>금액(원)</label>
-                <input type="number" value={extraForm.amount} onChange={e => setExtraForm(f => ({ ...f, amount: Number(e.target.value) }))} style={inputStyle} />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem', marginBottom: '1.25rem' }}>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>수업 날짜</label>
-                <input type="date" value={extraForm.scheduled_date} onChange={e => setExtraForm(f => ({ ...f, scheduled_date: e.target.value }))} style={inputStyle} />
-              </div>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>수업 시간</label>
-                <input type="time" value={extraForm.scheduled_time} onChange={e => setExtraForm(f => ({ ...f, scheduled_time: e.target.value }))} style={inputStyle} />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.625rem' }}>
-              <button onClick={handleExtraSubmit} disabled={saving}
-                style={{ flex: 1, padding: '0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                {saving ? '등록중...' : '수업 등록'}
-              </button>
+            <div style={{ display: 'flex', gap: '0.625rem', marginTop: '1rem' }}>
               <button onClick={() => { setShowExtra(false); setMemberSearch('') }}
-                style={{ padding: '0.875rem 1.25rem', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                취소
+                style={{ flex: 1, padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>취소</button>
+              <button onClick={handleExtraSubmit} disabled={saving}
+                style={{ flex: 2, padding: '0.75rem', borderRadius: '0.75rem', border: 'none', background: saving ? '#e5e7eb' : '#16A34A', color: saving ? '#9ca3af' : 'white', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                {saving ? '등록 중...' : '등록'}
               </button>
             </div>
           </div>
