@@ -1,9 +1,7 @@
 'use client'
 // src/app/pay/success/page.tsx
-// 토스페이먼츠 결제 성공 후 리다이렉트되는 페이지
-// URL: /pay/success?paymentKey=xxx&orderId=xxx&amount=xxx&planId=xxx
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 interface SuccessInfo {
@@ -15,7 +13,7 @@ interface SuccessInfo {
   approved_at: string
 }
 
-export default function PaySuccessPage() {
+function SuccessContent() {
   const searchParams = useSearchParams()
   const paymentKey   = searchParams.get('paymentKey')
   const orderId      = searchParams.get('orderId')
@@ -33,7 +31,6 @@ export default function PaySuccessPage() {
       return
     }
 
-    // 서버에 승인 요청
     fetch('/api/payment/toss/confirm', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,8 +45,8 @@ export default function PaySuccessPage() {
       .catch(() => { setError('승인 처리 중 오류가 발생했습니다'); setLoading(false) })
   }, [paymentKey, orderId, amount])
 
-  const fmt    = (n: number) => n.toLocaleString('ko-KR')
-  const fmtDt  = (dt: string) => {
+  const fmt   = (n: number) => n.toLocaleString('ko-KR')
+  const fmtDt = (dt: string) => {
     if (!dt) return ''
     const d = new Date(dt)
     return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
@@ -59,7 +56,6 @@ export default function PaySuccessPage() {
     <div style={{ background: '#f9fafb', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
       <div style={{ width: '100%', maxWidth: '400px' }}>
 
-        {/* 로고 */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.75rem', fontWeight: 700, color: '#1d4ed8' }}>WTA</div>
           <div style={{ fontSize: '0.8rem', color: '#9ca3af', fontFamily: 'Noto Sans KR, sans-serif' }}>웨스트 테니스 아카데미</div>
@@ -78,23 +74,16 @@ export default function PaySuccessPage() {
           </div>
         ) : info ? (
           <div style={{ background: 'white', borderRadius: '1.25rem', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-
-            {/* 성공 헤더 */}
             <div style={{ background: 'linear-gradient(135deg, #15803d, #16A34A)', padding: '2rem 1.5rem', textAlign: 'center' }}>
               <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>✅</div>
-              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: 'white', marginBottom: '4px' }}>
-                결제 완료
-              </div>
+              <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: 'white', marginBottom: '4px' }}>결제 완료</div>
               <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '2rem', fontWeight: 700, color: 'white' }}>
                 {fmt(info.amount)}원
               </div>
             </div>
 
-            {/* 영수증 내용 */}
             <div style={{ padding: '1.5rem' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', marginBottom: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                결제 영수증
-              </div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', marginBottom: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>결제 영수증</div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginBottom: '1.5rem' }}>
                 {[
@@ -114,15 +103,25 @@ export default function PaySuccessPage() {
 
               <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '1rem', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.82rem', color: '#15803d', fontFamily: 'Noto Sans KR, sans-serif', lineHeight: 1.6 }}>
-                  결제가 정상적으로 처리되었습니다.<br/>
-                  감사합니다 🎾
+                  결제가 정상적으로 처리되었습니다.<br/>감사합니다 🎾
                 </div>
               </div>
             </div>
           </div>
         ) : null}
-
       </div>
     </div>
+  )
+}
+
+export default function PaySuccessPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ background: '#f9fafb', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: '#9ca3af', fontFamily: 'Noto Sans KR, sans-serif' }}>불러오는 중...</div>
+      </div>
+    }>
+      <SuccessContent />
+    </Suspense>
   )
 }

@@ -1,11 +1,11 @@
 'use client'
 // src/app/pay/fail/page.tsx
-// 토스페이먼츠 결제 실패 후 리다이렉트되는 페이지
 
+import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
-export default function PayFailPage() {
+function FailContent() {
   const searchParams = useSearchParams()
   const message      = searchParams.get('message') ?? '결제가 취소되었습니다'
   const planId       = searchParams.get('planId')
@@ -14,20 +14,15 @@ export default function PayFailPage() {
     <div style={{ background: '#f9fafb', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
       <div style={{ width: '100%', maxWidth: '400px' }}>
 
-        {/* 로고 */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.75rem', fontWeight: 700, color: '#1d4ed8' }}>WTA</div>
           <div style={{ fontSize: '0.8rem', color: '#9ca3af', fontFamily: 'Noto Sans KR, sans-serif' }}>웨스트 테니스 아카데미</div>
         </div>
 
         <div style={{ background: 'white', borderRadius: '1.25rem', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-
-          {/* 실패 헤더 */}
           <div style={{ background: 'linear-gradient(135deg, #b91c1c, #dc2626)', padding: '2rem 1.5rem', textAlign: 'center' }}>
             <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>❌</div>
-            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>
-              결제 실패
-            </div>
+            <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: 'white' }}>결제 실패</div>
           </div>
 
           <div style={{ padding: '1.5rem' }}>
@@ -37,7 +32,6 @@ export default function PayFailPage() {
               </div>
             </div>
 
-            {/* 다시 시도 버튼 */}
             {planId && (
               <Link href={`/pay/${planId}`} style={{ textDecoration: 'none' }}>
                 <button style={{
@@ -58,5 +52,17 @@ export default function PayFailPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function PayFailPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ background: '#f9fafb', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: '#9ca3af', fontFamily: 'Noto Sans KR, sans-serif' }}>불러오는 중...</div>
+      </div>
+    }>
+      <FailContent />
+    </Suspense>
   )
 }
