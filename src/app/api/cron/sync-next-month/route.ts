@@ -1,6 +1,7 @@
 // src/app/api/cron/next-month-sync/route.ts
 // 매월 25일 실행 — 다음달 레슨 플랜 + 슬롯 초안 자동 생성
 // ✅ 할인 정보(discount_amount, discount_memo), billing_count 승계 추가
+// ✅ 패턴 threshold 수정: 슬롯 4개 미만은 1회도 인정, 4개 이상은 해당 요일 50% 이상만 패턴 인정
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
@@ -107,6 +108,14 @@ export async function GET() {
     nextMonthDates.push({ date, dayOfWeek: date.getDay() })
   }
 
+  // ── 이번달 요일별 총 횟수 (50% threshold 계산용) ─────────────────────
+  const daysInThisMonth = new Date(thisYear, thisMonth, 0).getDate()
+  const totalWeekdayCount: Record<number, number> = {}
+  for (let d = 1; d <= daysInThisMonth; d++) {
+    const dow = new Date(thisYear, thisMonth - 1, d).getDay()
+    totalWeekdayCount[dow] = (totalWeekdayCount[dow] ?? 0) + 1
+  }
+
   // 휴무 충돌 체크
   const isBlocked = (coachId: string, dateObj: Date, timeStr: string): boolean => {
     const dateStr   = dateObj.toISOString().split('T')[0]
@@ -136,7 +145,7 @@ export async function GET() {
       continue
     }
 
-    // 회원 최신 할인 정보 가져오기 ✅
+    // 회원 최신 할인 정보
     const memberDiscount = memberDiscountMap.get(plan.member_id) ?? { discount_amount: 0, discount_memo: null }
 
     // ── 슬롯 패턴 추출 ────────────────────────────────────────────────
@@ -154,31 +163,40 @@ export async function GET() {
       patternCount[key].count++
     }
 
-    const threshold = Math.max(1, Math.floor(slots.length / 6))
-    const patterns  = Object.entries(patternCount)
-      .filter(([, v]) => v.count >= threshold)
+    // ✅ 수정: 슬롯 4개 미만(수업 초반)이면 기존 방식(1회도 패턴 인정)
+    //          슬롯 4개 이상이면 해당 요일 전체 주의 50% 이상만 패턴 인정
+    //          → 한 주 예외 수업이 다음달 패턴으로 잡히는 버그 방지
+    const patterns = Object.entries(patternCount)
+      .filter(([key, v]) => {
+        if (slots.length < 4) {
+          return v.count >= 1
+        }
+        const dayOfWeek  = Number(key.split('_')[0])
+        const totalForDay = totalWeekdayCount[dayOfWeek] ?? 1
+        return v.count >= Math.ceil(totalForDay * 0.5)
+      })
       .map(([key, v]) => {
         const [day, time] = key.split('_')
         return { dayOfWeek: Number(day), time, duration: v.duration }
       })
 
-    // 패턴이 없으면 플랜 껍데기만 복사 (할인 승계 포함) ✅
+    // 패턴이 없으면 플랜 껍데기만 복사 (할인 승계 포함)
     if (patterns.length === 0) {
       await supabaseAdmin.from('lesson_plans').insert({
-        member_id:        plan.member_id,
-        coach_id:         plan.coach_id,
-        month_id:         nextMonthId,
-        lesson_type:      plan.lesson_type,
-        total_count:      0,
-        billing_count:    0,               // ✅
-        completed_count:  0,
-        payment_status:   'unpaid',
-        amount:           plan.amount,     // 금액은 confirm_all 때 재계산됨
-        unit_minutes:     plan.unit_minutes,
-        program_id:       plan.program_id ?? null,
+        member_id:         plan.member_id,
+        coach_id:          plan.coach_id,
+        month_id:          nextMonthId,
+        lesson_type:       plan.lesson_type,
+        total_count:       0,
+        billing_count:     0,
+        completed_count:   0,
+        payment_status:    'unpaid',
+        amount:            plan.amount,
+        unit_minutes:      plan.unit_minutes,
+        program_id:        plan.program_id ?? null,
         next_month_synced: false,
-        discount_amount:  memberDiscount.discount_amount,  // ✅ 최신 할인 반영
-        discount_memo:    memberDiscount.discount_memo,    // ✅
+        discount_amount:   memberDiscount.discount_amount,
+        discount_memo:     memberDiscount.discount_memo,
       })
       await supabaseAdmin.from('lesson_plans').update({ next_month_synced: true }).eq('id', plan.id)
       totalSynced++
@@ -204,24 +222,24 @@ export async function GET() {
       }
     }
 
-    // 다음달 플랜 생성 (할인 + billing_count 승계) ✅
+    // 다음달 플랜 생성 (할인 + billing_count 승계)
     const { data: newPlan, error: planErr } = await supabaseAdmin
       .from('lesson_plans')
       .insert({
-        member_id:        plan.member_id,
-        coach_id:         plan.coach_id,
-        month_id:         nextMonthId,
-        lesson_type:      plan.lesson_type,
-        total_count:      0,
-        billing_count:    0,               // ✅ confirm_all 때 재계산
-        completed_count:  0,
-        payment_status:   'unpaid',
-        amount:           plan.amount,     // confirm_all 때 재계산됨
-        unit_minutes:     plan.unit_minutes,
-        program_id:       plan.program_id ?? null,
+        member_id:         plan.member_id,
+        coach_id:          plan.coach_id,
+        month_id:          nextMonthId,
+        lesson_type:       plan.lesson_type,
+        total_count:       0,
+        billing_count:     0,
+        completed_count:   0,
+        payment_status:    'unpaid',
+        amount:            plan.amount,
+        unit_minutes:      plan.unit_minutes,
+        program_id:        plan.program_id ?? null,
         next_month_synced: false,
-        discount_amount:  memberDiscount.discount_amount,  // ✅
-        discount_memo:    memberDiscount.discount_memo,    // ✅
+        discount_amount:   memberDiscount.discount_amount,
+        discount_memo:     memberDiscount.discount_memo,
       })
       .select('id')
       .single()
