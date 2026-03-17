@@ -11,8 +11,8 @@ export default async function CoachHomePage() {
 
   const kst   = new Date(Date.now() + 9 * 60 * 60 * 1000)
   const today = kst.toISOString().split('T')[0]
-  const start = ${today}T00:00:00+09:00
-  const end   = ${today}T23:59:59+09:00
+  const start = `${today}T00:00:00+09:00`
+  const end   = `${today}T23:59:59+09:00`
 
   const { data: slots } = await supabaseAdmin
     .from('lesson_slots')
