@@ -10,6 +10,7 @@ interface App {
   lesson_type: string
   status: string
   coach_note: string | null
+  applicant_name?: string
   member: { id: string; name: string; phone: string }
   month: { year: number; month: number }
 }
@@ -72,6 +73,10 @@ export default function CoachApplicationsPage() {
     const d = new Date(dt)
     return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
+
+  // 신청자 표시 이름: 가족 신청이면 "회원명 (가족명)", 본인 신청이면 "회원명"
+  const displayName = (a: App) =>
+    a.applicant_name ? `${a.member?.name} (${a.applicant_name})` : a.member?.name
 
   const pending  = apps.filter(a => a.status === 'pending_coach')
   const done     = apps.filter(a => a.status !== 'pending_coach')
@@ -159,7 +164,7 @@ export default function CoachApplicationsPage() {
                 <div style={{ flex: 1, background: 'white', border: `1.5px solid ${tab === 'pending' ? '#fde68a' : '#f3f4f6'}`, borderRadius: '1rem', padding: '1rem 1.25rem', cursor: tab === 'pending' ? 'pointer' : 'default' }}
                   onClick={() => tab === 'pending' ? (setSelected(a), setNote('')) : null}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: 700, color: '#111827' }}>{a.member?.name}</span>
+                    <span style={{ fontWeight: 700, color: '#111827' }}>{displayName(a)}</span>
                     <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{a.member?.phone}</span>
                     {a.status !== 'pending_coach' && (
                       <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px',
@@ -194,7 +199,7 @@ export default function CoachApplicationsPage() {
             <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>수업 신청 처리</h2>
             <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1rem' }}>
-              <div style={{ fontWeight: 700, color: '#111827' }}>{selected.member?.name}</div>
+              <div style={{ fontWeight: 700, color: '#111827' }}>{displayName(selected)}</div>
               <div style={{ fontSize: '0.85rem', color: '#374151', marginTop: '2px' }}>{fmtDt(selected.requested_at)}</div>
               <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{selected.duration_minutes}분 · {selected.lesson_type}</div>
             </div>

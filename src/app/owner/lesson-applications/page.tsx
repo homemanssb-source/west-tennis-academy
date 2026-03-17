@@ -11,6 +11,7 @@ interface App {
   status: string
   coach_note: string | null
   admin_note: string | null
+  applicant_name?: string
   member: { id: string; name: string; phone: string }
   coach:  { id: string; name: string }
   month:  { year: number; month: number }
@@ -114,6 +115,10 @@ export default function OwnerApplicationsPage() {
     return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
 
+  // 신청자 표시 이름: 가족 신청이면 "회원명 (가족명)", 본인 신청이면 "회원명"
+  const displayName = (a: App) =>
+    a.applicant_name ? `${a.member?.name} (${a.applicant_name})` : a.member?.name
+
   const filtered     = filter === 'pending_admin' ? apps.filter(a => a.status === 'pending_admin') : apps
   const pendingList  = apps.filter(a => a.status === 'pending_admin')
   const pendingCount = pendingList.length
@@ -215,7 +220,7 @@ export default function OwnerApplicationsPage() {
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 700, color: '#111827' }}>{a.member?.name}</span>
+                          <span style={{ fontWeight: 700, color: '#111827' }}>{displayName(a)}</span>
                           <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{a.member?.phone}</span>
                           <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: st.bg, color: st.color }}>
                             {st.label}
@@ -251,7 +256,7 @@ export default function OwnerApplicationsPage() {
             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem' }}>최종 승인</h2>
 
             <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1.25rem' }}>
-              <div style={{ fontWeight: 700, color: '#111827' }}>{selected.member?.name}</div>
+              <div style={{ fontWeight: 700, color: '#111827' }}>{displayName(selected)}</div>
               <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>신청 시간: {fmtDt(selected.requested_at)}</div>
               {selected.coach_note && (
                 <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#854d0e' }}>코치 메모: {selected.coach_note}</div>
