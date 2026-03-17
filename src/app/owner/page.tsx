@@ -15,12 +15,14 @@ export default async function OwnerDashboard() {
     { count: appCount },
     { count: unpaidCount },
     { count: programCount },
+    { count: draftCount },
   ] = await Promise.all([
     supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'member').eq('is_active', true),
     supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'coach').eq('is_active', true),
     supabaseAdmin.from('member_applications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     supabaseAdmin.from('lesson_plans').select('*', { count: 'exact', head: true }).eq('payment_status', 'unpaid'),
     supabaseAdmin.from('lesson_programs').select('*', { count: 'exact', head: true }).eq('is_active', true),
+    supabaseAdmin.from('lesson_slots').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
   ])
 
   const stats = [
@@ -42,6 +44,7 @@ export default async function OwnerDashboard() {
         { emoji: '📋', label: '플랜 목록',     sub: '등록된 레슨플랜 조회·수정',     href: '/owner/planlist',  badge: 0,                 badgeColor: '',        badgeBg: '' },
         { emoji: '📬', label: '수업 신청',     sub: '회원 신청 승인·거절 관리',      href: '/owner/lesson-applications', badge: 0,           badgeColor: '',        badgeBg: '' },
         { emoji: '📋', label: '플랜 복사',     sub: '지난달 플랜 이번달로 복사',     href: '/owner/lesson-copy',   badge: 0,                 badgeColor: '',        badgeBg: '' },
+        { emoji: '🗓️', label: '수업 초안 확정', sub: '다음달 수업 초안 검토·확정',    href: '/owner/schedule-draft', badge: draftCount ?? 0,  badgeColor: '#7c3aed', badgeBg: '#f3f0ff' },
         { emoji: '🏆', label: '수업 프로그램', sub: '프로그램 종류 관리',            href: '/owner/programs',      badge: programCount ?? 0, badgeColor: '#15803d', badgeBg: '#dcfce7' },
       ]
     },

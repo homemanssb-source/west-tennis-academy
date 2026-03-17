@@ -124,6 +124,24 @@ export default function ScheduleDraftPage() {
     loadAll(monthId)
   }
 
+  // 충돌 슬롯 일괄 삭제
+  const handleDeleteAllConflict = async () => {
+    if (!monthId) return
+    const cnt = conflictDrafts.length
+    if (!confirm(`충돌 항목 ${cnt}건을 모두 삭제할까요?`)) return
+    setSaving(true)
+    const res = await fetch('/api/schedule-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_all_conflict', month_id: monthId }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) { setMsg('❌ ' + data.error); return }
+    setMsg(`🗑 충돌 ${data.deleted}건 삭제됨`)
+    loadAll(monthId)
+  }
+
   // 회원 요청 처리 (승인/거절)
   const handleRequestAction = async (reqId: string, action: 'approve' | 'reject') => {
     setSaving(true)
@@ -283,7 +301,13 @@ export default function ScheduleDraftPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
             {conflictDrafts.length > 0 && (
               <>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b91c1c', marginTop: '0.5rem', marginBottom: '0.25rem' }}>⚠️ 충돌 항목 — 수동 처리 필요</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', marginBottom: '0.25rem' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b91c1c' }}>⚠️ 충돌 항목 — 수동 처리 필요</div>
+                  <button onClick={handleDeleteAllConflict} disabled={saving}
+                    style={{ marginLeft: 'auto', padding: '0.3rem 0.75rem', borderRadius: '0.5rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', whiteSpace: 'nowrap' }}>
+                    🗑 충돌 전체 삭제
+                  </button>
+                </div>
                 {conflictDrafts.map(s => <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving} />)}
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '0.75rem', marginBottom: '0.25rem' }}>✅ 정상 항목</div>
               </>
