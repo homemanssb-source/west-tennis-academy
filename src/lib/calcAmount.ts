@@ -25,6 +25,8 @@ export interface CalcInput {
 
 export interface CalcResult {
   base_amount:     number   // 횟수 기준 기본금액 (주말·할인 전)
+  sat_count:       number   // ✅ 토요일 수업 횟수
+  sun_count:       number   // ✅ 일요일 수업 횟수
   sat_extra:       number   // 토요일 추가금
   sun_extra:       number   // 일요일 추가금
   discount_amount: number   // 할인액
@@ -62,7 +64,16 @@ export function calcAmount(input: CalcInput): CalcResult {
   // 최종 금액
   const amount = Math.max(0, base_amount + sat_extra + sun_extra - discount_amount)
 
-  return { base_amount, sat_extra, sun_extra, discount_amount, amount, pricing_mode }
+  return {
+    base_amount,
+    sat_count,    // ✅
+    sun_count,    // ✅
+    sat_extra,
+    sun_extra,
+    discount_amount,
+    amount,
+    pricing_mode,
+  }
 }
 
 // ── wta_config 조회 ───────────────────────────────────────────────
@@ -108,7 +119,8 @@ export async function recalcAndSavePlan(planId: string): Promise<CalcResult | nu
   const sat_count = slotDates.filter(d => d.getDay() === 6).length
   const sun_count = slotDates.filter(d => d.getDay() === 0).length
 
-  const prog     = (plan as any).program
+  const prog = (plan as any).program
+
   // billing_count: 운영자가 수동 설정한 값 우선, 없으면 total_count
   const billing_count = (plan as any).billing_count > 0
     ? (plan as any).billing_count
@@ -121,7 +133,7 @@ export async function recalcAndSavePlan(planId: string): Promise<CalcResult | nu
     billing_count,
     sat_count,
     sun_count,
-    discount_amount:   (plan as any).discount_amount ?? 0,
+    discount_amount: (plan as any).discount_amount ?? 0,
   })
 
   // 4. lesson_plans 업데이트
