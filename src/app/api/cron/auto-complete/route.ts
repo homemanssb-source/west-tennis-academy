@@ -1,4 +1,3 @@
-// src/app/api/cron/auto-complete/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
@@ -17,22 +16,20 @@ export async function GET(req: NextRequest) {
   const now = new Date()
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
 
-  const todayStr  = kst.toISOString().split('T')[0]
-  const dayStart  = `${todayStr}T00:00:00+09:00`
+  // ✅ 수정: dayStart 조건 제거 — 현재 시각 이전의 scheduled 슬롯 전체 처리
+  // (기존: 오늘 00:00 이후만 → 자정 실행 시 처리 대상 0개 버그)
   const nowKstStr = kst.toISOString().replace('Z', '+09:00')
 
-  // 오늘 시작 + 이미 종료된 scheduled 슬롯 조회
   const { data: slots, error } = await supabaseAdmin
     .from('lesson_slots')
     .select('id, lesson_plan_id, scheduled_at, duration_minutes')
     .eq('status', 'scheduled')
-    .gte('scheduled_at', dayStart)
-    .lte('scheduled_at', nowKstStr)
+    .lte('scheduled_at', nowKstStr)  // 현재 시각 이전 전체 (당일 제한 없음)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!slots || slots.length === 0) return NextResponse.json({ ok: true, updated: 0 })
 
-  // 실제 종료된 슬롯만 필터
+  // 실제 종료된 슬롯만 필터 (시작시간 + 수업시간 <= 현재)
   const nowMs = now.getTime()
   const finished = slots.filter(s => {
     const startMs    = new Date(s.scheduled_at).getTime()
@@ -50,8 +47,7 @@ export async function GET(req: NextRequest) {
     .update({ status: 'completed', auto_completed: true })
     .in('id', ids)
 
-  // ✅ 수정: select 없이 RPC만 호출 (N+1 제거: plan당 2쿼리 → 1쿼리)
-  // increment_completed_by RPC: plan_id별 완료 수만큼 atomic 증가
+  // plan별 completed_count 증가 (RPC)
   const planMap: Record<string, number> = {}
   finished.forEach(s => {
     planMap[s.lesson_plan_id] = (planMap[s.lesson_plan_id] ?? 0) + 1
