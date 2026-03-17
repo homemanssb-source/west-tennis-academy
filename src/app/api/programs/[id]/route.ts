@@ -1,3 +1,4 @@
+// src/app/api/programs/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -25,19 +26,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ ok: true })
   }
 
-  // 일반 업데이트 (coach_id, default_amount 포함)
+  // 일반 업데이트
   const {
     name, ratio, max_students, unit_minutes, description,
-    coach_id, default_amount, sort_order,
+    coach_id, default_amount, per_session_price, sort_order,
   } = body
 
   const updateData: Record<string, unknown> = {
     name, ratio, max_students, unit_minutes, description,
   }
-  // coach_id: 명시적으로 넘어온 경우만 업데이트 (null 허용)
-  if ('coach_id' in body)       updateData.coach_id       = coach_id ?? null
-  if ('default_amount' in body) updateData.default_amount = default_amount ?? 0
-  if ('sort_order' in body)     updateData.sort_order     = sort_order ?? 0
+  if ('coach_id'          in body) updateData.coach_id          = coach_id          ?? null
+  if ('default_amount'    in body) updateData.default_amount    = default_amount    ?? 0
+  if ('per_session_price' in body) updateData.per_session_price = per_session_price ?? 0  // ✅ 신규
+  if ('sort_order'        in body) updateData.sort_order        = sort_order        ?? 0
 
   const { error } = await supabaseAdmin
     .from('lesson_programs')

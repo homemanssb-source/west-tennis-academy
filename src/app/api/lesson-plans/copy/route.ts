@@ -1,4 +1,5 @@
 // src/app/api/lesson-plans/copy/route.ts
+// ✅ 할인 정보(discount_amount, discount_memo) 승계 추가
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
 
   const { year: toYear, month: toMonth } = toMonthRecord
 
-  // ── 원본 월 플랜 조회 (슬롯 포함) ────────────────────────────────────
+  // ── 원본 월 플랜 조회 ─────────────────────────────────────────────────
   let query = supabaseAdmin
     .from('lesson_plans')
     .select(`
@@ -45,13 +46,23 @@ export async function POST(req: NextRequest) {
 
   const { data: sourcePlans, error: plansErr } = await query
 
-  console.log('[copy] from_month_id:', from_month_id)
-  console.log('[copy] sourcePlans count:', sourcePlans?.length, 'error:', plansErr?.message)
-  console.log('[copy] first plan slots:', JSON.stringify(sourcePlans?.[0]?.slots?.slice(0,2)))
-
   if (!sourcePlans || sourcePlans.length === 0) {
     return NextResponse.json({ error: '복사할 플랜이 없습니다', debug: plansErr?.message }, { status: 404 })
   }
+
+  // ── 회원별 최신 할인 정보 조회 ✅ ────────────────────────────────────
+  const memberIds = [...new Set(sourcePlans.map((p: any) => p.member_id))]
+  const { data: memberProfiles } = await supabaseAdmin
+    .from('profiles')
+    .select('id, discount_amount, discount_memo')
+    .in('id', memberIds)
+
+  const memberDiscountMap = new Map(
+    (memberProfiles ?? []).map((m: any) => [m.id, {
+      discount_amount: m.discount_amount ?? 0,
+      discount_memo:   m.discount_memo   ?? null,
+    }])
+  )
 
   // ── 대상 월에 이미 있는 플랜 확인 (중복 방지) ────────────────────────
   const { data: existingPlans } = await supabaseAdmin
@@ -63,7 +74,6 @@ export async function POST(req: NextRequest) {
     (existingPlans ?? []).map((p: any) => `${p.member_id}_${p.coach_id}`)
   )
 
-  // ── 대상 월에 이미 있는 슬롯 확인 (반복 실행 시 중복 방지) ──────────
   const { data: existingPlansFull } = await supabaseAdmin
     .from('lesson_plans')
     .select('id, member_id, coach_id')
@@ -74,15 +84,11 @@ export async function POST(req: NextRequest) {
   )
 
   // ── 코치 휴무 전체 조회 ───────────────────────────────────────────────
-  const { data: coachBlocks } = await supabaseAdmin
-    .from('coach_blocks')
-    .select('*')
-
+  const { data: coachBlocks } = await supabaseAdmin.from('coach_blocks').select('*')
   const blocks = coachBlocks ?? []
 
-  // 휴무 충돌 체크 함수
   const isBlocked = (coachId: string, dateObj: Date, timeStr: string): boolean => {
-    const dateStr = dateObj.toISOString().split('T')[0]
+    const dateStr   = dateObj.toISOString().split('T')[0]
     const dayOfWeek = dateObj.getDay()
     return blocks.some((b: any) => {
       if (b.coach_id !== coachId) return false
@@ -106,22 +112,23 @@ export async function POST(req: NextRequest) {
     toMonthDates.push({ date, dayOfWeek: date.getDay() })
   }
 
-  let copiedPlans  = 0
-  let skippedPlans = 0
-  let createdSlots = 0
+  let copiedPlans   = 0
+  let skippedPlans  = 0
+  let createdSlots  = 0
   let conflictSlots = 0
-  let skippedSlots = 0
+  let skippedSlots  = 0
 
   for (const plan of sourcePlans) {
     const planKey = `${plan.member_id}_${plan.coach_id}`
     let newPlanId: string
 
+    // 회원 최신 할인 정보 ✅
+    const memberDiscount = memberDiscountMap.get(plan.member_id) ?? { discount_amount: 0, discount_memo: null }
+
     if (existingPlanSet.has(planKey)) {
-      // 이미 있는 플랜 → 슬롯만 추가 (반복 실행 안전)
       skippedPlans++
       newPlanId = existingPlanMap.get(planKey)!
     } else {
-      // 신규 플랜 생성
       const { data: newPlan, error: planErr } = await supabaseAdmin
         .from('lesson_plans')
         .insert({
@@ -130,12 +137,15 @@ export async function POST(req: NextRequest) {
           month_id:          to_month_id,
           lesson_type:       plan.lesson_type,
           total_count:       0,
+          billing_count:     0,               // ✅ confirm_all 때 재계산
           completed_count:   0,
           payment_status:    'unpaid',
           amount:            plan.amount,
           unit_minutes:      plan.unit_minutes,
           program_id:        plan.program_id ?? null,
           next_month_synced: false,
+          discount_amount:   memberDiscount.discount_amount,  // ✅ 최신 할인
+          discount_memo:     memberDiscount.discount_memo,    // ✅
         })
         .select('id')
         .single()
@@ -146,10 +156,11 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 슬롯 패턴 추출 ──────────────────────────────────────────────────
-    const slots = (plan.slots ?? []).filter((s: any) => !s.is_makeup && !['cancelled','draft'].includes(s.status))
+    const slots = (plan.slots ?? []).filter((s: any) =>
+      !s.is_makeup && !['cancelled', 'draft'].includes(s.status)
+    )
     if (slots.length === 0) continue
 
-    // 요일+시간 패턴 카운트 — KST 변환 후 추출
     const patternCount: Record<string, { count: number; duration: number }> = {}
     for (const slot of slots) {
       const utc = new Date(slot.scheduled_at)
@@ -162,9 +173,8 @@ export async function POST(req: NextRequest) {
       patternCount[key].count++
     }
 
-    // 1회 이상 등장한 패턴을 모두 인정
     const threshold = Math.max(1, Math.floor(slots.length / 6))
-    const patterns = Object.entries(patternCount)
+    const patterns  = Object.entries(patternCount)
       .filter(([, v]) => v.count >= threshold)
       .map(([key, v]) => {
         const [day, time] = key.split('_')
@@ -173,7 +183,7 @@ export async function POST(req: NextRequest) {
 
     if (patterns.length === 0) continue
 
-    // ── 이미 있는 draft/scheduled 슬롯 확인 (반복 실행 중복 방지) ───────
+    // ── 이미 있는 슬롯 확인 (반복 실행 중복 방지) ───────────────────────
     const { data: existingSlots } = await supabaseAdmin
       .from('lesson_slots')
       .select('scheduled_at')
@@ -192,12 +202,9 @@ export async function POST(req: NextRequest) {
       for (const { date } of matchingDates) {
         const [hh, mm] = pattern.time.split(':').map(Number)
         const slotDate = new Date(toYear, toMonth - 1, date.getDate(), hh, mm, 0)
+        const kstStr   = `${toYear}-${String(toMonth).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00+09:00`
+        const slotKey  = kstStr.slice(0, 16)
 
-        // KST 문자열 생성
-        const kstStr = `${toYear}-${String(toMonth).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00+09:00`
-        const slotKey = kstStr.slice(0, 16)
-
-        // 이미 있는 슬롯은 건너뜀
         if (existingSlotTimes.has(slotKey)) {
           skippedSlots++
           continue
@@ -227,7 +234,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 초안 생성 시 draft_open = true 자동 설정 ─────────────────────────
+  // draft_open 자동 설정
   if (createdSlots > 0) {
     await supabaseAdmin
       .from('months')
@@ -235,25 +242,23 @@ export async function POST(req: NextRequest) {
       .eq('id', to_month_id)
   }
 
-  // ── 메시지 구성 ───────────────────────────────────────────────────────
   const parts = []
-  if (copiedPlans > 0)  parts.push(`플랜 ${copiedPlans}개 복사`)
-  if (skippedPlans > 0) parts.push(`${skippedPlans}개 기존 플랜 유지`)
-  if (createdSlots > 0) parts.push(`수업 ${createdSlots}개 초안 생성`)
-  if (skippedSlots > 0) parts.push(`${skippedSlots}개 슬롯 이미 존재`)
+  if (copiedPlans   > 0) parts.push(`플랜 ${copiedPlans}개 복사`)
+  if (skippedPlans  > 0) parts.push(`${skippedPlans}개 기존 플랜 유지`)
+  if (createdSlots  > 0) parts.push(`수업 ${createdSlots}개 초안 생성`)
+  if (skippedSlots  > 0) parts.push(`${skippedSlots}개 슬롯 이미 존재`)
   if (conflictSlots > 0) parts.push(`⚠️ 휴무 충돌 ${conflictSlots}건`)
-  if (createdSlots > 0) parts.push(`✅ 회원 미리보기 오픈됨`)
+  if (createdSlots  > 0) parts.push(`✅ 회원 미리보기 오픈됨`)
 
   return NextResponse.json({
-    ok:           true,
-    copied:       copiedPlans,
-    skipped:      skippedPlans,
-    slots:        createdSlots,
-    slotSkipped:  skippedSlots,
-    conflicts:    conflictSlots,
-    toMonthId:    to_month_id,
-    draftOpen:    createdSlots > 0,
-    message:      parts.join(', '),
-
+    ok:          true,
+    copied:      copiedPlans,
+    skipped:     skippedPlans,
+    slots:       createdSlots,
+    slotSkipped: skippedSlots,
+    conflicts:   conflictSlots,
+    toMonthId:   to_month_id,
+    draftOpen:   createdSlots > 0,
+    message:     parts.join(', '),
   })
 }

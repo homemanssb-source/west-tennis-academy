@@ -1,3 +1,4 @@
+// src/app/api/members/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -5,12 +6,12 @@ import bcrypt from 'bcryptjs'
 
 export async function GET() {
   const session = await getSession()
-  if (!session || !['owner','admin'].includes(session.role)) {
+  if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
   const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select('id, name, phone, role, is_active, coach_id, created_at')
+    .select('id, name, phone, role, is_active, coach_id, created_at, discount_amount, discount_memo') // ✅ 할인 컬럼 추가
     .eq('role', 'member')
     .order('created_at', { ascending: false })
 
@@ -20,20 +21,27 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
-  if (!session || !['owner','admin'].includes(session.role)) {
+  if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
   try {
     const { name, phone, coach_id } = await req.json()
     if (!name || !phone) return NextResponse.json({ error: '이름과 전화번호는 필수입니다' }, { status: 400 })
 
-    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
-    const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
+    const tempPin  = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
 
     const { data, error } = await supabaseAdmin
       .from('profiles')
-      .insert({ name, phone: phone.replace(/-/g,''), role: 'member', pin_hash, pin_must_change: true, is_active: true, coach_id: coach_id || null })
+      .insert({
+        name,
+        phone:           phone.replace(/-/g, ''),
+        role:            'member',
+        pin_hash,
+        pin_must_change: true,
+        is_active:       true,
+        coach_id:        coach_id || null,
+      })
       .select()
       .single()
 

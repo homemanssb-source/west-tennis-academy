@@ -1,9 +1,10 @@
+// src/app/api/schedule-draft/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
+import { recalcAndSavePlan } from '@/lib/calcAmount'
 
 // GET /api/schedule-draft?month_id=xxx
-// 다음달 draft 슬롯 목록 조회
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session || !['owner', 'admin'].includes(session.role)) {
@@ -28,7 +29,6 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // month_id 기준 필터 (lesson_plan의 month_id)
   const { data: planIds } = await supabaseAdmin
     .from('lesson_plans')
     .select('id')
@@ -54,7 +54,6 @@ export async function POST(req: NextRequest) {
   if (action === 'confirm_one') {
     if (!slot_id) return NextResponse.json({ error: 'slot_id 필요' }, { status: 400 })
 
-    // 슬롯 정보 조회
     const { data: slot } = await supabaseAdmin
       .from('lesson_slots')
       .select('id, scheduled_at, duration_minutes, lesson_plan_id, has_conflict')
@@ -63,7 +62,6 @@ export async function POST(req: NextRequest) {
 
     if (!slot) return NextResponse.json({ error: '슬롯 없음' }, { status: 404 })
 
-    // 같은 코치 같은 시간 중복 체크
     const { data: plan } = await supabaseAdmin
       .from('lesson_plans')
       .select('coach_id')
@@ -84,7 +82,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // draft → scheduled
     const { error } = await supabaseAdmin
       .from('lesson_slots')
       .update({ status: 'scheduled', has_conflict: false })
@@ -92,8 +89,9 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // lesson_plan total_count 업데이트
+    // total_count 업데이트 → 금액 재계산 ✅
     await updatePlanTotalCount(slot.lesson_plan_id)
+    await recalcAndSavePlan(slot.lesson_plan_id)
 
     return NextResponse.json({ ok: true })
   }
@@ -102,7 +100,6 @@ export async function POST(req: NextRequest) {
   if (action === 'confirm_all') {
     if (!month_id) return NextResponse.json({ error: 'month_id 필요' }, { status: 400 })
 
-    // 해당 월의 draft 슬롯 중 충돌 없는 것만
     const { data: planIds } = await supabaseAdmin
       .from('lesson_plans')
       .select('id')
@@ -130,10 +127,11 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // 각 플랜 total_count 업데이트
+    // total_count 업데이트 → 금액 재계산 ✅
     const affectedPlanIds = [...new Set(draftSlots.map((s: any) => s.lesson_plan_id))]
     for (const planId of affectedPlanIds) {
       await updatePlanTotalCount(planId)
+      await recalcAndSavePlan(planId)
     }
 
     // 회원 알림

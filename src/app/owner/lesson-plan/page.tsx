@@ -1,4 +1,6 @@
 'use client'
+// src/app/owner/lesson-plan/page.tsx
+// ✅ 레슨비 자동 계산 미리보기 포함
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -6,18 +8,42 @@ import Link from 'next/link'
 
 interface Coach   { id: string; name: string }
 interface Month   { id: string; year: number; month: number }
-interface Member  { id: string; name: string; phone: string }
+interface Member  { id: string; name: string; phone: string; discount_amount: number; discount_memo: string | null }
 interface Program {
-  id: string
-  name: string
-  unit_minutes: number
-  default_amount: number  // 기본 수업료 자동 입력
-  coach_id: string | null // null=공통, 값=특정코치전용
-  is_active?: boolean
+  id: string; name: string; unit_minutes: number
+  default_amount: number; per_session_price: number
+  coach_id: string | null; is_active?: boolean
 }
 interface Schedule { datetime: string; duration: number }
+interface WtaConfig { session_threshold: number; sat_surcharge: number; sun_surcharge: number }
 
 const DAYS = ['일','월','화','수','목','금','토']
+const fmt  = (n: number) => `₩${Math.max(0, n || 0).toLocaleString()}`
+
+// ── 금액 계산 함수 (순수) ──────────────────────────────────────────
+function calcAmount(opts: {
+  config: WtaConfig
+  default_amount: number; per_session_price: number
+  billing_count: number; sat_count: number; sun_count: number
+  discount_amount: number
+}) {
+  const { config, default_amount, per_session_price, billing_count, sat_count, sun_count, discount_amount } = opts
+  const { session_threshold, sat_surcharge, sun_surcharge } = config
+
+  let base_amount: number
+  if (billing_count >= session_threshold) {
+    const over = billing_count - session_threshold
+    base_amount = default_amount + (over > 0 ? over * per_session_price : 0)
+  } else {
+    base_amount = per_session_price * billing_count
+  }
+
+  const sat_extra = sat_count > 0 ? sat_surcharge : 0
+  const sun_extra = sun_count > 0 ? sun_surcharge : 0
+  const amount    = Math.max(0, base_amount + sat_extra + sun_extra - discount_amount)
+
+  return { base_amount, sat_extra, sun_extra, amount }
+}
 
 export default function LessonPlanCreatePage() {
   const router = useRouter()
@@ -25,8 +51,9 @@ export default function LessonPlanCreatePage() {
   const [coaches,     setCoaches]     = useState<Coach[]>([])
   const [months,      setMonths]      = useState<Month[]>([])
   const [members,     setMembers]     = useState<Member[]>([])
-  const [allPrograms, setAllPrograms] = useState<Program[]>([])  // 전체 보관
-  const [programs,    setPrograms]    = useState<Program[]>([])  // 코치 선택 후 표시용
+  const [allPrograms, setAllPrograms] = useState<Program[]>([])
+  const [programs,    setPrograms]    = useState<Program[]>([])
+  const [config,      setConfig]      = useState<WtaConfig>({ session_threshold: 8, sat_surcharge: 0, sun_surcharge: 0 })
   const [saving,      setSaving]      = useState(false)
   const [error,       setError]       = useState('')
 
@@ -40,10 +67,9 @@ export default function LessonPlanCreatePage() {
   const [programId,   setProgramId]   = useState('')
   const [lessonType,  setLessonType]  = useState('')
   const [unitMinutes, setUnitMinutes] = useState(60)
-  const [amount,      setAmount]      = useState(0)
   const [payment,     setPayment]     = useState<'unpaid'|'paid'>('unpaid')
 
-  // 일정 자동생성 관련
+  // 일정 자동생성
   const [startDate,    setStartDate]    = useState('')
   const [selectedDays, setSelectedDays] = useState<number[]>([])
   const [time,         setTime]         = useState('09:00')
@@ -52,14 +78,20 @@ export default function LessonPlanCreatePage() {
   const [editIdx,      setEditIdx]      = useState<number|null>(null)
   const [editTime,     setEditTime]     = useState('')
 
+  // ✅ 레슨비 계산 상태
+  const [billingCount,   setBillingCount]   = useState<number | null>(null)  // null = schedules.length 사용
+  const [manualAmount,   setManualAmount]   = useState<number | null>(null)  // null = 자동 계산
+  const [memberDiscount, setMemberDiscount] = useState(0)
+  const [discountMemo,   setDiscountMemo]   = useState<string | null>(null)
+
   useEffect(() => {
     Promise.all([
       fetch('/api/coaches').then(r => r.json()),
       fetch('/api/months').then(r => r.json()),
       fetch('/api/members').then(r => r.json()),
-      // 전체 프로그램 가져오기 (코치 선택 전엔 공통만 표시)
       fetch('/api/programs').then(r => r.json()),
-    ]).then(([c, m, mem, p]) => {
+      fetch('/api/config').then(r => r.json()),
+    ]).then(([c, m, mem, p, cfg]) => {
       setCoaches(Array.isArray(c) ? c : [])
       const mList = Array.isArray(m) ? m : []
       setMonths(mList)
@@ -67,33 +99,33 @@ export default function LessonPlanCreatePage() {
       setMembers(Array.isArray(mem) ? mem : [])
       const pList = Array.isArray(p) ? p : []
       setAllPrograms(pList)
-      // 초기: 공통 프로그램만 표시 (coach_id === null)
       setPrograms(pList.filter((x: Program) => x.coach_id === null))
+      if (cfg && !cfg.error) setConfig(cfg)
     })
   }, [])
 
-  // ── 코치 변경 시 → 해당 코치 프로그램 API 재호출 ──────────────
   useEffect(() => {
     if (!coachId) {
-      // 코치 미선택: 공통 프로그램만
       setPrograms(allPrograms.filter(x => x.coach_id === null))
-      setProgramId('')
+      setProgramId(''); setLessonType('')
       return
     }
-    // 코치 선택: 공통 + 해당 코치 전용 (is_active 필터는 API에서 처리)
-    fetch(`/api/programs?coach_id=${coachId}`)
-      .then(r => r.json())
-      .then(d => setPrograms(Array.isArray(d) ? d : []))
-    // 프로그램 선택 초기화
-    setProgramId('')
-    setLessonType('')
+    fetch(`/api/programs?coach_id=${coachId}`).then(r => r.json()).then(d => setPrograms(Array.isArray(d) ? d : []))
+    setProgramId(''); setLessonType('')
+    setManualAmount(null)
   }, [coachId])
+
+  // 회원 선택 시 할인 정보 반영
+  useEffect(() => {
+    const m = members.find(x => x.id === memberId)
+    setMemberDiscount(m?.discount_amount ?? 0)
+    setDiscountMemo(m?.discount_memo ?? null)
+    setManualAmount(null)
+  }, [memberId, members])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (memberRef.current && !memberRef.current.contains(e.target as Node)) {
-        setShowMemberDrop(false)
-      }
+      if (memberRef.current && !memberRef.current.contains(e.target as Node)) setShowMemberDrop(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -103,12 +135,13 @@ export default function LessonPlanCreatePage() {
     ? members.filter(m => m.name.includes(memberSearch) || m.phone.includes(memberSearch))
     : members
 
+  const selectedProgram = programs.find(p => p.id === programId) ?? null
+
   const handleProgramSelect = (p: Program) => {
     setProgramId(p.id)
     setLessonType(p.name)
     setUnitMinutes(p.unit_minutes || 60)
-    // ✅ 기본 수업료가 있으면 자동 입력
-    if (p.default_amount > 0) setAmount(p.default_amount)
+    setManualAmount(null)
   }
 
   const toggleDay = (d: number) =>
@@ -121,16 +154,20 @@ export default function LessonPlanCreatePage() {
     let cnt = 0
     while (cnt < count) {
       if (selectedDays.includes(cur.getDay())) {
-        const dt = `${cur.toISOString().split('T')[0]}T${time}:00+09:00`
-        result.push({ datetime: dt, duration: unitMinutes })
+        result.push({ datetime: `${cur.toISOString().split('T')[0]}T${time}:00+09:00`, duration: unitMinutes })
         cnt++
       }
       cur.setDate(cur.getDate() + 1)
     }
     setSchedules(result)
+    setBillingCount(null)  // 일정 바뀌면 청구 횟수 리셋
+    setManualAmount(null)
   }
 
-  const removeSlot = (i: number) => setSchedules(prev => prev.filter((_, idx) => idx !== i))
+  const removeSlot = (i: number) => {
+    setSchedules(prev => prev.filter((_, idx) => idx !== i))
+    setManualAmount(null)
+  }
 
   const startEdit = (i: number) => {
     const d = new Date(schedules[i].datetime)
@@ -144,8 +181,7 @@ export default function LessonPlanCreatePage() {
       const d = new Date(s.datetime)
       const [h, m] = editTime.split(':').map(Number)
       d.setHours(h, m, 0, 0)
-      const ymd = d.toISOString().split('T')[0]
-      return { ...s, datetime: `${ymd}T${editTime}:00+09:00` }
+      return { ...s, datetime: `${d.toISOString().split('T')[0]}T${editTime}:00+09:00` }
     }))
     setEditIdx(null)
   }
@@ -155,28 +191,38 @@ export default function LessonPlanCreatePage() {
     return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
 
+  // ── 레슨비 자동 계산 ──────────────────────────────────────────────
+  const effectiveBillingCount = billingCount !== null ? billingCount : schedules.length
+  const satCount = schedules.filter(s => new Date(s.datetime).getDay() === 6).length
+  const sunCount = schedules.filter(s => new Date(s.datetime).getDay() === 0).length
+
+  const autoCalc = selectedProgram && schedules.length > 0
+    ? calcAmount({
+        config,
+        default_amount:    selectedProgram.default_amount,
+        per_session_price: selectedProgram.per_session_price,
+        billing_count:     effectiveBillingCount,
+        sat_count:         satCount,
+        sun_count:         sunCount,
+        discount_amount:   memberDiscount,
+      })
+    : null
+
+  const finalAmount = manualAmount !== null ? manualAmount : (autoCalc?.amount ?? 0)
+
   const handleSubmit = async () => {
     setError('')
-    if (!memberId || !coachId || !monthId) {
-      setError('회원, 코치, 수업월을 선택해주세요'); return
-    }
-    if (!schedules.length) {
-      setError('수업 일정을 생성해주세요'); return
-    }
+    if (!memberId || !coachId || !monthId) { setError('회원, 코치, 수업월을 선택해주세요'); return }
+    if (!schedules.length) { setError('수업 일정을 생성해주세요'); return }
     setSaving(true)
     const res = await fetch('/api/lesson-plans', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        member_id:    memberId,
-        coach_id:     coachId,
-        month_id:     monthId,
-        lesson_type:  lessonType || '개인레슨',
-        unit_minutes: unitMinutes,
-        schedules,
-        amount,
-        payment_status: payment,
-        program_id:   programId || undefined,
+        member_id: memberId, coach_id: coachId, month_id: monthId,
+        lesson_type: lessonType || '개인레슨', unit_minutes: unitMinutes,
+        schedules, amount: finalAmount, payment_status: payment,
+        program_id: programId || undefined,
+        billing_count: effectiveBillingCount,
       }),
     })
     const d = await res.json()
@@ -186,21 +232,18 @@ export default function LessonPlanCreatePage() {
   }
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '0.625rem 0.875rem',
-    borderRadius: '0.625rem', border: '1.5px solid #e5e7eb',
-    fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif',
-    outline: 'none', boxSizing: 'border-box', background: 'white',
+    width: '100%', padding: '0.625rem 0.875rem', borderRadius: '0.625rem',
+    border: '1.5px solid #e5e7eb', fontSize: '0.875rem',
+    fontFamily: 'Noto Sans KR, sans-serif', outline: 'none',
+    boxSizing: 'border-box', background: 'white',
   }
   const cardStyle: React.CSSProperties = {
-    background: 'white', borderRadius: '1rem',
-    border: '1.5px solid #f3f4f6', padding: '1.25rem',
+    background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', padding: '1.25rem',
   }
   const labelStyle: React.CSSProperties = {
-    fontSize: '0.75rem', fontWeight: 700, color: '#6b7280',
-    display: 'block', marginBottom: '6px',
+    fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px',
   }
 
-  // 선택된 코치 이름
   const selectedCoachName = coaches.find(c => c.id === coachId)?.name
 
   return (
@@ -216,7 +259,7 @@ export default function LessonPlanCreatePage() {
 
       <div style={{ maxWidth: '700px', margin: '0 auto', padding: '1.25rem 1.5rem 4rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-        {/* ── 기본 정보 ── */}
+        {/* 기본 정보 */}
         <div style={cardStyle}>
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>기본 정보</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
@@ -225,29 +268,31 @@ export default function LessonPlanCreatePage() {
             <div ref={memberRef} style={{ position: 'relative' }}>
               <label style={labelStyle}>회원 검색</label>
               <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  placeholder="이름 또는 전화번호 검색"
-                  value={memberSearch}
+                <input type="text" placeholder="이름 또는 전화번호 검색" value={memberSearch}
                   onChange={e => { setMemberSearch(e.target.value); setMemberId(''); setShowMemberDrop(true) }}
                   onFocus={() => setShowMemberDrop(true)}
-                  style={{ ...inputStyle, paddingRight: '2.5rem' }}
-                />
-                {memberId && (
-                  <span style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#16A34A', fontSize: '1rem' }}>✓</span>
-                )}
+                  style={{ ...inputStyle, paddingRight: '2.5rem' }} />
+                {memberId && <span style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#16A34A' }}>✓</span>}
               </div>
+              {/* ✅ 할인 배지 */}
+              {memberId && memberDiscount > 0 && (
+                <div style={{ marginTop: '4px', fontSize: '0.72rem', color: '#7e22ce', fontWeight: 700 }}>
+                  💸 할인 적용: −{memberDiscount.toLocaleString()}원
+                  {discountMemo && ` (${discountMemo})`}
+                </div>
+              )}
               {showMemberDrop && filteredMembers.length > 0 && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', zIndex: 50, maxHeight: '200px', overflowY: 'auto', marginTop: '4px' }}>
                   {filteredMembers.map(m => (
-                    <div key={m.id}
-                      onClick={() => { setMemberId(m.id); setMemberSearch(`${m.name} (${m.phone})`); setShowMemberDrop(false) }}
+                    <div key={m.id} onClick={() => { setMemberId(m.id); setMemberSearch(`${m.name} (${m.phone})`); setShowMemberDrop(false) }}
                       style={{ padding: '0.625rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', color: '#374151', borderBottom: '1px solid #f3f4f6' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#f0fdf4')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'white')}
-                    >
+                      onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
                       <span style={{ fontWeight: 600 }}>{m.name}</span>
                       <span style={{ color: '#9ca3af', marginLeft: '0.5rem', fontSize: '0.8rem' }}>{m.phone}</span>
+                      {(m.discount_amount ?? 0) > 0 && (
+                        <span style={{ marginLeft: '0.5rem', fontSize: '0.7rem', color: '#7e22ce', fontWeight: 700 }}>할인 {m.discount_amount.toLocaleString()}원</span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -273,34 +318,25 @@ export default function LessonPlanCreatePage() {
           </div>
         </div>
 
-        {/* ── 수업 설정 ── */}
+        {/* 수업 설정 */}
         <div style={cardStyle}>
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>수업 설정</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-
-            {/* ✅ 프로그램 선택 - 드롭다운 */}
-            <div>
-              <label style={labelStyle}>
-                프로그램
-                {coachId && selectedCoachName && (
-                  <span style={{ fontWeight: 400, color: '#3b82f6', marginLeft: '6px' }}>
-                    — {selectedCoachName} 코치 기준
-                  </span>
-                )}
-              </label>
-
-              {!coachId ? (
-                <div style={{ padding: '0.75rem 1rem', background: '#f9fafb', borderRadius: '0.625rem', border: '1.5px dashed #e5e7eb', fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center' }}>
-                  👆 먼저 코치를 선택하면 해당 코치의 수업 프로그램이 표시됩니다
-                </div>
-              ) : programs.length === 0 ? (
-                <div style={{ padding: '0.75rem 1rem', background: '#fef9c3', borderRadius: '0.625rem', border: '1.5px solid #fde68a', fontSize: '0.8rem', color: '#854d0e' }}>
-                  ⚠️ 등록된 프로그램이 없습니다. <Link href="/owner/programs" style={{ color: '#1d4ed8', fontWeight: 700 }}>프로그램 관리</Link>에서 추가해주세요.
-                </div>
-              ) : (
-                <select
-                  style={inputStyle}
-                  value={programId}
+          <div>
+            <label style={labelStyle}>
+              프로그램
+              {coachId && selectedCoachName && <span style={{ fontWeight: 400, color: '#3b82f6', marginLeft: '6px' }}>— {selectedCoachName} 코치 기준</span>}
+            </label>
+            {!coachId ? (
+              <div style={{ padding: '0.75rem 1rem', background: '#f9fafb', borderRadius: '0.625rem', border: '1.5px dashed #e5e7eb', fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center' }}>
+                👆 먼저 코치를 선택하면 해당 코치의 수업 프로그램이 표시됩니다
+              </div>
+            ) : programs.length === 0 ? (
+              <div style={{ padding: '0.75rem 1rem', background: '#fef9c3', borderRadius: '0.625rem', border: '1.5px solid #fde68a', fontSize: '0.8rem', color: '#854d0e' }}>
+                ⚠️ 등록된 프로그램이 없습니다. <Link href="/owner/programs" style={{ color: '#1d4ed8', fontWeight: 700 }}>프로그램 관리</Link>에서 추가해주세요.
+              </div>
+            ) : (
+              <>
+                <select style={inputStyle} value={programId}
                   onChange={e => {
                     const p = programs.find(x => x.id === e.target.value)
                     if (p) handleProgramSelect(p)
@@ -309,50 +345,49 @@ export default function LessonPlanCreatePage() {
                   <option value="">프로그램을 선택하세요</option>
                   {programs.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.coach_id ? '★ ' : ''}{p.name} ({p.unit_minutes}분){p.default_amount > 0 ? ` · ${p.default_amount.toLocaleString()}원` : ''}
+                      {p.coach_id ? '★ ' : ''}{p.name} ({p.unit_minutes}분)
+                      {p.default_amount > 0 ? ` · 월정액 ${p.default_amount.toLocaleString()}원` : ''}
                     </option>
                   ))}
                 </select>
-              )}
-
-              {/* 선택된 프로그램 정보 배너 */}
-              {programId && (
-                <div style={{ marginTop: '0.5rem', padding: '0.625rem 0.875rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.625rem', fontSize: '0.78rem', color: '#15803d', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span>✅</span>
-                  <span>
-                    <strong>{programs.find(p => p.id === programId)?.name}</strong>
-                    {' · '}{programs.find(p => p.id === programId)?.unit_minutes}분
-                    {(programs.find(p => p.id === programId)?.default_amount ?? 0) > 0 &&
-                      ` · 기본 수업료 ${programs.find(p => p.id === programId)!.default_amount.toLocaleString()}원 자동 입력`}
-                  </span>
-                </div>
-              )}
-            </div>
+                {selectedProgram && (
+                  <div style={{ marginTop: '0.5rem', padding: '0.625rem 0.875rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.625rem', fontSize: '0.78rem', color: '#15803d', fontWeight: 600, display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                    <span>✅ <strong>{selectedProgram.name}</strong> · {selectedProgram.unit_minutes}분</span>
+                    {selectedProgram.default_amount > 0 && <span>월정액 {selectedProgram.default_amount.toLocaleString()}원</span>}
+                    {selectedProgram.per_session_price > 0 && <span style={{ color: '#1d4ed8' }}>회당 {selectedProgram.per_session_price.toLocaleString()}원</span>}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
-        {/* ── 일정 자동 생성 ── */}
+        {/* 일정 자동 생성 */}
         <div style={cardStyle}>
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>수업 일정 생성</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-
             <div>
               <label style={labelStyle}>시작 날짜</label>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inputStyle} />
             </div>
-
             <div>
               <label style={labelStyle}>수업 요일</label>
               <div style={{ display: 'flex', gap: '0.375rem' }}>
                 {DAYS.map((d, i) => (
                   <button key={i} onClick={() => toggleDay(i)}
-                    style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: `1.5px solid ${selectedDays.includes(i) ? '#16A34A' : '#e5e7eb'}`, background: selectedDays.includes(i) ? '#f0fdf4' : 'white', color: selectedDays.includes(i) ? '#16A34A' : '#9ca3af', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                    style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: `1.5px solid ${selectedDays.includes(i) ? (i===0?'#dc2626':i===6?'#d97706':'#16A34A') : '#e5e7eb'}`, background: selectedDays.includes(i) ? (i===0?'#fef2f2':i===6?'#fffbeb':'#f0fdf4') : 'white', color: selectedDays.includes(i) ? (i===0?'#dc2626':i===6?'#d97706':'#16A34A') : '#9ca3af', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
                     {d}
                   </button>
                 ))}
               </div>
+              {selectedProgram && (selectedDays.includes(0) || selectedDays.includes(6)) && (
+                <div style={{ marginTop: '4px', fontSize: '0.72rem', color: '#d97706', fontWeight: 600 }}>
+                  ⚠️ 주말 선택됨
+                  {selectedDays.includes(6) && config.sat_surcharge > 0 && ` · 토요일 +${config.sat_surcharge.toLocaleString()}원`}
+                  {selectedDays.includes(0) && config.sun_surcharge > 0 && ` · 일요일 +${config.sun_surcharge.toLocaleString()}원`}
+                </div>
+              )}
             </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div>
                 <label style={labelStyle}>수업 시간</label>
@@ -361,79 +396,164 @@ export default function LessonPlanCreatePage() {
               <div>
                 <label style={labelStyle}>총 수업 횟수</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <button onClick={() => setCount(c => Math.max(1, c - 1))}
-                    style={{ width: '36px', height: '36px', borderRadius: '0.5rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#374151', fontWeight: 700, fontSize: '1.1rem', cursor: 'pointer' }}>−</button>
+                  <button onClick={() => setCount(c => Math.max(1, c-1))} style={{ width: '36px', height: '36px', borderRadius: '0.5rem', border: '1.5px solid #e5e7eb', background: 'white', fontWeight: 700, fontSize: '1.1rem', cursor: 'pointer' }}>−</button>
                   <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#16A34A', minWidth: '32px', textAlign: 'center' }}>{count}</span>
-                  <button onClick={() => setCount(c => c + 1)}
-                    style={{ width: '36px', height: '36px', borderRadius: '0.5rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#374151', fontWeight: 700, fontSize: '1.1rem', cursor: 'pointer' }}>+</button>
+                  <button onClick={() => setCount(c => c+1)} style={{ width: '36px', height: '36px', borderRadius: '0.5rem', border: '1.5px solid #e5e7eb', background: 'white', fontWeight: 700, fontSize: '1.1rem', cursor: 'pointer' }}>+</button>
                   <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>회</span>
                 </div>
               </div>
             </div>
-
             <button onClick={generateSchedules} disabled={!startDate || !selectedDays.length}
               style={{ padding: '0.75rem', borderRadius: '0.75rem', border: 'none', fontWeight: 700, fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif', cursor: (!startDate || !selectedDays.length) ? 'not-allowed' : 'pointer', background: (!startDate || !selectedDays.length) ? '#e5e7eb' : '#1d4ed8', color: (!startDate || !selectedDays.length) ? '#9ca3af' : 'white' }}>
               📅 일정 자동 생성
             </button>
-
             {schedules.length > 0 && (
               <div>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>
                   생성된 일정 <span style={{ color: '#16A34A' }}>({schedules.length}회)</span>
                   <span style={{ fontWeight: 400, color: '#9ca3af', marginLeft: '0.5rem' }}>✏️ 시간수정 · 🗑️ 삭제 가능</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', maxHeight: '280px', overflowY: 'auto', paddingRight: '2px' }}>
-                  {schedules.map((s, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.5rem', border: '1px solid #f3f4f6' }}>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16A34A', minWidth: '28px' }}>{i+1}회</span>
-                      {editIdx === i ? (
-                        <>
-                          <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)}
-                            style={{ flex: 1, fontSize: '0.85rem', border: '1.5px solid #3b82f6', borderRadius: '0.375rem', padding: '2px 6px', fontFamily: 'Noto Sans KR, sans-serif' }} />
-                          <button onClick={() => saveEdit(i)}
-                            style={{ fontSize: '0.75rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '4px 10px', cursor: 'pointer', fontWeight: 600, fontFamily: 'Noto Sans KR, sans-serif' }}>저장</button>
-                          <button onClick={() => setEditIdx(null)}
-                            style={{ fontSize: '0.75rem', background: '#e5e7eb', color: '#6b7280', border: 'none', borderRadius: '0.375rem', padding: '4px 10px', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>취소</button>
-                        </>
-                      ) : (
-                        <>
-                          <span style={{ fontSize: '0.85rem', color: '#374151', flex: 1 }}>{fmtDt(s.datetime)}</span>
-                          <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginRight: '0.25rem' }}>{s.duration}분</span>
-                          <button onClick={() => startEdit(i)} title="시간 수정"
-                            style={{ fontSize: '0.85rem', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 5px', color: '#6b7280', lineHeight: 1 }}>✏️</button>
-                          <button onClick={() => { if (confirm(`${fmtDt(s.datetime)} 일정을 삭제할까요?`)) removeSlot(i) }} title="삭제"
-                            style={{ fontSize: '0.85rem', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 5px', color: '#ef4444', lineHeight: 1 }}>🗑️</button>
-                        </>
-                      )}
-                    </div>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', maxHeight: '240px', overflowY: 'auto' }}>
+                  {schedules.map((s, i) => {
+                    const dow = new Date(s.datetime).getDay()
+                    const isWeekend = dow === 0 || dow === 6
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: isWeekend ? '#fffbeb' : '#f9fafb', borderRadius: '0.5rem', border: `1px solid ${isWeekend ? '#fde68a' : '#f3f4f6'}` }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: isWeekend ? '#d97706' : '#16A34A', minWidth: '28px' }}>{i+1}회</span>
+                        {editIdx === i ? (
+                          <>
+                            <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)}
+                              style={{ flex: 1, fontSize: '0.85rem', border: '1.5px solid #3b82f6', borderRadius: '0.375rem', padding: '2px 6px', fontFamily: 'Noto Sans KR, sans-serif' }} />
+                            <button onClick={() => saveEdit(i)} style={{ fontSize: '0.75rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '0.375rem', padding: '4px 10px', cursor: 'pointer', fontWeight: 600, fontFamily: 'Noto Sans KR, sans-serif' }}>저장</button>
+                            <button onClick={() => setEditIdx(null)} style={{ fontSize: '0.75rem', background: '#e5e7eb', color: '#6b7280', border: 'none', borderRadius: '0.375rem', padding: '4px 10px', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>취소</button>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: '0.85rem', color: '#374151', flex: 1 }}>{fmtDt(s.datetime)}</span>
+                            <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{s.duration}분</span>
+                            {isWeekend && <span style={{ fontSize: '0.65rem', color: '#d97706', fontWeight: 700 }}>주말</span>}
+                            <button onClick={() => startEdit(i)} style={{ fontSize: '0.85rem', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 5px', color: '#6b7280' }}>✏️</button>
+                            <button onClick={() => { if (confirm(`${fmtDt(s.datetime)} 삭제할까요?`)) removeSlot(i) }} style={{ fontSize: '0.85rem', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 5px', color: '#ef4444' }}>🗑️</button>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* ── 결제 정보 ── */}
+        {/* ✅ 레슨비 미리보기 (프로그램 + 일정 모두 있을 때) */}
+        {selectedProgram && schedules.length > 0 && (
+          <div style={{ background: 'white', border: '1.5px solid #dbeafe', borderRadius: '1rem', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+              <span style={{ fontSize: '1rem' }}>💰</span>
+              <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#1e40af' }}>레슨비 미리보기</span>
+              {manualAmount !== null && <span style={{ fontSize: '0.7rem', background: '#fef3c7', color: '#92400e', borderRadius: '999px', padding: '2px 8px', fontWeight: 700 }}>수동 입력</span>}
+            </div>
+
+            {/* 계산 내역 */}
+            {autoCalc && (
+              <div style={{ marginBottom: '0.875rem', fontSize: '0.82rem' }}>
+                {/* 기본 금액 */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                  <span style={{ color: '#4b5563' }}>
+                    기본금액
+                    <span style={{ color: '#9ca3af', fontSize: '0.72rem', marginLeft: '4px' }}>
+                      ({effectiveBillingCount >= config.session_threshold
+                        ? effectiveBillingCount === config.session_threshold ? '월정액' : `월정액 + ${effectiveBillingCount - config.session_threshold}회 초과`
+                        : `${selectedProgram.per_session_price.toLocaleString()}원 × ${effectiveBillingCount}회`})
+                    </span>
+                  </span>
+                  <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700 }}>{fmt(autoCalc.base_amount)}</span>
+                </div>
+                {autoCalc.sat_extra > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                    <span style={{ color: '#4b5563' }}>토요일 추가금 <span style={{ color: '#9ca3af', fontSize: '0.72rem' }}>({satCount}회 → 고정)</span></span>
+                    <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#d97706' }}>+{fmt(autoCalc.sat_extra)}</span>
+                  </div>
+                )}
+                {autoCalc.sun_extra > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                    <span style={{ color: '#4b5563' }}>일요일 추가금 <span style={{ color: '#9ca3af', fontSize: '0.72rem' }}>({sunCount}회 → 고정)</span></span>
+                    <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#d97706' }}>+{fmt(autoCalc.sun_extra)}</span>
+                  </div>
+                )}
+                {memberDiscount > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                    <span style={{ color: '#4b5563' }}>회원 할인 {discountMemo && <span style={{ color: '#9ca3af', fontSize: '0.72rem' }}>({discountMemo})</span>}</span>
+                    <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, color: '#7e22ce' }}>−{fmt(memberDiscount)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 최종 금액 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: manualAmount !== null ? '#fffbeb' : '#eff6ff', borderRadius: '0.75rem', border: `1.5px solid ${manualAmount !== null ? '#fde68a' : '#bfdbfe'}`, marginBottom: '0.875rem' }}>
+              <span style={{ fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af' }}>최종 레슨비</span>
+              <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: '#1e40af' }}>{fmt(finalAmount)}</span>
+            </div>
+
+            {/* ✅ 청구 횟수 조정 */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
+                <span>청구 횟수 조정 <span style={{ fontWeight: 400, color: '#9ca3af' }}>(서비스 제외 시 줄이기)</span></span>
+                {billingCount !== null && (
+                  <button onClick={() => { setBillingCount(null); setManualAmount(null) }} style={{ fontSize: '0.7rem', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>↺ 자동 ({schedules.length}회)</button>
+                )}
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button onClick={() => { setBillingCount(Math.max(0, effectiveBillingCount - 1)); setManualAmount(null) }} style={{ width: '36px', height: '36px', borderRadius: '0.5rem', border: '1.5px solid #e5e7eb', background: 'white', fontWeight: 700, cursor: 'pointer' }}>−</button>
+                <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: effectiveBillingCount !== schedules.length ? '#7e22ce' : '#111827', minWidth: '40px', textAlign: 'center' }}>{effectiveBillingCount}</span>
+                <button onClick={() => { setBillingCount(effectiveBillingCount + 1); setManualAmount(null) }} style={{ width: '36px', height: '36px', borderRadius: '0.5rem', border: '1.5px solid #e5e7eb', background: 'white', fontWeight: 700, cursor: 'pointer' }}>+</button>
+                <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>회 청구 <span style={{ color: '#9ca3af' }}>(실제 {schedules.length}회)</span></span>
+              </div>
+            </div>
+
+            {/* ✅ 수동 금액 입력 */}
+            <div>
+              <label style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}>
+                <span>수동 금액 입력 (자동 계산 덮어쓰기)</span>
+                {manualAmount !== null && (
+                  <button onClick={() => setManualAmount(null)} style={{ fontSize: '0.7rem', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>↺ 자동 계산으로</button>
+                )}
+              </label>
+              <input type="number" min="0"
+                value={manualAmount !== null ? manualAmount : ''}
+                onChange={e => setManualAmount(e.target.value === '' ? null : Number(e.target.value))}
+                placeholder={autoCalc ? `자동: ${fmt(autoCalc.amount)}` : '금액 직접 입력'}
+                style={{ ...inputStyle, border: `1.5px solid ${manualAmount !== null ? '#f59e0b' : '#e5e7eb'}`, background: manualAmount !== null ? '#fffbeb' : 'white' }} />
+            </div>
+          </div>
+        )}
+
+        {/* 결제 정보 */}
         <div style={cardStyle}>
           <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>결제 정보</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-            <div>
-              <label style={labelStyle}>
-                수업료 (원)
-                {programId && (programs.find(p => p.id === programId)?.default_amount ?? 0) > 0 && (
-                  <span style={{ fontWeight: 400, color: '#16A34A', marginLeft: '6px' }}>← 프로그램 기본값 자동 입력됨</span>
-                )}
-              </label>
-              <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))}
-                placeholder="0" style={inputStyle} />
-            </div>
+            {/* 프로그램 미선택 시 직접 입력 */}
+            {!selectedProgram && (
+              <div>
+                <label style={labelStyle}>수업료 (원) <span style={{ fontWeight: 400, color: '#9ca3af' }}>← 프로그램 선택 시 자동 계산</span></label>
+                <input type="number" value={finalAmount || ''} onChange={e => setManualAmount(Number(e.target.value))} placeholder="0" style={inputStyle} />
+              </div>
+            )}
+            {/* 프로그램 선택 시 최종 금액 요약 */}
+            {selectedProgram && schedules.length > 0 && (
+              <div style={{ padding: '0.75rem 1rem', background: '#f0fdf4', borderRadius: '0.75rem', border: '1.5px solid #86efac', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#15803d' }}>등록될 레슨비</span>
+                <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.3rem', fontWeight: 700, color: '#15803d' }}>{fmt(finalAmount)}</span>
+              </div>
+            )}
             <div>
               <label style={labelStyle}>결제 상태</label>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 {(['unpaid', 'paid'] as const).map(s => (
                   <button key={s} onClick={() => setPayment(s)}
-                    style={{ flex: 1, padding: '0.625rem', borderRadius: '0.625rem', border: `1.5px solid ${payment === s ? (s === 'paid' ? '#16A34A' : '#dc2626') : '#e5e7eb'}`, background: payment === s ? (s === 'paid' ? '#f0fdf4' : '#fef2f2') : 'white', color: payment === s ? (s === 'paid' ? '#16A34A' : '#dc2626') : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                    {s === 'paid' ? '납부' : '미납'}
+                    style={{ flex: 1, padding: '0.625rem', borderRadius: '0.625rem', border: `1.5px solid ${payment === s ? (s==='paid'?'#16A34A':'#dc2626') : '#e5e7eb'}`, background: payment === s ? (s==='paid'?'#f0fdf4':'#fef2f2') : 'white', color: payment === s ? (s==='paid'?'#16A34A':'#dc2626') : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                    {s === 'paid' ? '✅ 납부' : '❌ 미납'}
                   </button>
                 ))}
               </div>
@@ -441,17 +561,15 @@ export default function LessonPlanCreatePage() {
           </div>
         </div>
 
-        {/* 에러 메시지 */}
         {error && (
           <div style={{ padding: '0.75rem 1rem', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.75rem', fontSize: '0.875rem', color: '#b91c1c', fontFamily: 'Noto Sans KR, sans-serif' }}>
             ⚠️ {error}
           </div>
         )}
 
-        {/* 등록 버튼 */}
         <button onClick={handleSubmit} disabled={saving || !memberId || !coachId || !monthId || !schedules.length}
           style={{ padding: '1rem', borderRadius: '0.875rem', border: 'none', fontWeight: 700, fontSize: '1rem', fontFamily: 'Noto Sans KR, sans-serif', cursor: (saving || !memberId || !coachId || !monthId || !schedules.length) ? 'not-allowed' : 'pointer', background: (saving || !memberId || !coachId || !monthId || !schedules.length) ? '#e5e7eb' : '#16A34A', color: (saving || !memberId || !coachId || !monthId || !schedules.length) ? '#9ca3af' : 'white' }}>
-          {saving ? '등록 중...' : `🎾 스케줄 등록 (${schedules.length}회)`}
+          {saving ? '등록 중...' : `🎾 스케줄 등록 (${schedules.length}회 · ${fmt(finalAmount)})`}
         </button>
       </div>
     </div>

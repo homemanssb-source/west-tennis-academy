@@ -1,6 +1,8 @@
+// src/app/api/lesson-plans/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
+import { calcAmount, getConfig } from '@/lib/calcAmount'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
@@ -9,13 +11,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { member_id, coach_id, month_id, lesson_type, unit_minutes, schedules, amount, program_id } = await req.json()
+    const {
+      member_id, coach_id, month_id, lesson_type,
+      unit_minutes, schedules, amount, program_id,
+      billing_count: reqBillingCount,  // 운영자가 직접 입력한 청구 횟수 (없으면 schedules.length)
+    } = await req.json()
 
     if (!member_id || !coach_id || !month_id || !lesson_type || !schedules?.length) {
       return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
     }
 
-    // ── 중복 시간대 체크 ──────────────────────────────────────
+    // ── 중복 시간대 체크 ──────────────────────────────────────────────
     const datetimes = schedules.map((s: { datetime: string }) => s.datetime)
 
     const { data: conflicts } = await supabaseAdmin
@@ -29,7 +35,7 @@ export async function POST(req: NextRequest) {
       const days = ['일', '월', '화', '수', '목', '금', '토']
       const conflictDates = conflicts.map((c: { scheduled_at: string }) => {
         const d = new Date(c.scheduled_at)
-        return `${d.getMonth() + 1}/${d.getDate()}(${days[d.getDay()]}) ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+        return `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
       })
       return NextResponse.json(
         { error: `아래 시간대에 이미 같은 코치의 수업이 있습니다:\n${conflictDates.join('\n')}`, conflicts: conflictDates },
@@ -37,7 +43,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ✅ FIX #6: 운영자 스케줄 등록 시 코치 휴무 체크
+    // ── 코치 휴무 체크 ─────────────────────────────────────────────────
     for (const s of schedules) {
       const dt        = new Date(s.datetime)
       const dateStr   = dt.toISOString().split('T')[0]
@@ -55,14 +61,12 @@ export async function POST(req: NextRequest) {
 
       if (blocks && blocks.length > 0) {
         for (const b of blocks) {
-          // 종일 휴무
           if (!b.block_start && !b.block_end) {
             return NextResponse.json(
               { error: `${dateStr} 코치 휴무일입니다.${b.reason ? ' 사유: ' + b.reason : ''}` },
               { status: 409 }
             )
           }
-          // 시간대 겹침
           const bStart = b.block_start ?? '00:00'
           const bEnd   = b.block_end   ?? '23:59'
           if (hhmm < bEnd && endHhmm > bStart) {
@@ -74,8 +78,48 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    // ─────────────────────────────────────────────────────────
 
+    // ── 레슨비 자동 계산 ──────────────────────────────────────────────
+    const billing_count = reqBillingCount ?? schedules.length
+
+    // 토·일 횟수 집계
+    const sat_count = schedules.filter((s: { datetime: string }) => new Date(s.datetime).getDay() === 6).length
+    const sun_count = schedules.filter((s: { datetime: string }) => new Date(s.datetime).getDay() === 0).length
+
+    // 프로그램 + 회원 할인 조회
+    let finalAmount = amount || 0
+    let discount_amount = 0
+    let discount_memo: string | null = null
+
+    if (program_id) {
+      const [progRes, configRes, memberRes] = await Promise.all([
+        supabaseAdmin.from('lesson_programs').select('default_amount, per_session_price').eq('id', program_id).single(),
+        getConfig(),
+        supabaseAdmin.from('profiles').select('discount_amount, discount_memo').eq('id', member_id).single(),
+      ])
+
+      const prog   = progRes.data
+      const config = configRes
+      const member = memberRes.data
+
+      discount_amount = member?.discount_amount ?? 0
+      discount_memo   = member?.discount_memo   ?? null
+
+      if (prog) {
+        const calc = calcAmount({
+          config,
+          default_amount:    prog.default_amount    ?? 0,
+          per_session_price: prog.per_session_price ?? 0,
+          billing_count,
+          sat_count,
+          sun_count,
+          discount_amount,
+        })
+        finalAmount = calc.amount
+      }
+    }
+
+    // ── lesson_plans insert ───────────────────────────────────────────
     const { data: plan, error: planErr } = await supabaseAdmin
       .from('lesson_plans')
       .insert({
@@ -83,11 +127,16 @@ export async function POST(req: NextRequest) {
         coach_id,
         month_id,
         lesson_type,
-        unit_minutes: unit_minutes || 60,
-        total_count: schedules.length,
+        unit_minutes:    unit_minutes || 60,
+        total_count:     schedules.length,
+        billing_count,                         // ✅ 청구 횟수
         completed_count: 0,
-        payment_status: 'unpaid',
-        amount: amount || 0,
+        payment_status:  'unpaid',
+        amount:          finalAmount,
+        sat_count,                             // ✅ 토요일 횟수
+        sun_count,                             // ✅ 일요일 횟수
+        discount_amount,                       // ✅ 할인액 스냅샷
+        discount_memo,                         // ✅ 할인 사유 스냅샷
         ...(program_id ? { program_id } : {}),
       })
       .select()
@@ -95,7 +144,8 @@ export async function POST(req: NextRequest) {
 
     if (planErr) return NextResponse.json({ error: planErr.message }, { status: 500 })
 
-    const slots = schedules.map((s: { datetime: string; duration: number }) => ({
+    // ── lesson_slots insert ───────────────────────────────────────────
+    const slotsToInsert = schedules.map((s: { datetime: string; duration: number }) => ({
       lesson_plan_id:   plan.id,
       scheduled_at:     s.datetime,
       duration_minutes: s.duration || unit_minutes || 60,
@@ -104,7 +154,7 @@ export async function POST(req: NextRequest) {
       is_makeup:        false,
     }))
 
-    const { error: slotsErr } = await supabaseAdmin.from('lesson_slots').insert(slots)
+    const { error: slotsErr } = await supabaseAdmin.from('lesson_slots').insert(slotsToInsert)
 
     if (slotsErr) {
       await supabaseAdmin.from('lesson_plans').delete().eq('id', plan.id)

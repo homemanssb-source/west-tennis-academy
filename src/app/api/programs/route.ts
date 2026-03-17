@@ -1,3 +1,4 @@
+// src/app/api/programs/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
       .or(`coach_id.is.null,coach_id.eq.${coachId}`)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false })
-    data = res.data
+    data  = res.data
     error = res.error
   } else {
     // 전체 조회 (운영자 관리용) - 비활성 포함
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
       `)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false })
-    data = res.data
+    data  = res.data
     error = res.error
   }
 
@@ -49,9 +50,10 @@ export async function POST(req: NextRequest) {
   try {
     const {
       name, ratio, max_students, unit_minutes, description,
-      coach_id,          // null이면 공통, 값 있으면 특정 코치 전용
-      default_amount,    // 기본 수업료
-      sort_order,        // 정렬 순서
+      coach_id,
+      default_amount,
+      per_session_price,   // ✅ 신규
+      sort_order,
     } = await req.json()
 
     if (!name || !ratio || !max_students) {
@@ -64,12 +66,13 @@ export async function POST(req: NextRequest) {
         name,
         ratio,
         max_students,
-        unit_minutes:   unit_minutes   || 60,
+        unit_minutes:      unit_minutes      || 60,
         description,
-        coach_id:       coach_id       || null,
-        default_amount: default_amount || 0,
-        sort_order:     sort_order     || 0,
-        created_by:     session.id,
+        coach_id:          coach_id          || null,
+        default_amount:    default_amount    || 0,
+        per_session_price: per_session_price || 0,   // ✅ 신규
+        sort_order:        sort_order        || 0,
+        created_by:        session.id,
       })
       .select()
       .single()
