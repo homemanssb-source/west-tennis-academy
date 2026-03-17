@@ -110,10 +110,12 @@ export default function PaymentPage() {
 
   const handlePay = async () => {
     if (!selected) return
+    // ✅ 클로저 문제 방지 — state에서 직접 읽기
+    const currentAmount = editAmountStr === '' ? 0 : Number(editAmountStr)
     setSaving(true)
     const fd = new FormData()
     fd.append('payment_status', 'paid')
-    fd.append('amount', String(editAmount))
+    fd.append('amount', String(currentAmount))
     if (receipt) fd.append('receipt', receipt)
     await fetch(`/api/payment/${selected.id}`, { method: 'PATCH', body: fd })
     setSaving(false)
@@ -123,6 +125,8 @@ export default function PaymentPage() {
 
   const handleUnpay = async () => {
     if (!selected) return
+    // ✅ 클로저 문제 방지 — state에서 직접 읽기
+    const currentAmount = editAmountStr === '' ? 0 : Number(editAmountStr)
 
     if (selected.toss_paid) {
       const confirmed = confirm(
@@ -137,7 +141,7 @@ export default function PaymentPage() {
     setSaving(true)
     await fetch(`/api/payment/${selected.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payment_status: 'unpaid', amount: editAmount }),
+      body: JSON.stringify({ payment_status: 'unpaid', amount: currentAmount }),
     })
     setSaving(false)
     setSelected(null)
