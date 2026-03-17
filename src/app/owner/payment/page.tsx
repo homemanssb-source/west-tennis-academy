@@ -1,6 +1,5 @@
 'use client'
 // src/app/owner/payment/page.tsx
-// ✅ toss_paid 경고 + 미납 변경 시 confirm 추가
 
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
@@ -13,7 +12,7 @@ interface LessonPlan {
   id: string; payment_status: 'unpaid' | 'paid'; amount: number
   lesson_type: string; total_count: number; completed_count: number
   unit_minutes: number
-  toss_paid: boolean   // ✅ 토스 결제 여부
+  toss_paid: boolean
   member: { id: string; name: string; phone: string }
   coach:  { id: string; name: string }
   month:  { id: string; year: number; month: number }
@@ -43,7 +42,8 @@ export default function PaymentPage() {
   const [saving,   setSaving]   = useState(false)
   const [receipt,  setReceipt]  = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
-  const [editAmount, setEditAmount] = useState(0)
+  // ✅ 문자열로 관리 → 0일 때 빈칸 표시 가능
+  const [editAmountStr, setEditAmountStr] = useState('')
   const [showExtra,  setShowExtra]  = useState(false)
   const [months,   setMonths]   = useState<Month[]>([])
   const [members,  setMembers]  = useState<Member[]>([])
@@ -52,7 +52,6 @@ export default function PaymentPage() {
   const [showMemberDrop, setShowMemberDrop] = useState(false)
   const memberRef = useRef<HTMLDivElement>(null)
 
-  // 토스 결제 링크 상태
   const [payLink,     setPayLink]     = useState<string | null>(null)
   const [linkLoading, setLinkLoading] = useState(false)
   const [linkCopied,  setLinkCopied]  = useState(false)
@@ -62,6 +61,9 @@ export default function PaymentPage() {
     lesson_type: '추가수업', unit_minutes: 60,
     scheduled_date: '', scheduled_time: '', amount: 0,
   })
+
+  // ✅ 실제 금액은 문자열 → 숫자 변환해서 사용
+  const editAmount = editAmountStr === '' ? 0 : Number(editAmountStr)
 
   const load = async () => {
     setLoading(true)
@@ -92,7 +94,8 @@ export default function PaymentPage() {
 
   const openDetail = async (plan: LessonPlan) => {
     setSelected(plan)
-    setEditAmount(plan.amount)
+    // ✅ 0이면 빈 문자열로 → 바로 입력 가능
+    setEditAmountStr(plan.amount > 0 ? String(plan.amount) : '')
     setDetailTab('slots')
     setReceipt(null)
     setReceiptPreview(null)
@@ -118,7 +121,6 @@ export default function PaymentPage() {
     load()
   }
 
-  // ✅ 토스 결제 완료 플랜 미납 변경 시 경고
   const handleUnpay = async () => {
     if (!selected) return
 
@@ -142,7 +144,6 @@ export default function PaymentPage() {
     load()
   }
 
-  // 토스 결제 링크 생성
   const handleGeneratePayLink = async () => {
     if (!selected) return
     setLinkLoading(true)
@@ -235,7 +236,6 @@ export default function PaymentPage() {
       </div>
 
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1rem 1.5rem 2rem' }}>
-        {/* 요약 통계 */}
         {!loading && plans.length > 0 && (
           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             {[
@@ -275,7 +275,6 @@ export default function PaymentPage() {
                           color:      p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
                           {p.payment_status === 'paid' ? '납부완료' : '미납'}
                         </span>
-                        {/* ✅ 토스 결제 배지 */}
                         {p.toss_paid && (
                           <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>
                             💳 토스결제
@@ -321,7 +320,6 @@ export default function PaymentPage() {
                 <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>
                   {selected.member?.name} · {selected.month?.year}년 {selected.month?.month}월
                 </span>
-                {/* ✅ 토스 결제 배지 */}
                 {selected.toss_paid && (
                   <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>
                     💳 토스결제
@@ -400,7 +398,7 @@ export default function PaymentPage() {
             {/* 납부 처리 탭 */}
             {detailTab === 'pay' && (
               <>
-                {/* ✅ 토스 결제 완료 경고 배너 */}
+                {/* 토스 결제 완료 경고 배너 */}
                 {selected.toss_paid && (
                   <div style={{ background: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '0.875rem', padding: '0.875rem 1rem', marginBottom: '1rem', display: 'flex', gap: '0.625rem', alignItems: 'flex-start' }}>
                     <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>💳</span>
@@ -420,12 +418,13 @@ export default function PaymentPage() {
                   <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
                     {selected.month?.year}년 {selected.month?.month}월 · {selected.coach?.name} · {selected.lesson_type}
                   </div>
-                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827', marginTop: '0.5rem' }}>
-                    {fmt(editAmount)}원
+                  {/* ✅ 현재 설정된 금액 표시 */}
+                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: editAmount > 0 ? '#111827' : '#9ca3af', marginTop: '0.5rem' }}>
+                    {editAmount > 0 ? `${fmt(editAmount)}원` : '금액 미설정'}
                   </div>
                 </div>
 
-                {/* 토스 결제 링크 생성 (미납 플랜만) */}
+                {/* 토스 결제 링크 생성 */}
                 {selected.payment_status === 'unpaid' && (
                   <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.875rem', padding: '1rem', marginBottom: '1rem' }}>
                     <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1e40af', marginBottom: '0.625rem' }}>
@@ -437,13 +436,13 @@ export default function PaymentPage() {
                     </div>
 
                     {!payLink ? (
-                      <button onClick={handleGeneratePayLink} disabled={linkLoading}
+                      <button onClick={handleGeneratePayLink} disabled={linkLoading || editAmount <= 0}
                         style={{ width: '100%', padding: '0.75rem', borderRadius: '0.75rem', border: 'none',
-                          background: linkLoading ? '#e5e7eb' : '#1d4ed8',
-                          color: linkLoading ? '#9ca3af' : 'white',
-                          fontWeight: 700, cursor: linkLoading ? 'not-allowed' : 'pointer',
+                          background: linkLoading || editAmount <= 0 ? '#e5e7eb' : '#1d4ed8',
+                          color: linkLoading || editAmount <= 0 ? '#9ca3af' : 'white',
+                          fontWeight: 700, cursor: linkLoading || editAmount <= 0 ? 'not-allowed' : 'pointer',
                           fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem' }}>
-                        {linkLoading ? '링크 생성 중...' : '🔗 결제 링크 생성'}
+                        {linkLoading ? '링크 생성 중...' : editAmount <= 0 ? '금액을 먼저 입력해주세요' : '🔗 결제 링크 생성'}
                       </button>
                     ) : (
                       <div>
@@ -470,11 +469,26 @@ export default function PaymentPage() {
                   </div>
                 )}
 
-                {/* 금액 수정 */}
+                {/* ✅ 금액 수정 - 0이면 빈칸으로 표시 */}
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>금액 수정</label>
-                  <input type="number" value={editAmount} onChange={e => setEditAmount(Number(e.target.value))}
-                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', boxSizing: 'border-box' as const }} />
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>
+                    금액 수정
+                    {editAmount <= 0 && <span style={{ color: '#ef4444', marginLeft: '6px' }}>← 금액을 입력해주세요</span>}
+                  </label>
+                  <input
+                    type="number"
+                    value={editAmountStr}
+                    onChange={e => setEditAmountStr(e.target.value)}
+                    placeholder="금액 입력 (원)"
+                    style={{
+                      width: '100%', padding: '0.5rem 0.75rem',
+                      border: `1.5px solid ${editAmount <= 0 ? '#fca5a5' : '#e5e7eb'}`,
+                      borderRadius: '0.625rem', fontSize: '0.875rem',
+                      fontFamily: 'Noto Sans KR, sans-serif',
+                      boxSizing: 'border-box' as const,
+                      background: editAmount <= 0 ? '#fef2f2' : 'white',
+                    }}
+                  />
                 </div>
 
                 {/* 영수증 첨부 */}
@@ -506,18 +520,23 @@ export default function PaymentPage() {
                 {/* 버튼 */}
                 <div style={{ display: 'flex', gap: '0.625rem' }}>
                   {selected.payment_status === 'unpaid' ? (
-                    <button onClick={handlePay} disabled={saving}
-                      style={{ flex: 1, padding: '0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                      {saving ? '처리중...' : '✅ 현장 납부 완료 처리'}
+                    <button onClick={handlePay} disabled={saving || editAmount <= 0}
+                      style={{ flex: 1, padding: '0.875rem',
+                        background: saving || editAmount <= 0 ? '#e5e7eb' : '#16A34A',
+                        color: saving || editAmount <= 0 ? '#9ca3af' : 'white',
+                        border: 'none', borderRadius: '0.875rem', fontWeight: 700,
+                        cursor: saving || editAmount <= 0 ? 'not-allowed' : 'pointer',
+                        fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                      {saving ? '처리중...' : editAmount <= 0 ? '금액을 입력해주세요' : '✅ 현장 납부 완료 처리'}
                     </button>
                   ) : (
                     <button onClick={handleUnpay} disabled={saving}
                       style={{ flex: 1, padding: '0.875rem',
-                        // ✅ 토스 결제된 경우 버튼 색상 강조
                         background: selected.toss_paid ? '#fef3c7' : '#fef2f2',
                         color:      selected.toss_paid ? '#92400e' : '#b91c1c',
                         border:     `1.5px solid ${selected.toss_paid ? '#fde68a' : '#fecaca'}`,
-                        borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                        borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer',
+                        fontSize: '0.9rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
                       {saving ? '처리중...' : selected.toss_paid ? '⚠️ 미납으로 변경 (주의)' : '↩ 미납으로 변경'}
                     </button>
                   )}
@@ -592,7 +611,7 @@ export default function PaymentPage() {
 
             <div style={{ marginBottom: '0.875rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>금액 (원)</label>
-              <input type="number" style={inputStyle} value={extraForm.amount || ''} onChange={e => setExtraForm(f => ({ ...f, amount: Number(e.target.value) }))} placeholder="0" />
+              <input type="number" style={inputStyle} value={extraForm.amount || ''} onChange={e => setExtraForm(f => ({ ...f, amount: Number(e.target.value) }))} placeholder="금액 입력" />
             </div>
 
             <div style={{ display: 'flex', gap: '0.625rem', marginTop: '1rem' }}>
