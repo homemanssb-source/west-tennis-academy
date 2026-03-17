@@ -1,5 +1,4 @@
-﻿// src/app/coach/page.tsx
-import { redirect } from 'next/navigation'
+﻿import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import Link from 'next/link'
@@ -10,21 +9,21 @@ export default async function CoachHomePage() {
   const session = await getSession()
   if (!session || !['owner','coach'].includes(session.role)) redirect('/auth/coach')
 
-  const today = new Date().toISOString().split('T')[0]
-  const start = `${today}T00:00:00+09:00`
-  const end   = `${today}T23:59:59+09:00`
+  const kst   = new Date(Date.now() + 9 * 60 * 60 * 1000)
+  const today = kst.toISOString().split('T')[0]
+  const start = ${today}T00:00:00+09:00
+  const end   = ${today}T23:59:59+09:00
 
-  // ✅ draft/cancelled 제외 — 초안은 확정 전이라 코치 홈에 표시 안 함
   const { data: slots } = await supabaseAdmin
     .from('lesson_slots')
-    .select(`
+    .select(
       id, scheduled_at, duration_minutes, status, slot_type, memo,
       lesson_plan:lesson_plan_id (
         id, lesson_type,
         member:member_id ( id, name, phone ),
         coach:coach_id ( id, name )
       )
-    `)
+    )
     .gte('scheduled_at', start)
     .lte('scheduled_at', end)
     .not('status', 'in', '("draft","cancelled")')
@@ -101,13 +100,13 @@ export default async function CoachHomePage() {
             {mySlots.map((s: any) => {
               const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
               return (
-                <div key={s.id} style={{ background: st.bg, borderLeft: `4px solid ${st.border}`, borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div key={s.id} style={{ background: st.bg, borderLeft: 4px solid , borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '48px' }}>{fmtTime(s.scheduled_at)}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
                     <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
                   </div>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: `${st.border}33`, color: st.color }}>{st.label}</span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: ${st.border}33, color: st.color }}>{st.label}</span>
                 </div>
               )
             })}
