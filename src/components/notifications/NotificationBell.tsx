@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePush } from '@/lib/usePush'
 
@@ -28,6 +28,8 @@ export default function NotificationBell() {
   const [open,        setOpen]        = useState(false)
   const [loading,     setLoading]     = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
+  const bellRef = useRef<HTMLButtonElement>(null)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
 
   const unread = notifs.filter(n => !n.is_read).length
 
@@ -53,9 +55,8 @@ export default function NotificationBell() {
     }
   }
 
-  // ✅ 단건 삭제
   const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation() // 카드 클릭 이벤트 막기
+    e.stopPropagation()
     await fetch(`/api/notifications/${id}`, { method: 'DELETE' })
     setNotifs(prev => prev.filter(n => n.id !== id))
   }
@@ -68,6 +69,21 @@ export default function NotificationBell() {
     } finally {
       setPushLoading(false)
     }
+  }
+
+  // 벨 버튼 위치를 기준으로 드롭다운 좌표 계산
+  const handleBellClick = async () => {
+    const next = !open
+    if (next && bellRef.current) {
+      const rect = bellRef.current.getBoundingClientRect()
+      setDropdownPos({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      })
+      await load()
+      await markAllRead()
+    }
+    setOpen(next)
   }
 
   const fmt = (dt: string) => {
@@ -111,14 +127,8 @@ export default function NotificationBell() {
 
         {/* 벨 버튼 */}
         <button
-          onClick={async () => {
-            const next = !open
-            setOpen(next)
-            if (next) {
-              await load()
-              await markAllRead()
-            }
-          }}
+          ref={bellRef}
+          onClick={handleBellClick}
           style={{
             position: 'relative',
             background: 'rgba(255,255,255,0.15)',
@@ -157,16 +167,16 @@ export default function NotificationBell() {
         </button>
       </div>
 
-      {/* 드롭다운 */}
+      {/* 드롭다운 — position: fixed 로 뷰포트 기준 배치 → 짤림 없음 */}
       {open && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
           <div style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
+            position: 'fixed',
+            top: dropdownPos.top,
+            right: dropdownPos.right,
             width: '320px',
-            maxWidth: 'calc(100vw - 2rem)',
+            maxWidth: 'calc(100vw - 1rem)',
             background: 'white',
             borderRadius: '1rem',
             boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
@@ -182,7 +192,6 @@ export default function NotificationBell() {
               borderBottom: '1px solid #f3f4f6',
             }}>
               <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>알림</span>
-              {/* ✅ 전체 삭제 버튼 */}
               {notifs.length > 0 && (
                 <button
                   onClick={async () => {
@@ -231,7 +240,7 @@ export default function NotificationBell() {
                         <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px', lineHeight: 1.4 }}>{n.body}</div>
                         <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '4px' }}>{fmt(n.created_at)}</div>
                       </div>
-                      {/* ✅ 단건 삭제 버튼 */}
+                      {/* 단건 삭제 버튼 */}
                       <button
                         onClick={e => handleDelete(e, n.id)}
                         title="삭제"
