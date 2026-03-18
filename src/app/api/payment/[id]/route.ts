@@ -4,9 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024
 
-// ✅ 수정: MIME type 기반으로 확장자 강제 지정 (확장자 위조 방어)
 const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png':  'png',
@@ -39,7 +38,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
-    // ✅ 수정: 파일 검증 인덴트 정리 + 확장자 강제 지정
     if (file && file.size > 0) {
       if (!ALLOWED_TYPES.includes(file.type as any)) {
         return NextResponse.json(
@@ -54,7 +52,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         )
       }
 
-      // ✅ MIME type 기반 확장자 (원본 파일명 확장자 미사용)
       const ext      = MIME_TO_EXT[file.type] ?? 'jpg'
       const fileName = `receipts/${id}/${Date.now()}.${ext}`
       const buffer   = Buffer.from(await file.arrayBuffer())
@@ -63,24 +60,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         .from('receipts')
         .upload(fileName, buffer, { contentType: file.type, upsert: false })
 
-      if (uploadErr) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.error('영수증 업로드 실패:', uploadErr.message)
-        }
-      } else {
+      if (!uploadErr) {
         const { data: urlData } = supabaseAdmin.storage
           .from('receipts')
           .getPublicUrl(fileName)
 
-        const { error: receiptErr } = await supabaseAdmin.from('payment_receipts').insert({
+        // ✅ 실제 컬럼명: image_url (file_url 아님)
+        await supabaseAdmin.from('payment_receipts').insert({
           lesson_plan_id: id,
-          file_url: urlData.publicUrl,
-          file_name: file.name,
-          uploaded_by: session.id,
+          image_url:      urlData.publicUrl,
+          uploaded_by:    session.id,
         })
-        if (receiptErr && process.env.NODE_ENV !== 'production') {
-          console.error('영수증 DB 저장 실패:', receiptErr.message)
-        }
       }
     }
 
@@ -116,7 +106,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       member:member_id ( id, name, phone ),
       coach:coach_id ( id, name ),
       month:month_id ( id, year, month ),
-      receipts:payment_receipts ( id, file_url, file_name, created_at, uploader:uploaded_by(name) )
+      receipts:payment_receipts ( id, image_url, amount, memo, created_at, uploader:uploaded_by(name) )
     `)
     .eq('id', id)
     .single()
