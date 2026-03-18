@@ -1,4 +1,4 @@
-// ✅ fix: family_member_name 주입 (lesson_plans.family_member_id 직접 조회)
+﻿// ✅ fix: family_member_name 주입 (lesson_plans.family_member_id 직접 조회)
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
       coach:profiles!lesson_plans_coach_id_fkey(id, name),
       month:months(id, year, month),
       slots:lesson_slots(id, status),
-      family_member:family_member_id(name)
+      family_member:family_members!family_member_id(name)
     `)
     .order('created_at', { ascending: false })
 

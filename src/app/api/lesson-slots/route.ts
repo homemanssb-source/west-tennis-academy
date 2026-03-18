@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
         id, lesson_type, unit_minutes,
         member:member_id ( id, name, phone ),
         coach:coach_id ( id, name ),
-        family_member:family_member_id ( name )
+        family_member:family_members!family_member_id ( name )
       )
     `)
     .gte('scheduled_at', startStr)
