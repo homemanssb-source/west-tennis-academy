@@ -5,7 +5,7 @@ import Link from 'next/link'
 interface Slot {
   id: string; scheduled_at: string; duration_minutes: number; status: string; is_makeup: boolean
   display_name: string
-  lesson_plan: { lesson_type: string; family_member_id?: string; member: { id: string; name: string }; coach: { id: string; name: string } }
+  lesson_plan: { lesson_type: string; member: { id: string; name: string }; coach: { id: string; name: string } }
 }
 interface Block {
   id: string; coach_id: string; block_date: string | null
@@ -27,24 +27,36 @@ function getMonday(d: Date) {
   mon.setHours(0, 0, 0, 0)
   return mon
 }
-function toYMD(d: Date) { const kst = new Date(d.getTime() + 9*60*60*1000); return kst.toISOString().split('T')[0] }
+function toYMD(d: Date) { return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }) }
 
-// 같은 시간대 슬롯 겹침 계산: 각 슬롯에 column/totalColumns 할당
+// 슬롯 시작 분 계산 (KST 기준)
+function getStartMin(scheduledAt: string) {
+  const d = new Date(scheduledAt)
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
+  return (kst.getUTCHours() - START_HOUR) * 60 + kst.getUTCMinutes()
+}
+
+// 슬롯 KST 날짜 문자열
+function getKSTDate(scheduledAt: string) {
+  const d = new Date(scheduledAt)
+  return new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
+}
+
+// 같은 시간(분 단위 동일)끼리 겹침 컬럼 계산
 function assignColumns(slots: Slot[]): (Slot & { col: number; totalCols: number })[] {
-  const result: (Slot & { col: number; totalCols: number })[] = []
-  // scheduled_at 기준 그룹핑
-  const groups: Record<string, Slot[]> = {}
+  // 시작 분 기준으로 그룹핑 (문자열 형식 차이 무시)
+  const groups: Record<number, Slot[]> = {}
   for (const s of slots) {
-    const key = s.scheduled_at
+    const key = getStartMin(s.scheduled_at)
     if (!groups[key]) groups[key] = []
     groups[key].push(s)
   }
-  for (const s of slots) {
-    const group = groups[s.scheduled_at]
+  return slots.map(s => {
+    const key = getStartMin(s.scheduled_at)
+    const group = groups[key]
     const col = group.indexOf(s)
-    result.push({ ...s, col, totalCols: group.length })
-  }
-  return result
+    return { ...s, col, totalCols: group.length }
+  })
 }
 
 export default function WeeklySchedulePage() {
@@ -54,6 +66,7 @@ export default function WeeklySchedulePage() {
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'all'|'byCoach'>('all')
   const [selCoach, setSelCoach] = useState<string>('all')
+  const [selCoachByCoach, setSelCoachByCoach] = useState<string>('')
   const now = new Date()
 
   useEffect(() => {
@@ -81,17 +94,14 @@ export default function WeeklySchedulePage() {
   const coaches = Array.from(new Map(slots.filter(s => s.lesson_plan?.coach).map(s => [s.lesson_plan.coach.id, s.lesson_plan.coach])).values())
   const coachColorMap: Record<string,string> = {}
   coaches.forEach((c, i) => { coachColorMap[c.id] = COACH_COLORS[i % COACH_COLORS.length] })
-
-  // 전체보기: selCoach 필터
   const filteredSlots = selCoach === 'all' ? slots : slots.filter(s => s.lesson_plan?.coach?.id === selCoach)
 
-  // 선생님별: 드롭다운으로 선택된 코치 1명만
-  const [selCoachByCoach, setSelCoachByCoach] = useState<string>('')
+  // 선생님별 첫 코치 자동 선택
   useEffect(() => {
     if (viewMode === 'byCoach' && coaches.length > 0 && !selCoachByCoach) {
       setSelCoachByCoach(coaches[0].id)
     }
-  }, [viewMode, coaches])
+  }, [viewMode, coaches, selCoachByCoach])
 
   function TimeGrid({ slotsForGrid, blocksForGrid }: { slotsForGrid: Slot[]; blocksForGrid: Block[] }) {
     return (
@@ -108,11 +118,13 @@ export default function WeeklySchedulePage() {
             const ymd = toYMD(date)
             const isToday = ymd === toYMD(now)
             const dow = date.getDay()
-            const daySlots = assignColumns(slotsForGrid.filter(s => s.scheduled_at.startsWith(ymd)))
+            // KST 날짜 기준으로 필터링
+            const daySlots = assignColumns(slotsForGrid.filter(s => getKSTDate(s.scheduled_at) === ymd))
             const dayBlocks = blocksForGrid.filter(b =>
               b.repeat_weekly ? b.day_of_week === dow : b.block_date === ymd
             )
-            const nowMin = isToday ? (now.getHours()-START_HOUR)*60+now.getMinutes() : -1
+            const nowKST = new Date(now.getTime() + 9*60*60*1000)
+            const nowMin = isToday ? (nowKST.getUTCHours()-START_HOUR)*60+nowKST.getUTCMinutes() : -1
             return (
               <div key={di} style={{ display:'flex', flexDirection:'column' }}>
                 <div style={{ textAlign:'center', height:'40px', background:isToday?'#16A34A':'white', border:'1.5px solid '+(isToday?'#16A34A':'#e5e7eb'), borderRadius:'8px 8px 0 0', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
@@ -135,7 +147,7 @@ export default function WeeklySchedulePage() {
                     const endMin = b.block_end
                       ? (Number(b.block_end.split(':')[0])*60 + Number(b.block_end.split(':')[1])) - START_HOUR*60
                       : (END_HOUR - START_HOUR)*60
-                    const top  = Math.max(0, startMin/CELL_MIN*CELL_H)
+                    const top    = Math.max(0, startMin/CELL_MIN*CELL_H)
                     const height = Math.max(CELL_H, (endMin - startMin)/CELL_MIN*CELL_H)
                     return (
                       <div key={b.id} style={{ position:'absolute', top:top+1, left:0, right:0, height:height-1, background:'repeating-linear-gradient(45deg,#f3f0ff,#f3f0ff 4px,#ede9fe 4px,#ede9fe 8px)', borderLeft:'3px solid #7c3aed', zIndex:4, overflow:'hidden', padding:'2px 3px' }}>
@@ -145,35 +157,32 @@ export default function WeeklySchedulePage() {
                     )
                   })}
                   {daySlots.map(slot => {
-                    const dt = new Date(slot.scheduled_at)
-                    const startMin = (dt.getHours()-START_HOUR)*60+dt.getMinutes()
+                    const startMin = getStartMin(slot.scheduled_at)
                     if (startMin < 0 || startMin >= (END_HOUR-START_HOUR)*60) return null
-                    const dur = slot.duration_minutes || 30
-                    const top = (startMin/CELL_MIN)*CELL_H
+                    const dur    = slot.duration_minutes || 60
+                    const top    = (startMin/CELL_MIN)*CELL_H
                     const height = Math.max((dur/CELL_MIN)*CELL_H, CELL_H*3)
                     const status = slot.is_makeup ? 'makeup' : slot.status
                     const coachId = slot.lesson_plan?.coach?.id
-                    const color = viewMode==='byCoach' && coachId ? coachColorMap[coachId] : STATUS_COLOR[status] ?? STATUS_COLOR.scheduled
-                    const bg = viewMode==='byCoach' && coachId ? coachColorMap[coachId]+'18' : STATUS_BG[status] ?? STATUS_BG.scheduled
-                    // 겹침 처리: 열 너비/위치 계산
-                    const colW = 100 / slot.totalCols
+                    const color  = viewMode==='byCoach' && coachId ? coachColorMap[coachId] : STATUS_COLOR[status] ?? STATUS_COLOR.scheduled
+                    const bg     = viewMode==='byCoach' && coachId ? coachColorMap[coachId]+'18' : STATUS_BG[status] ?? STATUS_BG.scheduled
+                    const colW   = 100 / slot.totalCols
                     const leftPct = slot.col * colW
+                    // 시간 표시 (KST)
+                    const kstD = new Date(new Date(slot.scheduled_at).getTime() + 9*60*60*1000)
+                    const hh = String(kstD.getUTCHours()).padStart(2,'0')
+                    const mm = String(kstD.getUTCMinutes()).padStart(2,'0')
                     return (
                       <div key={slot.id} style={{
-                        position:'absolute',
-                        top:top+1,
+                        position:'absolute', top:top+1,
                         left:`calc(${leftPct}% + 1px)`,
                         width:`calc(${colW}% - 2px)`,
                         height:height-2,
-                        background:bg,
-                        borderLeft:'3px solid '+color,
-                        borderRadius:'0 4px 4px 0',
-                        padding:'2px 3px',
-                        zIndex:5,
-                        overflow:'hidden',
-                        boxShadow:'0 1px 2px rgba(0,0,0,0.06)'
+                        background:bg, borderLeft:'3px solid '+color,
+                        borderRadius:'0 4px 4px 0', padding:'2px 3px',
+                        zIndex:5, overflow:'hidden', boxShadow:'0 1px 2px rgba(0,0,0,0.06)'
                       }}>
-                        <div style={{ fontSize:'9px', fontWeight:700, color, lineHeight:1.3 }}>{String(dt.getHours()).padStart(2,'0')}:{String(dt.getMinutes()).padStart(2,'0')}</div>
+                        <div style={{ fontSize:'9px', fontWeight:700, color, lineHeight:1.3 }}>{hh}:{mm}</div>
                         <div style={{ fontSize:'10px', fontWeight:700, color:'#111827', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{slot.display_name}</div>
                         {height>=42 && <div style={{ fontSize:'9px', color:'#6b7280', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{slot.lesson_plan?.coach?.name}</div>}
                         {slot.is_makeup && <div style={{ fontSize:'8px', background:'#e9d5ff', color:'#7e22ce', borderRadius:'9999px', padding:'0 4px', display:'inline-block', marginTop:'1px' }}>보강</div>}
@@ -198,19 +207,15 @@ export default function WeeklySchedulePage() {
           <button onClick={() => { setViewMode('all'); setSelCoach('all') }} style={{ padding:'0.25rem 0.75rem', borderRadius:'0.5rem', border:'none', background:viewMode==='all'?'white':'transparent', color:viewMode==='all'?'#111827':'#9ca3af', fontWeight:viewMode==='all'?700:400, fontSize:'0.8rem', cursor:'pointer', whiteSpace:'nowrap' }}>전체 보기</button>
           <button onClick={() => { setViewMode('byCoach'); setSelCoachByCoach(coaches[0]?.id ?? '') }} style={{ padding:'0.25rem 0.75rem', borderRadius:'0.5rem', border:'none', background:viewMode==='byCoach'?'white':'transparent', color:viewMode==='byCoach'?'#111827':'#9ca3af', fontWeight:viewMode==='byCoach'?700:400, fontSize:'0.8rem', cursor:'pointer', whiteSpace:'nowrap' }}>선생님별</button>
         </div>
-        {/* 전체보기: 코치 필터 드롭다운 */}
         {viewMode==='all' && coaches.length>0 && (
           <select value={selCoach} onChange={e => setSelCoach(e.target.value)} style={{ padding:'0.375rem 0.75rem', border:'1.5px solid #e5e7eb', borderRadius:'0.625rem', background:'white', fontSize:'0.8rem', color:'#374151', cursor:'pointer' }}>
             <option value='all'>전체 코치</option>
             {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 코치</option>)}
           </select>
         )}
-        {/* 선생님별: 코치 선택 드롭다운 */}
         {viewMode==='byCoach' && coaches.length>0 && (
           <select value={selCoachByCoach} onChange={e => setSelCoachByCoach(e.target.value)} style={{ padding:'0.375rem 0.75rem', border:'1.5px solid #16A34A', borderRadius:'0.625rem', background:'white', fontSize:'0.8rem', color:'#374151', cursor:'pointer', fontWeight:600 }}>
-            {coaches.map((c,i) => (
-              <option key={c.id} value={c.id}>{c.name} 코치</option>
-            ))}
+            {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 코치</option>)}
           </select>
         )}
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'0.5rem' }}>
@@ -224,14 +229,16 @@ export default function WeeklySchedulePage() {
       ) : (
         <div style={{ padding:'1rem' }}>
           {viewMode==='all' && (
-            <><div style={{ display:'flex', gap:'1rem', marginBottom:'0.75rem', flexWrap:'wrap' }}>
-              {[['scheduled','예정'],['completed','완료'],['cancelled','결석'],['makeup','보강']].map(([k,l]) => (
-                <div key={k} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', color:'#6b7280' }}>
-                  <div style={{ width:'10px', height:'10px', background:STATUS_COLOR[k], borderRadius:'2px' }}/>{l}
-                </div>
-              ))}
-            </div>
-            <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={filteredSlots} blocksForGrid={blocks} /></div></>
+            <>
+              <div style={{ display:'flex', gap:'1rem', marginBottom:'0.75rem', flexWrap:'wrap' }}>
+                {[['scheduled','예정'],['completed','완료'],['cancelled','결석'],['makeup','보강']].map(([k,l]) => (
+                  <div key={k} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', color:'#6b7280' }}>
+                    <div style={{ width:'10px', height:'10px', background:STATUS_COLOR[k], borderRadius:'2px' }}/>{l}
+                  </div>
+                ))}
+              </div>
+              <div style={{ overflowX:'auto' }}><TimeGrid slotsForGrid={filteredSlots} blocksForGrid={blocks} /></div>
+            </>
           )}
           {viewMode==='byCoach' && (
             <>
@@ -240,7 +247,7 @@ export default function WeeklySchedulePage() {
               ) : selCoachByCoach ? (
                 (() => {
                   const coach = coaches.find(c => c.id === selCoachByCoach)
-                  const ci = coaches.findIndex(c => c.id === selCoachByCoach)
+                  const ci    = coaches.findIndex(c => c.id === selCoachByCoach)
                   const color = COACH_COLORS[ci % COACH_COLORS.length]
                   const coachSlots = slots.filter(s => s.lesson_plan?.coach?.id === selCoachByCoach)
                   return (
