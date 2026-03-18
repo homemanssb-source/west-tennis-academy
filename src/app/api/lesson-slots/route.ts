@@ -1,4 +1,5 @@
 ﻿// src/app/api/lesson-slots/route.ts
+// ✅ fix: POST 핸들러 추가 (슬롯 추가 기능)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -28,7 +29,6 @@ export async function GET(req: NextRequest) {
     endStr   = `${to}T23:59:59+09:00`
   }
 
-  // ✅ draft/cancelled 제외 — 초안은 운영자 확정 전이라 달력에 표시 안 함
   const { data, error } = await supabaseAdmin
     .from('lesson_slots')
     .select(`
@@ -50,7 +50,6 @@ export async function GET(req: NextRequest) {
     ? data.filter((s: any) => s.lesson_plan?.coach?.id === coachId)
     : data
 
-  // ✅ coachId 없을 때 appSlots 조회 생략 ('' 로 쿼리하던 버그 제거)
   let appSlots: any[] = []
   if (coachId) {
     const { data: appData } = await supabaseAdmin
@@ -71,7 +70,6 @@ export async function GET(req: NextRequest) {
     }))
   }
 
-  // ✅ 시간대별 slot_count 맵 — isBusy 정원 체크용
   const allSlots = [...filtered, ...appSlots]
   const countMap: Record<string, number> = {}
   allSlots.forEach((s: any) => {
@@ -88,4 +86,56 @@ export async function GET(req: NextRequest) {
   }))
 
   return NextResponse.json(result)
+}
+
+// ✅ 추가: POST — 운영자/어드민이 수업 슬롯 직접 추가
+export async function POST(req: NextRequest) {
+  const session = await getSession()
+  if (!session || !['owner', 'admin'].includes(session.role)) {
+    return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+  }
+
+  try {
+    const { lesson_plan_id, scheduled_at, duration_minutes, status } = await req.json()
+
+    if (!lesson_plan_id || !scheduled_at) {
+      return NextResponse.json({ error: 'lesson_plan_id, scheduled_at 필수' }, { status: 400 })
+    }
+
+    const { data: plan, error: planErr } = await supabaseAdmin
+      .from('lesson_plans')
+      .select('id, total_count')
+      .eq('id', lesson_plan_id)
+      .single()
+
+    if (planErr || !plan) {
+      return NextResponse.json({ error: '존재하지 않는 레슨 플랜입니다' }, { status: 404 })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('lesson_slots')
+      .insert({
+        lesson_plan_id,
+        scheduled_at,
+        duration_minutes: duration_minutes ?? 60,
+        status: status ?? 'scheduled',
+        slot_type: 'regular',
+      })
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // scheduled 상태로 추가 시 total_count 증가
+    if (!status || status === 'scheduled') {
+      await supabaseAdmin
+        .from('lesson_plans')
+        .update({ total_count: (plan.total_count ?? 0) + 1 })
+        .eq('id', lesson_plan_id)
+    }
+
+    return NextResponse.json(data)
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 })
+  }
 }

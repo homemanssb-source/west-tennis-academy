@@ -193,11 +193,11 @@ export default function WeeklySchedulePage() {
 
                     // ✅ 그룹수업: 2명 이상이면 하나의 블록에 합쳐서 표시
                     if (count >= 2) {
-                      const names = group.map(s => {
-                        // 가족 신청이면 자녀 이름 우선 표시
-                        if (s.family_member_name) return s.family_member_name
-                        return s.lesson_plan?.member?.name ?? '-'
-                      })
+                      // ✅ fix: 중복 이름 제거 (같은 회원 슬롯 여러 개인 경우)
+                      const rawNames = group.map(s =>
+                        s.family_member_name ? s.family_member_name : (s.lesson_plan?.member?.name ?? '-')
+                      )
+                      const names = [...new Set(rawNames)]
                       const groupColor = coachId ? coachColorMap[coachId] ?? '#7c3aed' : '#7c3aed'
                       const groupBg    = groupColor + '18'
                       return (
@@ -205,11 +205,11 @@ export default function WeeklySchedulePage() {
                           <div style={{ fontSize:'9px', fontWeight:700, color:groupColor, lineHeight:1.3 }}>
                             {String(kstH).padStart(2,'0')}:{String(kstMin).padStart(2,'0')}
                           </div>
-                          {/* 그룹 배지 */}
+                          {/* 그룹 배지 — 중복 제거 후 실제 인원수 표시 */}
                           <div style={{ fontSize:'8px', fontWeight:700, background:groupColor, color:'white', borderRadius:'9999px', padding:'0 4px', display:'inline-block', marginBottom:'1px' }}>
-                            그룹 {count}명
+                            그룹 {names.length}명
                           </div>
-                          {/* 이름 목록 */}
+                          {/* 이름 목록 (중복 제거됨) */}
                           {names.slice(0, 3).map((n, ni) => (
                             <div key={ni} style={{ fontSize:'9px', color:'#111827', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{n}</div>
                           ))}
