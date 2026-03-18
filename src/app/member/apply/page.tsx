@@ -296,9 +296,11 @@ export default function MemberApplyPage() {
     // ✅ fix #9: KST 오늘 날짜 기준으로 과거 날짜 제외
     const todayKST = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    // 해당 월의 고정 스케줄 날짜 생성 (오늘 이후만)
+    // 해당 월의 고정 스케줄 날짜 생성 (오늘 이후 + 휴무 제외)
     const lastDay = new Date(m.year, m.month, 0).getDate()
     const slots: string[] = []
+    const skippedBlocked: string[] = []
+
     for (let d = 1; d <= lastDay; d++) {
       const ymd = `${m.year}-${String(m.month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
       if (ymd < todayKST) continue  // ✅ 오늘 이전 날짜 제외
@@ -306,10 +308,34 @@ export default function MemberApplyPage() {
       const dow  = date.getDay()
       const sched = fixedSchedules.find(s => s.day === dow)
       if (!sched) continue
+
+      // ✅ fix: 코치 휴무 체크 추가
+      const [sh, sm] = sched.time.split(':').map(Number)
+      const reqS = sh * 60 + sm
+      const reqE = reqS + duration
+      const isBlocked = coachBlocks.some(b => {
+        if (b.repeat_weekly) { if (b.day_of_week !== dow) return false }
+        else { if (b.block_date !== ymd) return false }
+        if (!b.block_start && !b.block_end) return true  // 종일 휴무
+        const bs = b.block_start ? Number(b.block_start.split(':')[0])*60 + Number(b.block_start.split(':')[1]) : 0
+        const be = b.block_end   ? Number(b.block_end.split(':')[0])*60   + Number(b.block_end.split(':')[1])   : 24*60
+        return reqS < be && reqE > bs
+      })
+      if (isBlocked) {
+        skippedBlocked.push(ymd)
+        continue
+      }
+
       slots.push(`${ymd}T${sched.time}:00+09:00`)
     }
 
     if (slots.length === 0) { setSaving(false); return alert('남은 수업 날짜가 없습니다') }
+
+    // 휴무로 제외된 날짜 안내
+    if (skippedBlocked.length > 0) {
+      const msg = `아래 날짜는 코치 휴무로 제외됩니다:\n${skippedBlocked.join(', ')}\n\n나머지 ${slots.length}회로 신청하시겠습니까?`
+      if (!confirm(msg)) { setSaving(false); return }
+    }
 
     const res = await fetch('/api/lesson-applications', {
       method: 'POST',
