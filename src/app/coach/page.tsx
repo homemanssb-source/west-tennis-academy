@@ -9,13 +9,13 @@ export default async function CoachHomePage() {
   const session = await getSession()
   if (!session || !['owner','coach'].includes(session.role)) redirect('/auth/coach')
 
-  // ✅ 수정: UTC 기준 → KST 기준 날짜 (자정 00:00~09:00 사이 하루 전날 뜨는 버그 수정)
+  // ✅ KST 기준 오늘 날짜
   const kst   = new Date(Date.now() + 9 * 60 * 60 * 1000)
   const today = kst.toISOString().split('T')[0]
   const start = `${today}T00:00:00+09:00`
   const end   = `${today}T23:59:59+09:00`
 
-  // ✅ draft/cancelled 제외 — 초안은 확정 전이라 코치 홈에 표시 안 함
+  // ✅ draft/cancelled 제외
   const { data: slots } = await supabaseAdmin
     .from('lesson_slots')
     .select(`
@@ -40,7 +40,11 @@ export default async function CoachHomePage() {
     makeup:    { bg: '#fdf4ff', border: '#c084fc', color: '#7e22ce', label: '보강' },
   }
 
-  const fmtTime = (dt: string) => new Date(dt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  // ✅ fix: 서버 컴포넌트(UTC 환경)에서 KST 시간 표시 — toLocaleTimeString 사용 시 9시간 오차 발생
+  const fmtTime = (dt: string) => {
+    const kst = new Date(new Date(dt).getTime() + 9 * 60 * 60 * 1000)
+    return `${String(kst.getUTCHours()).padStart(2,'0')}:${String(kst.getUTCMinutes()).padStart(2,'0')}`
+  }
 
   return (
     <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -54,7 +58,7 @@ export default async function CoachHomePage() {
             <NotificationBell />
             <div style={{ textAlign: 'right' }}>
               <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>🎾 {session.name}</div>
-              <div style={{ color: 'rgba(255,255,255,.6)', fontSize: '0.75rem' }}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</div>
+              <div style={{ color: 'rgba(255,255,255,.6)', fontSize: '0.75rem' }}>{new Date(Date.now() + 9*60*60*1000).toLocaleDateString('ko-KR', { timeZone: 'UTC', month: 'long', day: 'numeric', weekday: 'short' })}</div>
             </div>
           </div>
         </div>
@@ -62,9 +66,9 @@ export default async function CoachHomePage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.75rem', padding: '1rem 1.25rem 0' }}>
         {[
-          { label: '전체', value: mySlots.length, color: '#1d4ed8', bg: '#eff6ff' },
-          { label: '완료', value: mySlots.filter((s:any) => s.status === 'completed').length, color: '#15803d', bg: '#f0fdf4' },
-          { label: '예정', value: mySlots.filter((s:any) => s.status === 'scheduled').length, color: '#854d0e', bg: '#fef9c3' },
+          { label: '전체', value: mySlots.length,                                              color: '#1d4ed8', bg: '#eff6ff' },
+          { label: '완료', value: mySlots.filter((s:any) => s.status === 'completed').length,  color: '#15803d', bg: '#f0fdf4' },
+          { label: '예정', value: mySlots.filter((s:any) => s.status === 'scheduled').length,  color: '#854d0e', bg: '#fef9c3' },
         ].map(s => (
           <div key={s.label} style={{ background: s.bg, borderRadius: '0.875rem', padding: '0.875rem', textAlign: 'center' }}>
             <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.75rem', fontWeight: 700, color: s.color }}>{s.value}</div>
