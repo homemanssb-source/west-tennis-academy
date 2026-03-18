@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       .select(`
         id, scheduled_at, duration_minutes, status, is_makeup,
         lesson_plan:lesson_plan_id (
-          lesson_type,
+          lesson_type, family_member_id,
           member:member_id ( id, name ),
           coach:coach_id ( id, name )
         )
@@ -45,11 +45,30 @@ export async function GET(req: NextRequest) {
       .or(`and(repeat_weekly.eq.false,block_date.gte.${startDate},block_date.lte.${endDate}),repeat_weekly.eq.true`),
   ])
 
-  // display_name: 회원 이름 사용 (family_member는 lesson_plans에 없으므로 제거)
-  const slots = (rawSlots ?? []).map((s: any) => ({
-    ...s,
-    display_name: s.lesson_plan?.member?.name ?? '-',
-  }))
+  // family_member 이름 일괄 조회
+  const familyMemberIds = [...new Set(
+    (rawSlots ?? [])
+      .map((s: any) => s.lesson_plan?.family_member_id)
+      .filter(Boolean)
+  )]
+
+  const familyNameMap: Record<string, string> = {}
+  if (familyMemberIds.length > 0) {
+    const { data: fms } = await supabaseAdmin
+      .from('family_members')
+      .select('id, name')
+      .in('id', familyMemberIds)
+    for (const fm of fms ?? []) familyNameMap[fm.id] = fm.name
+  }
+
+  // display_name: 아이 이름 있으면 아이 이름, 없으면 회원 이름
+  const slots = (rawSlots ?? []).map((s: any) => {
+    const fmId = s.lesson_plan?.family_member_id
+    const displayName = fmId && familyNameMap[fmId]
+      ? familyNameMap[fmId]
+      : s.lesson_plan?.member?.name ?? '-'
+    return { ...s, display_name: displayName }
+  })
 
   const blocks = (allBlocks ?? []).filter(b => {
     if (!b.repeat_weekly) return true
