@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     ? data.filter((s: any) => s.lesson_plan?.coach?.id === coachId)
     : data
 
-  // ✅ fix: family_member_name 주입 (weekly-schedule API와 동일 방식)
+  // ✅ fix: family_member_name 주입
   const planIds = [...new Set(filtered.map((s: any) => s.lesson_plan?.id).filter(Boolean))]
   const familyNameMap: Record<string, string> = {}
 
@@ -172,4 +172,4 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
-} 
+}
