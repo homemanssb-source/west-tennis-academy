@@ -3,6 +3,7 @@
 // ✅ fix: generateSchedules/saveEdit toISOString UTC 날짜 버그 수정
 // ✅ fix: fmtDt KST 기준으로 수정
 // ✅ fix: 등록 버튼 안내 문구 추가
+// ✅ fix: 가족 구성원 선택 추가
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -11,12 +12,13 @@ import Link from 'next/link'
 interface Coach   { id: string; name: string }
 interface Month   { id: string; year: number; month: number }
 interface Member  { id: string; name: string; phone: string; discount_amount: number; discount_memo: string | null }
+interface FamilyMember { id: string; name: string }
 interface Program {
   id: string; name: string; unit_minutes: number
   default_amount: number; per_session_price: number
   coach_id: string | null; is_active?: boolean
   max_students?: number
-  fixed_schedules?: { day: number; time: string }[] | null  // ✅ 추가
+  fixed_schedules?: { day: number; time: string }[] | null
 }
 interface BlockInfo { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
 interface Schedule { datetime: string; duration: number }
@@ -25,7 +27,6 @@ interface WtaConfig { session_threshold: number; sat_surcharge: number; sun_surc
 const DAYS = ['일','월','화','수','목','금','토']
 const fmt  = (n: number) => `₩${Math.max(0, n || 0).toLocaleString()}`
 
-// ✅ KST 기준 날짜 포맷 헬퍼
 function toKSTDateParts(dt: Date) {
   const kst = new Date(dt.getTime() + 9 * 60 * 60 * 1000)
   const y  = kst.getUTCFullYear()
@@ -37,7 +38,6 @@ function toKSTDateParts(dt: Date) {
   return { y, m, d, hh, mm, dow }
 }
 
-// ── 금액 계산 함수 (순수) ──────────────────────────────────────────
 function calcAmount(opts: {
   config: WtaConfig
   default_amount: number; per_session_price: number
@@ -65,14 +65,18 @@ function calcAmount(opts: {
 export default function LessonPlanCreatePage() {
   const router = useRouter()
 
-  const [coaches,     setCoaches]     = useState<Coach[]>([])
-  const [months,      setMonths]      = useState<Month[]>([])
-  const [members,     setMembers]     = useState<Member[]>([])
-  const [allPrograms, setAllPrograms] = useState<Program[]>([])
-  const [programs,    setPrograms]    = useState<Program[]>([])
-  const [config,      setConfig]      = useState<WtaConfig>({ session_threshold: 8, sat_surcharge: 0, sun_surcharge: 0 })
-  const [saving,      setSaving]      = useState(false)
-  const [error,       setError]       = useState('')
+  const [coaches,       setCoaches]       = useState<Coach[]>([])
+  const [months,        setMonths]        = useState<Month[]>([])
+  const [members,       setMembers]       = useState<Member[]>([])
+  const [allPrograms,   setAllPrograms]   = useState<Program[]>([])
+  const [programs,      setPrograms]      = useState<Program[]>([])
+  const [config,        setConfig]        = useState<WtaConfig>({ session_threshold: 8, sat_surcharge: 0, sun_surcharge: 0 })
+  const [saving,        setSaving]        = useState(false)
+  const [error,         setError]         = useState('')
+
+  // ✅ 가족 구성원
+  const [familyMembers,   setFamilyMembers]   = useState<FamilyMember[]>([])
+  const [familyMemberId,  setFamilyMemberId]  = useState<string>('')
 
   const [memberId,       setMemberId]       = useState('')
   const [memberSearch,   setMemberSearch]   = useState('')
@@ -86,7 +90,6 @@ export default function LessonPlanCreatePage() {
   const [unitMinutes, setUnitMinutes] = useState(60)
   const [payment,     setPayment]     = useState<'unpaid'|'paid'>('unpaid')
 
-  // 일정 자동생성
   const [startDate,    setStartDate]    = useState('')
   const [selectedDays, setSelectedDays] = useState<number[]>([])
   const [time,         setTime]         = useState('09:00')
@@ -94,10 +97,9 @@ export default function LessonPlanCreatePage() {
   const [schedules,    setSchedules]    = useState<Schedule[]>([])
   const [editIdx,      setEditIdx]      = useState<number|null>(null)
   const [editTime,     setEditTime]     = useState('')
-  const [coachBlocks,  setCoachBlocks]  = useState<BlockInfo[]>([])   // ✅ 추가
-  const [blockedDates, setBlockedDates] = useState<string[]>([])      // ✅ 생성된 일정 중 휴무 날짜
+  const [coachBlocks,  setCoachBlocks]  = useState<BlockInfo[]>([])
+  const [blockedDates, setBlockedDates] = useState<string[]>([])
 
-  // ✅ 레슨비 계산 상태
   const [billingCount,   setBillingCount]   = useState<number | null>(null)
   const [manualAmount,   setManualAmount]   = useState<number | null>(null)
   const [memberDiscount, setMemberDiscount] = useState(0)
@@ -131,17 +133,24 @@ export default function LessonPlanCreatePage() {
       return
     }
     fetch(`/api/programs?coach_id=${coachId}`).then(r => r.json()).then(d => setPrograms(Array.isArray(d) ? d : []))
-    fetch(`/api/coach-blocks?coach_id=${coachId}`).then(r => r.json()).then(d => setCoachBlocks(Array.isArray(d) ? d : []))  // ✅ 추가
+    fetch(`/api/coach-blocks?coach_id=${coachId}`).then(r => r.json()).then(d => setCoachBlocks(Array.isArray(d) ? d : []))
     setProgramId(''); setLessonType('')
     setManualAmount(null)
   }, [coachId])
 
-  // 회원 선택 시 할인 정보 반영
+  // ✅ 회원 선택 시 할인 정보 + 가족 구성원 불러오기
   useEffect(() => {
     const m = members.find(x => x.id === memberId)
     setMemberDiscount(m?.discount_amount ?? 0)
     setDiscountMemo(m?.discount_memo ?? null)
     setManualAmount(null)
+    setFamilyMemberId('')
+    setFamilyMembers([])
+    if (memberId) {
+      fetch(`/api/family/by-account?account_id=${memberId}`)
+        .then(r => r.json())
+        .then(d => setFamilyMembers(Array.isArray(d) ? d : []))
+    }
   }, [memberId, members])
 
   useEffect(() => {
@@ -163,11 +172,9 @@ export default function LessonPlanCreatePage() {
     setLessonType(p.name)
     setUnitMinutes(p.unit_minutes || 60)
     setManualAmount(null)
-    // ✅ 그룹수업 고정 스케줄 있으면 요일+시간 자동 세팅
     if (p.fixed_schedules && p.fixed_schedules.length > 0) {
       const days = [...new Set(p.fixed_schedules.map(s => s.day))]
       setSelectedDays(days)
-      // 첫 번째 스케줄 시간으로 자동 세팅
       setTime(p.fixed_schedules[0].time)
     }
   }
@@ -175,80 +182,70 @@ export default function LessonPlanCreatePage() {
   const toggleDay = (d: number) =>
     setSelectedDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
 
-  // ✅ fix: toISOString().split('T')[0] → KST 기준 날짜 문자열로 교체
   const generateSchedules = () => {
     if (!startDate || !selectedDays.length) return
     const result: Schedule[] = []
     const warned: string[] = []
-    const [y, mo, d] = startDate.split('-').map(Number)
-    const cur = new Date(y, mo - 1, d)
-    let cnt = 0
-    while (cnt < count) {
-      if (selectedDays.includes(cur.getDay())) {
-        const yy  = cur.getFullYear()
-        const mm  = String(cur.getMonth() + 1).padStart(2, '0')
-        const dd  = String(cur.getDate()).padStart(2, '0')
-        const ymd = `${yy}-${mm}-${dd}`
-        const dow = cur.getDay()
-        // ✅ 휴무 체크
-        const [th, tm] = time.split(':').map(Number)
-        const reqS = th * 60 + tm
-        const reqE = reqS + unitMinutes
-        const isBlocked = coachBlocks.some(b => {
-          if (b.repeat_weekly) { if (b.day_of_week !== dow) return false }
-          else { if (b.block_date !== ymd) return false }
-          if (!b.block_start && !b.block_end) return true
-          const bs = b.block_start ? Number(b.block_start.split(':')[0])*60+Number(b.block_start.split(':')[1]) : 0
-          const be = b.block_end   ? Number(b.block_end.split(':')[0])*60+Number(b.block_end.split(':')[1])   : 24*60
-          return reqS < be && reqE > bs
-        })
-        if (isBlocked) warned.push(ymd)
-        result.push({ datetime: `${ymd}T${time}:00+09:00`, duration: unitMinutes })
-        cnt++
-      }
-      cur.setDate(cur.getDate() + 1)
+    const [sy, sm, sd] = startDate.split('-').map(Number)
+    const start = new Date(sy, sm - 1, sd)
+    const daysInMonth = new Date(sy, sm, 0).getDate()
+    let generated = 0
+
+    for (let day = sd; day <= daysInMonth && generated < count; day++) {
+      const date = new Date(sy, sm - 1, day)
+      const dow = date.getDay()
+      if (!selectedDays.includes(dow)) continue
+
+      const [hh, mm] = time.split(':').map(Number)
+      date.setHours(hh, mm, 0, 0)
+
+      const kst = toKSTDateParts(date)
+      const ymd = `${kst.y}-${kst.m}-${kst.d}`
+
+      const isBlocked = coachBlocks.some(b => {
+        if (b.repeat_weekly) return b.day_of_week === dow
+        return b.block_date === ymd
+      })
+      if (isBlocked) warned.push(ymd)
+
+      const iso = `${kst.y}-${kst.m}-${kst.d}T${kst.hh}:${kst.mm}:00+09:00`
+      result.push({ datetime: iso, duration: unitMinutes })
+      generated++
     }
+
     setSchedules(result)
-    setBlockedDates(warned)  // ✅ 휴무 날짜 저장 (경고 표시용)
+    setBlockedDates(warned)
     setBillingCount(null)
     setManualAmount(null)
   }
 
-  const removeSlot = (i: number) => {
-    setSchedules(prev => prev.filter((_, idx) => idx !== i))
-    setManualAmount(null)
+  const fmtDt = (iso: string) => {
+    const { y, m, d, hh, mm, dow } = toKSTDateParts(new Date(iso))
+    return `${y}.${m}.${d}(${DAYS[dow]}) ${hh}:${mm}`
   }
 
   const startEdit = (i: number) => {
-    // ✅ fix: KST 기준으로 시간 표시
     const { hh, mm } = toKSTDateParts(new Date(schedules[i].datetime))
-    setEditTime(`${hh}:${mm}`)
     setEditIdx(i)
+    setEditTime(`${hh}:${mm}`)
   }
 
   const saveEdit = (i: number) => {
-    setSchedules(prev => prev.map((s, idx) => {
-      if (idx !== i) return s
-      // ✅ fix: 기존 datetime에서 KST 날짜 추출 후 새 시간 조합
-      const { y, m, d } = toKSTDateParts(new Date(s.datetime))
-      return { ...s, datetime: `${y}-${m}-${d}T${editTime}:00+09:00` }
-    }))
+    const [hh, mm] = editTime.split(':')
+    const s = schedules[i]
+    const { y, m, d } = toKSTDateParts(new Date(s.datetime))
+    const newIso = `${y}-${m}-${d}T${hh}:${mm}:00+09:00`
+    setSchedules(prev => prev.map((x, idx) => idx === i ? { ...x, datetime: newIso } : x))
     setEditIdx(null)
   }
 
-  // ✅ fix: KST 기준 날짜/시간 표시
-  const fmtDt = (dt: string) => {
-    const { y, m, d, hh, mm, dow } = toKSTDateParts(new Date(dt))
-    return `${Number(m)}/${Number(d)}(${DAYS[dow]}) ${hh}:${mm}`
-  }
+  const removeSlot = (i: number) => setSchedules(prev => prev.filter((_, idx) => idx !== i))
 
-  // ── 레슨비 자동 계산 ──────────────────────────────────────────────
-  const effectiveBillingCount = billingCount !== null ? billingCount : schedules.length
-  // ✅ fix: KST 기준 요일로 토/일 집계
   const satCount = schedules.filter(s => toKSTDateParts(new Date(s.datetime)).dow === 6).length
   const sunCount = schedules.filter(s => toKSTDateParts(new Date(s.datetime)).dow === 0).length
+  const effectiveBillingCount = billingCount !== null ? billingCount : schedules.length
 
-  const autoCalc = selectedProgram && schedules.length > 0
+  const autoCalc = selectedProgram
     ? calcAmount({
         config,
         default_amount:    selectedProgram.default_amount,
@@ -275,6 +272,8 @@ export default function LessonPlanCreatePage() {
         schedules, amount: finalAmount, payment_status: payment,
         program_id: programId || undefined,
         billing_count: effectiveBillingCount,
+        // ✅ 가족 선택 시 전달
+        family_member_id: familyMemberId || undefined,
       }),
     })
     const d = await res.json()
@@ -346,6 +345,40 @@ export default function LessonPlanCreatePage() {
               </div>
             </div>
 
+            {/* ✅ 가족 구성원 선택 (회원 선택 후 가족이 있을 때만 표시) */}
+            {memberId && familyMembers.length > 0 && (
+              <div>
+                <label style={labelStyle}>수업 대상 <span style={{ fontWeight: 400, color: '#9ca3af' }}>(본인 수업이면 선택 안 해도 됩니다)</span></label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setFamilyMemberId('')}
+                    style={{
+                      padding: '0.5rem 1rem', borderRadius: '9999px', border: `1.5px solid ${!familyMemberId ? '#1d4ed8' : '#e5e7eb'}`,
+                      background: !familyMemberId ? '#eff6ff' : 'white', color: !familyMemberId ? '#1d4ed8' : '#6b7280',
+                      fontWeight: !familyMemberId ? 700 : 400, cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'Noto Sans KR, sans-serif',
+                    }}>
+                    본인 ({memberSearch})
+                  </button>
+                  {familyMembers.map(fm => (
+                    <button key={fm.id}
+                      onClick={() => setFamilyMemberId(fm.id)}
+                      style={{
+                        padding: '0.5rem 1rem', borderRadius: '9999px', border: `1.5px solid ${familyMemberId === fm.id ? '#7e22ce' : '#e5e7eb'}`,
+                        background: familyMemberId === fm.id ? '#fdf4ff' : 'white', color: familyMemberId === fm.id ? '#7e22ce' : '#6b7280',
+                        fontWeight: familyMemberId === fm.id ? 700 : 400, cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'Noto Sans KR, sans-serif',
+                      }}>
+                      {fm.name}
+                    </button>
+                  ))}
+                </div>
+                {familyMemberId && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#7e22ce', fontWeight: 600 }}>
+                    ✅ {familyMembers.find(f => f.id === familyMemberId)?.name} 수업으로 등록됩니다
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 코치 */}
             <div>
               <label style={labelStyle}>코치</label>
@@ -405,7 +438,6 @@ export default function LessonPlanCreatePage() {
                     {selectedProgram.per_session_price > 0 && <span style={{ color: '#1d4ed8' }}>회당 {selectedProgram.per_session_price.toLocaleString()}원</span>}
                   </div>
                 )}
-                {/* ✅ 그룹수업 고정스케줄 자동 세팅 안내 */}
                 {selectedProgram?.fixed_schedules && selectedProgram.fixed_schedules.length > 0 && (
                   <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.875rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#1d4ed8' }}>
                     📅 고정 스케줄이 있어 요일/시간이 자동 선택됐습니다 —
@@ -475,7 +507,6 @@ export default function LessonPlanCreatePage() {
                   )}
                   <span style={{ fontWeight: 400, color: '#9ca3af', marginLeft: '0.5rem' }}>✏️ 시간수정 · 🗑️ 삭제 가능</span>
                 </div>
-                {/* ✅ 휴무 날짜 경고 배너 */}
                 {blockedDates.length > 0 && (
                   <div style={{ marginBottom: '0.5rem', padding: '0.625rem 0.875rem', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#b91c1c' }}>
                     ⚠️ <strong>코치 휴무 날짜가 포함되어 있습니다.</strong> 아래 🔴 표시된 날짜를 삭제해주세요.<br/>
@@ -487,7 +518,7 @@ export default function LessonPlanCreatePage() {
                     const { y, m, d, dow } = toKSTDateParts(new Date(s.datetime))
                     const ymd = `${y}-${m}-${d}`
                     const isWeekend  = dow === 0 || dow === 6
-                    const isBlocked  = blockedDates.includes(ymd)  // ✅ 휴무 여부
+                    const isBlocked  = blockedDates.includes(ymd)
                     return (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: isBlocked ? '#fef2f2' : isWeekend ? '#fffbeb' : '#f9fafb', borderRadius: '0.5rem', border: `1px solid ${isBlocked ? '#fecaca' : isWeekend ? '#fde68a' : '#f3f4f6'}` }}>
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, color: isBlocked ? '#dc2626' : isWeekend ? '#d97706' : '#16A34A', minWidth: '28px' }}>{i+1}회</span>
@@ -517,7 +548,7 @@ export default function LessonPlanCreatePage() {
           </div>
         </div>
 
-        {/* ✅ 레슨비 미리보기 */}
+        {/* 레슨비 미리보기 */}
         {selectedProgram && schedules.length > 0 && (
           <div style={{ background: 'white', border: '1.5px solid #dbeafe', borderRadius: '1rem', padding: '1.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -614,7 +645,7 @@ export default function LessonPlanCreatePage() {
                 {(['unpaid', 'paid'] as const).map(s => (
                   <button key={s} onClick={() => setPayment(s)}
                     style={{ flex: 1, padding: '0.625rem', borderRadius: '0.625rem', border: `1.5px solid ${payment === s ? (s==='paid'?'#16A34A':'#dc2626') : '#e5e7eb'}`, background: payment === s ? (s==='paid'?'#f0fdf4':'#fef2f2') : 'white', color: payment === s ? (s==='paid'?'#16A34A':'#dc2626') : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                    {s === 'paid' ? '✅ 납부' : '❌ 미납'}
+                    {s === 'paid' ? '✅납부' : '❌ 미납'}
                   </button>
                 ))}
               </div>
@@ -629,7 +660,6 @@ export default function LessonPlanCreatePage() {
           </div>
         )}
 
-        {/* ✅ fix: 등록 버튼 비활성 시 안내 문구 */}
         {memberId && coachId && monthId && !schedules.length && (
           <div style={{ padding: '0.75rem 1rem', background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '0.75rem', fontSize: '0.875rem', color: '#92400e', fontFamily: 'Noto Sans KR, sans-serif', textAlign: 'center' }}>
             ⚠️ 날짜·요일·시간 선택 후 <strong>📅 일정 자동 생성</strong> 버튼을 눌러주세요
