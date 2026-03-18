@@ -94,13 +94,14 @@ export default function PaymentPage() {
 
   const openDetail = async (plan: LessonPlan) => {
     setSelected(plan)
-    // ✅ 0이면 빈 문자열로 → 바로 입력 가능
     setEditAmountStr(plan.amount > 0 ? String(plan.amount) : '')
     setDetailTab('slots')
     setReceipt(null)
     setReceiptPreview(null)
     setPayLink(null)
     setLinkCopied(false)
+    setSaving(false)       // ✅ 이전 saving 상태 초기화
+    setLinkLoading(false)  // ✅ 이전 linkLoading 상태 초기화
     setSlotsLoading(true)
     const res = await fetch(`/api/lesson-plans/${plan.id}`)
     const d   = await res.json()
