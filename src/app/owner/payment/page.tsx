@@ -151,9 +151,25 @@ export default function PaymentPage() {
 
   const handleGeneratePayLink = async () => {
     if (!selected) return
+    const currentAmount = editAmountStr === '' ? 0 : Number(editAmountStr)
+    if (currentAmount <= 0) { alert('금액을 먼저 입력해주세요'); return }
+
     setLinkLoading(true)
     setPayLink(null)
     setLinkCopied(false)
+
+    // ✅ 링크 생성 전 금액 먼저 DB 저장
+    const saveRes = await fetch(`/api/payment/${selected.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: currentAmount }),
+    })
+    if (!saveRes.ok) {
+      setLinkLoading(false)
+      alert('금액 저장 실패')
+      return
+    }
+
     const res  = await fetch('/api/payment/toss', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plan_id: selected.id }),
