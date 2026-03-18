@@ -11,8 +11,8 @@ export async function GET(req: NextRequest) {
   const week = req.nextUrl.searchParams.get('week')
   if (!week) return NextResponse.json({ error: 'week 필요' }, { status: 400 })
 
-  const startStr  = `${week}T00:00:00+09:00`
-  const startDate = week
+  const startStr   = `${week}T00:00:00+09:00`
+  const startDate  = week
   const endDateObj = new Date(`${week}T12:00:00+09:00`)
   endDateObj.setDate(endDateObj.getDate() + 6)
   const endDate = endDateObj.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       .select(`
         id, scheduled_at, duration_minutes, status, is_makeup,
         lesson_plan:lesson_plan_id (
-          lesson_type, family_member_id,
+          lesson_type,
           member:member_id ( id, name ),
           coach:coach_id ( id, name )
         )
@@ -45,30 +45,11 @@ export async function GET(req: NextRequest) {
       .or(`and(repeat_weekly.eq.false,block_date.gte.${startDate},block_date.lte.${endDate}),repeat_weekly.eq.true`),
   ])
 
-  // family_member 이름 조회
-  const familyMemberIds = [...new Set(
-    (rawSlots ?? [])
-      .map((s: any) => s.lesson_plan?.family_member_id)
-      .filter(Boolean)
-  )]
-
-  const familyNameMap: Record<string, string> = {}
-  if (familyMemberIds.length > 0) {
-    const { data: fms } = await supabaseAdmin
-      .from('family_members')
-      .select('id, name')
-      .in('id', familyMemberIds)
-    for (const fm of fms ?? []) familyNameMap[fm.id] = fm.name
-  }
-
-  // 슬롯에 display_name 추가 (아이 이름 있으면 아이 이름, 없으면 회원 이름)
-  const slots = (rawSlots ?? []).map((s: any) => {
-    const fmId = s.lesson_plan?.family_member_id
-    const displayName = fmId && familyNameMap[fmId]
-      ? familyNameMap[fmId]
-      : s.lesson_plan?.member?.name ?? '-'
-    return { ...s, display_name: displayName }
-  })
+  // display_name: 회원 이름 사용 (family_member는 lesson_plans에 없으므로 제거)
+  const slots = (rawSlots ?? []).map((s: any) => ({
+    ...s,
+    display_name: s.lesson_plan?.member?.name ?? '-',
+  }))
 
   const blocks = (allBlocks ?? []).filter(b => {
     if (!b.repeat_weekly) return true
