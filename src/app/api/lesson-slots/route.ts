@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
         scheduled_at,
         duration_minutes: duration_minutes ?? 60,
         status: status ?? 'scheduled',
-        slot_type: 'regular',
+        slot_type: 'lesson',
       })
       .select()
       .single()
