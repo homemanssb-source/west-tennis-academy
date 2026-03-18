@@ -202,9 +202,16 @@ export default function LessonPlanCreatePage() {
       const kst = toKSTDateParts(date)
       const ymd = `${kst.y}-${kst.m}-${kst.d}`
 
+      const [th, tm] = time.split(':').map(Number)
+      const reqS = th * 60 + tm
+      const reqE = reqS + unitMinutes
       const isBlocked = coachBlocks.some(b => {
-        if (b.repeat_weekly) return b.day_of_week === dow
-        return b.block_date === ymd
+        if (b.repeat_weekly) { if (b.day_of_week !== dow) return false }
+        else { if (b.block_date !== ymd) return false }
+        if (!b.block_start && !b.block_end) return true
+        const bs = b.block_start ? Number(b.block_start.split(':')[0])*60+Number(b.block_start.split(':')[1]) : 0
+        const be = b.block_end   ? Number(b.block_end.split(':')[0])*60+Number(b.block_end.split(':')[1])   : 24*60
+        return reqS < be && reqE > bs
       })
       if (isBlocked) warned.push(ymd)
 
