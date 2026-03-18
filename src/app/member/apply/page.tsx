@@ -1,4 +1,7 @@
 'use client'
+// src/app/member/apply/page.tsx
+// ✅ fix: STEP1 다음 버튼에 programId 필수 조건 추가
+// ✅ fix: isBusy에서 slot_count 활용 (단체수업 정원 정확히 체크)
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -6,10 +9,8 @@ import MemberBottomNav from '@/components/MemberBottomNav'
 
 interface Coach        { id: string; name: string }
 interface Month        { id: string; year: number; month: number; draft_open?: boolean }
-// ✅ max_students 추가
 interface Program      { id: string; name: string; unit_minutes: number; coach_id: string | null; default_amount: number; max_students: number }
 interface FamilyMember { id: string; name: string; birth_date: string | null }
-// ✅ slot_count 추가 (API에서 반환), duration_minutes, lesson_plan 추가
 interface SlotInfo     { scheduled_at: string; status: string; slot_count?: number; duration_minutes?: number; lesson_plan?: { member?: { id: string } } | null }
 interface BlockInfo    { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
 interface MyApp {
@@ -29,7 +30,6 @@ const STATUS: Record<string, { label: string; color: string; bg: string }> = {
   rejected:      { label: '거절',         color: '#b91c1c', bg: '#fee2e2' },
 }
 
-// ✅ 수정: busySlots + coachBlocks + maxStudents + duration + mySlotKeys 받아서 충돌 날짜 자동 제외
 function generateDates(
   year: number, month: number, startDate: Date,
   weekdays: number[], timeStr: string,
@@ -56,20 +56,17 @@ function generateDates(
 
     const ymd = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
 
-    // 휴무 체크 — 시간 범위 겹침 확인 (12:00~16:00 휴무라면 11:00 수업도 겹칠 수 있음)
+    // 휴무 체크
     const [th, tm] = tStr.split(':').map(Number)
     const reqS = th * 60 + tm
     const reqE = reqS + (duration ?? 60)
     const blocked = (coachBlocks ?? []).some(b => {
-      // 반복/날짜 체크
       if (b.repeat_weekly) {
         if (b.day_of_week !== dow) return false
       } else {
         if (b.block_date !== ymd) return false
       }
-      // 종일 휴무 (시간 미설정)
       if (!b.block_start && !b.block_end) return true
-      // 시간 범위 겹침 체크
       const bs = b.block_start
         ? Number(b.block_start.split(':')[0]) * 60 + Number(b.block_start.split(':')[1])
         : 0
@@ -83,15 +80,14 @@ function generateDates(
       continue
     }
 
-    // 정원 체크 — 시간 범위 겹침 방식 (1시간 수업이면 11:00~12:00 수업도 겹침)
+    // 정원 체크
     const [rh, rm] = tStr.split(':').map(Number)
     const reqStart = rh * 60 + rm
     const reqEnd   = reqStart + (duration ?? 60)
-    const count = (busySlots ?? []).filter(s => {
+    const matchingSlots = (busySlots ?? []).filter(s => {
       if (s.status === 'cancelled') return false
       const sd = new Date(new Date(s.scheduled_at).getTime() + 9 * 60 * 60 * 1000)
-      // ✅ 내가 이미 확정된 슬롯은 카운트 제외
-      const sdIso  = sd.toISOString()
+      const sdIso     = sd.toISOString()
       const slotKey16 = `${sdIso.split('T')[0]}T${sdIso.split('T')[1].slice(0,5)}`
       if (mySlotKeys?.has(slotKey16)) return false
       const sdYmd  = sdIso.split('T')[0]
@@ -102,9 +98,13 @@ function generateDates(
       const slotDur   = (s as any).duration_minutes ?? 60
       const slotEnd   = slotStart + slotDur
       return reqStart < slotEnd && reqEnd > slotStart
-    }).length
-    if (count >= max) {
-      skipped.push({ date: ymd, time: tStr, reason: `정원 초과 (${count}/${max}명)` })
+    })
+    // ✅ slot_count가 있으면 그 값 사용 (API에서 정확히 계산됨)
+    const effectiveCount = matchingSlots.length > 0
+      ? Math.max(...matchingSlots.map((s: any) => s.slot_count ?? 1))
+      : 0
+    if (effectiveCount >= max) {
+      skipped.push({ date: ymd, time: tStr, reason: `정원 초과 (${effectiveCount}/${max}명)` })
       continue
     }
 
@@ -146,14 +146,11 @@ export default function MemberApplyPage() {
   const [selectedTime,   setSelectedTime]   = useState('')
   const [dayTimes,       setDayTimes]       = useState<Record<number, string>>({})
   const [repeatDays,     setRepeatDays]     = useState<number[]>([])
-  // ✅ 수정: generatedDates → { dates, skipped } 구조로 변경
   const [generatedDates, setGeneratedDates] = useState<Date[]>([])
   const [skippedDates,   setSkippedDates]   = useState<{ date: string; time: string; reason: string }[]>([])
   const [excludedIdxs,   setExcludedIdxs]   = useState<Set<number>>(new Set())
   const [saving,         setSaving]         = useState(false)
-  // ✅ 추가: 취소 중 상태
   const [cancelling,     setCancelling]     = useState<string | null>(null)
-  // 내가 이미 확정된 슬롯의 시간키 (busySlots 카운트에서 제외용)
   const [mySlotKeys,     setMySlotKeys]     = useState<Set<string>>(new Set())
 
   const finalDates = generatedDates.filter((_, i) => !excludedIdxs.has(i))
@@ -168,7 +165,6 @@ export default function MemberApplyPage() {
       setCoaches(Array.isArray(c) ? c : [])
       const mList = Array.isArray(m) ? m : []
       setMonths(mList)
-      // ✅ draft_open=false인 첫 번째 월 선택 (draft_open=true인 월은 선택 불가)
       const availableMonth = mList.find((x: Month) => !x.draft_open)
       if (availableMonth) setMonthId(availableMonth.id)
       else if (mList.length > 0) setMonthId(mList[0].id)
@@ -189,7 +185,6 @@ export default function MemberApplyPage() {
     const appsData     = await appsRes.json()
     const scheduleData = await scheduleRes.json()
     setMyApps(Array.isArray(appsData) ? appsData : [])
-    // 확정 슬롯 시간키 저장 (scheduled_at 앞 16자리: YYYY-MM-DDTHH:mm)
     const keys = new Set<string>(
       (Array.isArray(scheduleData) ? scheduleData : [])
         .filter((s: any) => s.status === 'scheduled')
@@ -270,11 +265,12 @@ export default function MemberApplyPage() {
     })
   }
 
-  // ✅ 수정: 시간 범위 겹침 방식 정원 체크 + mySlotKeys 제외
+  // ✅ fix: slot_count 활용하여 단체수업 정원 정확히 체크
   const isBusy = (date: Date, tStr: string) => {
     const toKST = (d: Date) => new Date(d.getTime() + 9*60*60*1000)
     const kstDate = toKST(date)
     const ymd = kstDate.toISOString().split('T')[0]
+    // ✅ programId 선택된 경우만 max_students 사용, 아니면 1 (가장 엄격하게)
     const maxStudents = selectedProgram?.max_students ?? 1
     const [rh, rm] = tStr.split(':').map(Number)
     const reqStart = rh * 60 + rm
@@ -282,12 +278,11 @@ export default function MemberApplyPage() {
 
     const matchingSlots = busySlots.filter(s => {
       if (s.status === 'cancelled') return false
-      // ✅ 내가 확정된 슬롯은 카운트 제외 (재신청 시 중복 방지)
       const slotKstStr = toKST(new Date(s.scheduled_at)).toISOString()
       const slotKey16  = `${slotKstStr.split('T')[0]}T${slotKstStr.split('T')[1].slice(0,5)}`
       if (mySlotKeys.has(slotKey16)) return false
       const sd = toKST(new Date(s.scheduled_at))
-      const sdYmd  = sd.toISOString().split('T')[0]
+      const sdYmd = sd.toISOString().split('T')[0]
       if (sdYmd !== ymd) return false
       const sh = sd.getUTCHours()
       const sm = sd.getUTCMinutes()
@@ -296,7 +291,12 @@ export default function MemberApplyPage() {
       const slotEnd   = slotStart + slotDur
       return reqStart < slotEnd && reqEnd > slotStart
     })
-    return matchingSlots.length >= maxStudents
+
+    // ✅ slot_count가 있으면 그 값 사용 (API에서 정확히 계산됨)
+    const effectiveCount = matchingSlots.length > 0
+      ? Math.max(...matchingSlots.map((s: any) => s.slot_count ?? 1))
+      : 0
+    return effectiveCount >= maxStudents
   }
 
   const isPending = (date: Date, tStr: string) => {
@@ -309,7 +309,6 @@ export default function MemberApplyPage() {
     )
   }
 
-  // ✅ 수정: generateDates에 busySlots/coachBlocks/maxStudents/duration/mySlotKeys 전달
   useEffect(() => {
     if (!selectedDate || !selectedMonth || !selectedTime) return
     const baseDow   = selectedDate.getDay()
@@ -370,7 +369,6 @@ export default function MemberApplyPage() {
     setTab('list'); setStep(1); loadMyApps()
   }
 
-  // ✅ 추가: 신청 취소
   const handleCancel = async (appId: string) => {
     if (!confirm('수업 신청을 취소하시겠습니까?\n취소 후 재신청이 필요합니다.')) return
     setCancelling(appId)
@@ -393,6 +391,11 @@ export default function MemberApplyPage() {
   }
 
   const STEP_LABELS = ['기본 정보', '날짜 선택', '반복 설정', '미리보기']
+
+  // ✅ fix: STEP1 다음 버튼 disabled 조건 — programId 필수 추가
+  const step1Disabled = !coachId || !monthId || !programId
+    || (applicantType === 'family' && !familyId)
+    || !!months.find(m => m.id === monthId)?.draft_open
 
   return (
     <div className="mobile-wrap" style={{ background: '#f9fafb', minHeight: '100vh' }}>
@@ -466,7 +469,6 @@ export default function MemberApplyPage() {
                         </option>
                       ))}
                     </select>
-                    {/* draft_open인 월이 선택된 경우 안내 */}
                     {months.find(m => m.id === monthId)?.draft_open && (
                       <div style={{ marginTop: '0.5rem', padding: '0.625rem 0.875rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.625rem', fontSize: '0.78rem', color: '#1d4ed8', fontFamily: 'Noto Sans KR, sans-serif' }}>
                         📋 해당 월은 관리자가 일정을 준비 중이에요.<br/>
@@ -476,7 +478,7 @@ export default function MemberApplyPage() {
                   </div>
                   <div>
                     <label style={s.label}>
-                      프로그램
+                      프로그램 <span style={{ color: '#ef4444', fontSize: '0.7rem' }}>* 필수</span>
                       {coachId && coaches.find(c => c.id === coachId) && (
                         <span style={{ fontWeight: 400, color: '#3b82f6', marginLeft: '6px' }}>
                           — {coaches.find(c => c.id === coachId)!.name} 코치 기준
@@ -520,9 +522,16 @@ export default function MemberApplyPage() {
                   </div>
                 </div>
               </div>
+              {/* ✅ fix: programId 필수 안내 */}
+              {coachId && !programId && programs.length > 0 && (
+                <div style={{ padding: '0.625rem 0.875rem', background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '0.75rem', fontSize: '0.8rem', color: '#92400e', fontFamily: 'Noto Sans KR, sans-serif', textAlign: 'center' }}>
+                  ⚠️ 프로그램을 선택해야 다음 단계로 진행할 수 있습니다
+                </div>
+              )}
+              {/* ✅ fix: disabled 조건에 !programId 추가 */}
               <button onClick={() => setStep(2)}
-                disabled={!coachId || !monthId || (applicantType === 'family' && !familyId) || !!months.find(m => m.id === monthId)?.draft_open}
-                style={s.nextBtn(!coachId || !monthId || (applicantType === 'family' && !familyId) || !!months.find(m => m.id === monthId)?.draft_open)}>
+                disabled={step1Disabled}
+                style={s.nextBtn(step1Disabled)}>
                 다음 → 날짜 선택
               </button>
             </div>
@@ -531,7 +540,6 @@ export default function MemberApplyPage() {
           {/* ── STEP 2: 날짜 선택 ── */}
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* ✅ 추가: STEP 2 안내 배너 */}
               <div style={{ padding: '0.75rem 1rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.875rem', fontSize: '0.8rem', color: '#1d4ed8' }}>
                 <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 첫 수업 날짜와 시간을 선택하세요</div>
                 <div style={{ color: '#3b82f6', lineHeight: 1.5 }}>
@@ -593,8 +601,8 @@ export default function MemberApplyPage() {
                   </table>
                 </div>
                 {selectedDate && selectedTime && (
-                  <div style={{ marginTop: '0.75rem', padding: '0.625rem 0.875rem', background: '#f0fdf4', borderRadius: '0.625rem', fontSize: '0.85rem', color: '#15803d', fontWeight: 600 }}>
-                    ✅ 첫 수업: {fmtDate(selectedDate)} {selectedTime}
+                  <div style={{ marginTop: '0.75rem', padding: '0.625rem 0.875rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.625rem', fontSize: '0.8rem', color: '#15803d', fontWeight: 600 }}>
+                    ✅ 선택: {fmtDate(selectedDate)} {selectedTime}
                   </div>
                 )}
               </div>
@@ -608,103 +616,61 @@ export default function MemberApplyPage() {
           {/* ── STEP 3: 반복 설정 ── */}
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* ✅ 추가: STEP 3 안내 배너 */}
-              <div style={{ padding: '0.75rem 1rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', fontSize: '0.8rem', color: '#15803d' }}>
-                <div style={{ fontWeight: 700, marginBottom: '4px' }}>
-                  🔁 첫 수업: {selectedDate && fmtDate(selectedDate)} {selectedTime}
-                </div>
-                <div style={{ color: '#16a34a', lineHeight: 1.5 }}>
-                  이 요일은 이미 포함되어 있어요.<br/>
-                  <strong>추가 요일</strong>을 선택하면 해당 요일도 매주 신청돼요. (선택 안 해도 됩니다)<br/>
-                  휴무일이나 정원이 찬 날짜는 자동으로 제외됩니다.
-                </div>
-              </div>
               <div style={s.card}>
-                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', color: '#111827' }}>반복 요일 선택</h2>
-                <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.875rem' }}>
-                  {fmtDate(selectedDate!)}부터 {selectedMonth?.year}년 {selectedMonth?.month}월 말일까지
-                </p>
-
+                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem', color: '#111827' }}>반복 요일 설정</h2>
+                <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '0.875rem' }}>
+                  기본 요일({selectedDate ? DAYS_KO[selectedDate.getDay()] : ''})에 추가로 반복할 요일을 선택하세요
+                </div>
+                <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1rem' }}>
+                  {DAYS_KO.map((d, i) => {
+                    const isBase = i === selectedDate?.getDay()
+                    const isOn   = repeatDays.includes(i) || isBase
+                    return (
+                      <button key={i} onClick={() => toggleRepeatDay(i)} disabled={isBase}
+                        style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.5rem', border: `1.5px solid ${isOn ? '#16A34A' : '#e5e7eb'}`, background: isOn ? '#f0fdf4' : 'white', color: isOn ? '#15803d' : '#9ca3af', fontWeight: 700, cursor: isBase ? 'default' : 'pointer', fontSize: '0.75rem', fontFamily: 'Noto Sans KR, sans-serif', opacity: isBase ? 0.7 : 1 }}>
+                        {d}
+                      </button>
+                    )
+                  })}
+                </div>
+                {/* 요일별 시간 설정 */}
                 {repeatDays.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>추가 요일 시간 설정</div>
                     {repeatDays.map(dow => (
-                      <div key={dow} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.625rem' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', minWidth: '32px' }}>
-                          {DAYS_LABEL[dow === 0 ? 6 : dow - 1]}요일
-                        </span>
-                        <select value={dayTimes[dow] ?? ''} onChange={e => setDayTimes(prev => ({ ...prev, [dow]: e.target.value }))} style={{ ...s.input, flex: 1 }}>
+                      <div key={dow} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.625rem' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', minWidth: '20px' }}>{DAYS_KO[dow]}</span>
+                        <select value={dayTimes[dow] ?? ''} onChange={e => setDayTimes(prev => ({ ...prev, [dow]: e.target.value }))}
+                          style={{ flex: 1, padding: '0.375rem 0.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', fontSize: '0.8rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
                           <option value="">시간 선택</option>
                           {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                     ))}
-                    {repeatDays.some(dow => !dayTimes[dow]) && (
-                      <div style={{ padding: '0.5rem 0.75rem', background: '#fef9c3', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#854d0e' }}>
-                        ⚠️ 모든 요일의 시간을 선택해주세요
-                      </div>
-                    )}
                   </div>
                 )}
-
-                <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1rem' }}>
-                  {DAYS_LABEL.map((day, idx) => {
-                    const dow    = idx === 6 ? 0 : idx + 1
-                    const isBase = dow === selectedDate?.getDay()
-                    const active = isBase || repeatDays.includes(dow)
-                    return (
-                      <button key={dow} onClick={() => toggleRepeatDay(dow)} disabled={isBase}
-                        style={{ flex: 1, padding: '0.5rem 0', borderRadius: '0.625rem', border: `1.5px solid ${active ? '#16A34A' : '#e5e7eb'}`, background: active ? '#16A34A' : '#f3f4f6', color: active ? 'white' : '#6b7280', fontSize: '0.8rem', fontWeight: 700, cursor: isBase ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                        {day}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {/* 자동 생성 일정 */}
-                {generatedDates.length > 0 ? (
+                {/* 생성 예정 일정 미리보기 */}
+                {generatedDates.length > 0 && (
                   <>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151' }}>자동 생성 일정</span>
-                      <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                        <strong style={{ color: '#16A34A' }}>{finalDates.length}회</strong> 신청 예정
-                        {excludedIdxs.size > 0 && <span style={{ color: '#b91c1c', marginLeft: '0.375rem' }}>({excludedIdxs.size}개 제외)</span>}
-                      </span>
+                    <div style={{ marginTop: '1rem', fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>
+                      생성 예정 일정 <span style={{ color: '#16A34A' }}>({generatedDates.length}회)</span>
+                      {skippedDates.length > 0 && <span style={{ color: '#d97706', marginLeft: '0.5rem' }}>⚠️ {skippedDates.length}회 제외</span>}
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '2px' }}>
-                      {generatedDates.map((d, i) => {
-                        const excluded = excludedIdxs.has(i)
-                        const rank = generatedDates.slice(0, i).filter((_, j) => !excludedIdxs.has(j)).length + 1
-                        return (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.625rem', borderRadius: '0.5rem', background: excluded ? '#fef2f2' : '#f0fdf4', border: `1px solid ${excluded ? '#fecaca' : '#bbf7d0'}`, opacity: excluded ? 0.65 : 1 }}>
-                            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: excluded ? '#9ca3af' : '#15803d', minWidth: '28px', textDecoration: excluded ? 'line-through' : 'none' }}>
-                              {excluded ? '제외' : `${rank}회`}
-                            </span>
-                            <span style={{ fontSize: '0.82rem', flex: 1, color: excluded ? '#9ca3af' : '#374151', textDecoration: excluded ? 'line-through' : 'none' }}>
-                              {fmtDateTime(d)}
-                            </span>
-                            <button onClick={() => toggleExclude(i)}
-                              style={{ fontSize: '0.7rem', fontWeight: 700, border: 'none', borderRadius: '0.375rem', padding: '3px 8px', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', background: excluded ? '#dcfce7' : '#fee2e2', color: excluded ? '#15803d' : '#b91c1c', flexShrink: 0 }}>
-                              {excluded ? '복원' : '제외'}
-                            </button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    {excludedIdxs.size > 0 && (
-                      <button onClick={() => setExcludedIdxs(new Set())}
-                        style={{ marginTop: '0.5rem', width: '100%', padding: '0.4rem', background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#6b7280', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 600 }}>
-                        🔄 전체 복원
-                      </button>
-                    )}
-                    {/* ✅ 추가: 자동 제외된 날짜 안내 */}
-                    {skippedDates.length > 0 && (
-                      <div style={{ marginTop: '0.75rem', padding: '0.625rem 0.875rem', background: '#fef9c3', border: '1.5px solid #fde68a', borderRadius: '0.625rem' }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#854d0e', marginBottom: '4px' }}>
-                          ⚠️ 아래 날짜는 자동 제외되었습니다
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '180px', overflowY: 'auto' }}>
+                      {generatedDates.map((d, i) => (
+                        <div key={i} onClick={() => toggleExclude(i)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.625rem', background: excludedIdxs.has(i) ? '#fef2f2' : '#f0fdf4', borderRadius: '0.5rem', cursor: 'pointer', border: `1px solid ${excludedIdxs.has(i) ? '#fecaca' : '#86efac'}` }}>
+                          <span style={{ fontSize: '0.7rem', color: excludedIdxs.has(i) ? '#b91c1c' : '#16A34A' }}>{excludedIdxs.has(i) ? '✕' : '✓'}</span>
+                          <span style={{ fontSize: '0.78rem', color: excludedIdxs.has(i) ? '#9ca3af' : '#374151', textDecoration: excludedIdxs.has(i) ? 'line-through' : 'none' }}>{fmtDateTime(d)}</span>
                         </div>
-                        {skippedDates.map((s, i) => (
-                          <div key={i} style={{ fontSize: '0.72rem', color: '#92400e', lineHeight: 1.6 }}>
-                            • {s.date} {s.time} — {s.reason}
+                      ))}
+                    </div>
+                    {skippedDates.length > 0 && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#d97706', marginBottom: '0.25rem' }}>제외된 날짜</div>
+                        {skippedDates.map((sk, i) => (
+                          <div key={i} style={{ fontSize: '0.7rem', color: '#9ca3af', padding: '2px 0' }}>
+                            • {sk.date} {sk.time} — {sk.reason}
                           </div>
                         ))}
                       </div>
@@ -814,7 +780,6 @@ export default function MemberApplyPage() {
                     <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                       신청일: {new Date(app.requested_at).toLocaleDateString('ko-KR')}
                     </div>
-                    {/* ✅ 추가: pending_coach 상태에서만 취소 버튼 표시 */}
                     {app.status === 'pending_coach' && (
                       <button
                         onClick={() => handleCancel(app.id)}
