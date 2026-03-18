@@ -650,7 +650,7 @@ export default function MemberApplyPage() {
                   </div>
                 )}
                 {/* 생성 예정 일정 미리보기 */}
-                {generatedDates.length > 0 && (
+                {generatedDates.length > 0 ? (
                   <>
                     <div style={{ marginTop: '1rem', fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>
                       생성 예정 일정 <span style={{ color: '#16A34A' }}>({generatedDates.length}회)</span>
