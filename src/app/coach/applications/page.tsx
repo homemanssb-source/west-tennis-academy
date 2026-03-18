@@ -53,16 +53,16 @@ export default function CoachApplicationsPage() {
     load()
   }
 
+  // ✅ fix: Race Condition 방지 — Promise.all → 순차처리
   const handleBulkAction = async (action: 'coach_approve' | 'coach_reject') => {
     setSaving(true)
-    const ids = Array.from(checkedIds)
-    await Promise.all(ids.map(id =>
-      fetch(`/api/lesson-applications/${id}`, {
+    for (const id of Array.from(checkedIds)) {
+      await fetch(`/api/lesson-applications/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, coach_note: bulkNote || null }),
       })
-    ))
+    }
     setSaving(false)
     setBulkModal(null)
     setBulkNote('')
@@ -74,7 +74,6 @@ export default function CoachApplicationsPage() {
     return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
 
-  // 신청자 표시 이름: 가족 신청이면 "회원명 (가족명)", 본인 신청이면 "회원명"
   const displayName = (a: App) =>
     a.applicant_name ? `${a.member?.name} (${a.applicant_name})` : a.member?.name
 
@@ -260,7 +259,7 @@ export default function CoachApplicationsPage() {
         </div>
       )}
 
-      {/* 하단 네비 - 버그 수정 + 납부 추가 */}
+      {/* 하단 네비 */}
       <div className="bottom-nav">
         <Link href="/coach" className="bottom-nav-item">
           <span style={{ fontSize: '1.25rem' }}>🏠</span><span>홈</span>

@@ -38,7 +38,6 @@ export default function OwnerApplicationsPage() {
   const [editCoach,  setEditCoach]  = useState('')
   const [saving,     setSaving]     = useState(false)
   const [filter,     setFilter]     = useState<'pending_admin'|'all'>('pending_admin')
-  // ✅ 일괄 처리 상태
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [bulkModal,  setBulkModal]  = useState<'approve'|'reject'|null>(null)
   const [bulkNote,   setBulkNote]   = useState('')
@@ -86,16 +85,16 @@ export default function OwnerApplicationsPage() {
     load()
   }
 
-  // ✅ 일괄 처리
+  // ✅ fix: Race Condition 방지 — Promise.all → 순차처리
   const handleBulkAction = async (action: 'admin_approve' | 'admin_reject') => {
     setSaving(true)
-    await Promise.all(Array.from(checkedIds).map(id =>
-      fetch(`/api/lesson-applications/${id}`, {
+    for (const id of Array.from(checkedIds)) {
+      await fetch(`/api/lesson-applications/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, admin_note: bulkNote || null }),
       })
-    ))
+    }
     setSaving(false)
     setBulkModal(null)
     setBulkNote('')
@@ -115,7 +114,6 @@ export default function OwnerApplicationsPage() {
     return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
 
-  // 신청자 표시 이름: 가족 신청이면 "회원명 (가족명)", 본인 신청이면 "회원명"
   const displayName = (a: App) =>
     a.applicant_name ? `${a.member?.name} (${a.applicant_name})` : a.member?.name
 
@@ -150,7 +148,6 @@ export default function OwnerApplicationsPage() {
           )}
         </div>
 
-        {/* 필터 탭 */}
         <div style={{ maxWidth: '900px', margin: '0.75rem auto 0', display: 'flex', gap: '0.5rem' }}>
           {(['pending_admin', 'all'] as const).map(f => (
             <button key={f} onClick={() => { setFilter(f); setCheckedIds(new Set()) }}
@@ -162,7 +159,6 @@ export default function OwnerApplicationsPage() {
           ))}
         </div>
 
-        {/* ✅ 일괄 처리 툴바 — 승인 대기 필터 + 항목 있을 때만 */}
         {filter === 'pending_admin' && pendingCount > 0 && (
           <div style={{ maxWidth: '900px', margin: '0.75rem auto 0', display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.625rem 0.875rem', background: '#eff6ff', borderRadius: '0.75rem', border: '1px solid #93c5fd' }}>
             <input type="checkbox" checked={allChecked} onChange={toggleAll}
@@ -202,15 +198,12 @@ export default function OwnerApplicationsPage() {
               const isPending = a.status === 'pending_admin'
               return (
                 <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }}>
-
-                  {/* ✅ 체크박스 — 승인 대기 필터 + pending_admin 항목만 */}
                   {filter === 'pending_admin' && isPending && (
                     <div style={{ paddingTop: '1.1rem' }}>
                       <input type="checkbox" checked={checkedIds.has(a.id)} onChange={() => toggleCheck(a.id)}
                         style={{ width: '16px', height: '16px', accentColor: '#1d4ed8', cursor: 'pointer' }} />
                     </div>
                   )}
-
                   <div style={{ flex: 1, background: 'white', border: `1.5px solid ${st.border}`, borderRadius: '1rem', padding: '1rem 1.25rem',
                     cursor: isPending ? 'pointer' : 'default', transition: 'box-shadow .15s' }}
                     onClick={() => isPending ? openModal(a) : null}
@@ -254,7 +247,6 @@ export default function OwnerApplicationsPage() {
           onClick={e => { if (e.target === e.currentTarget) setSelected(null) }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '480px', borderRadius: '1.5rem', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem' }}>최종 승인</h2>
-
             <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1.25rem' }}>
               <div style={{ fontWeight: 700, color: '#111827' }}>{displayName(selected)}</div>
               <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>신청 시간: {fmtDt(selected.requested_at)}</div>
@@ -262,7 +254,6 @@ export default function OwnerApplicationsPage() {
                 <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#854d0e' }}>코치 메모: {selected.coach_note}</div>
               )}
             </div>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>
                 ✏️ 시간/코치 수정 시에만 입력 (빈칸이면 신청 시간 그대로 확정)
@@ -288,7 +279,6 @@ export default function OwnerApplicationsPage() {
                 <input style={inputStyle} placeholder="선택 사항" value={adminNote} onChange={e => setAdminNote(e.target.value)} />
               </div>
             </div>
-
             <div style={{ display: 'flex', gap: '0.625rem' }}>
               <button onClick={() => handleAction('admin_approve')} disabled={saving}
                 style={{ flex: 2, padding: '0.875rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
@@ -303,7 +293,7 @@ export default function OwnerApplicationsPage() {
         </div>
       )}
 
-      {/* ✅ 일괄 처리 모달 */}
+      {/* 일괄 처리 모달 */}
       {bulkModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
           onClick={e => { if (e.target === e.currentTarget) setBulkModal(null) }}>
