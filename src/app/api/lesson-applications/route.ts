@@ -67,8 +67,11 @@ export async function POST(req: NextRequest) {
     if (!fm) return NextResponse.json({ error: '가족 정보 오류' }, { status: 403 })
   }
 
-  // ✅ 수정: max_students를 루프 밖에서 한 번만 조회 (N+1 제거)
-  let maxStudents = 1
+  // 그룹레슨 여부 판단 (lesson_type 또는 program_id 기준)
+  const isGroup = lesson_type === '그룹레슨' || !!program_id
+
+  // max_students 조회 (program_id 있으면 DB에서, 없으면 그룹=999 개인=1)
+  let maxStudents = isGroup ? 999 : 1
   if (program_id) {
     const { data: prog } = await supabaseAdmin
       .from('lesson_programs')
@@ -93,15 +96,19 @@ export async function POST(req: NextRequest) {
 
     if (existing) { errors.push(`${requested_at} 중복`); continue }
 
-    // 확정 슬롯 충돌 확인
-    const { data: conflict } = await supabaseAdmin
-      .from('lesson_slots')
-      .select('id')
-      .eq('scheduled_at', requested_at)
-      .eq('lesson_plan.coach_id', coach_id) // ✅ 수정: 코치 기준으로 충돌 체크
-      .in('status', ['scheduled', 'completed'])
-      .maybeSingle()
-    if (conflict) { errors.push(requested_at + ' 수업 충돌'); continue }
+    // 확정 슬롯 충돌 확인 — 개인레슨만 차단, 그룹레슨은 정원 체크로 대체
+    if (!isGroup) {
+      const { data: conflictSlots } = await supabaseAdmin
+        .from('lesson_slots')
+        .select('id, lesson_plan:lesson_plan_id(coach_id)')
+        .eq('scheduled_at', requested_at)
+        .in('status', ['scheduled', 'completed'])
+
+      const hasConflict = (conflictSlots ?? []).some(
+        (s: any) => (s.lesson_plan as any)?.coach_id === coach_id
+      )
+      if (hasConflict) { errors.push(requested_at + ' 수업 충돌'); continue }
+    }
 
     // 정원 체크 (다른 회원 신청 수)
     const { data: otherApps } = await supabaseAdmin
@@ -118,7 +125,7 @@ export async function POST(req: NextRequest) {
       continue
     }
 
-    // ✅ 수정: INSERT 실패 시 duplicate key(23505)로 레이스컨디션 방어
+    // INSERT (레이스컨디션 방어)
     const { data, error } = await supabaseAdmin
       .from('lesson_applications')
       .insert({
