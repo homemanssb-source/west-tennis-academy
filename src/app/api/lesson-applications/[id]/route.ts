@@ -1,9 +1,9 @@
 ﻿// src/app/api/lesson-applications/[id]/route.ts
+// ✅ fix #11: RPC 실패 시 상태 롤백 + 에러 반환 (무시하지 않음)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 
-// 코치/관리자: 승인·거절
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session || !['coach', 'owner', 'admin'].includes(session.role)) {
@@ -38,7 +38,18 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
   if (action === 'admin_approve') {
     const { error: rpcError } = await supabaseAdmin.rpc('approve_lesson_application', { app_id: id })
-    if (rpcError) console.error('rpc error:', rpcError)
+
+    // ✅ fix #11: RPC 실패 시 상태를 pending_admin으로 롤백 후 에러 반환
+    if (rpcError) {
+      await supabaseAdmin
+        .from('lesson_applications')
+        .update({ status: 'pending_admin' })
+        .eq('id', id)
+      return NextResponse.json(
+        { error: '수업 확정 처리에 실패했습니다. 잠시 후 다시 시도해주세요.' },
+        { status: 500 }
+      )
+    }
 
     if (coach_id && data.lesson_plan_id) {
       await supabaseAdmin
@@ -101,7 +112,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   return NextResponse.json(data)
 }
 
-// ✅ 추가: 회원 본인 신청 취소 (pending_coach 상태만)
+// ✅ 회원 본인 신청 취소 (pending_coach 상태만)
 export async function DELETE(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -110,29 +121,17 @@ export async function DELETE(
   if (!session || session.role !== 'member') {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
-
   const { id } = await context.params
 
-  // 신청 정보 조회
-  const { data: app, error: fetchErr } = await supabaseAdmin
+  const { data: app } = await supabaseAdmin
     .from('lesson_applications')
-    .select('id, member_id, status, coach_id')
+    .select('member_id, status')
     .eq('id', id)
     .single()
 
-  if (fetchErr || !app) return NextResponse.json({ error: '신청 정보 없음' }, { status: 404 })
-
-  // 본인 신청인지 확인
-  if (app.member_id !== session.id) {
-    return NextResponse.json({ error: '본인 신청만 취소 가능합니다' }, { status: 403 })
-  }
-
-  // pending_coach 상태만 취소 가능 (코치가 아직 확인 전)
-  if (app.status !== 'pending_coach') {
-    return NextResponse.json({
-      error: '코치 대기 상태에서만 취소 가능합니다. 코치 또는 관리자에게 문의하세요.'
-    }, { status: 400 })
-  }
+  if (!app) return NextResponse.json({ error: '신청 내역 없음' }, { status: 404 })
+  if (app.member_id !== session.id) return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+  if (app.status !== 'pending_coach') return NextResponse.json({ error: '코치 확인 중인 신청만 취소 가능합니다' }, { status: 400 })
 
   const { error } = await supabaseAdmin
     .from('lesson_applications')
@@ -140,15 +139,5 @@ export async function DELETE(
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // 코치에게 취소 알림
-  await supabaseAdmin.from('notifications').insert({
-    profile_id: app.coach_id,
-    title: '🔔 수업 신청 취소',
-    body: `${session.name}님이 수업 신청을 취소했습니다.`,
-    type: 'info',
-    link: '/coach/applications',
-  })
-
   return NextResponse.json({ ok: true })
 }

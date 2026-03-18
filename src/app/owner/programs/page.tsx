@@ -1,21 +1,85 @@
 'use client'
 // src/app/owner/programs/page.tsx
-// ✅ per_session_price 추가 + wta_config 설정 섹션 추가
+// ✅ 그룹수업 고정 스케줄 (fixed_schedules) 등록/수정 UI 추가
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 interface Coach   { id: string; name: string }
+interface FixedSchedule { day: number; time: string }
 interface Program {
   id: string; name: string; ratio: string; max_students: number
   unit_minutes: number; description: string | null; is_active: boolean
   coach_id: string | null; coach?: { id: string; name: string } | null
-  default_amount: number; per_session_price: number; sort_order: number; created_at: string
+  default_amount: number; per_session_price: number; sort_order: number
+  fixed_schedules: FixedSchedule[] | null; created_at: string
 }
 interface WtaConfig { session_threshold: number; sat_surcharge: number; sun_surcharge: number }
 
 const PRESET_RATIOS = ['1:1', '2:1', '3:1', '4:1', '5:1', '6:1', '그룹']
+const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토']
 const fmt = (n: number) => (n || 0).toLocaleString()
+
+// 고정 스케줄 편집 컴포넌트
+function FixedScheduleEditor({
+  schedules, onChange
+}: {
+  schedules: FixedSchedule[]
+  onChange: (s: FixedSchedule[]) => void
+}) {
+  const addSlot = () => onChange([...schedules, { day: 1, time: '09:00' }])
+  const removeSlot = (i: number) => onChange(schedules.filter((_, idx) => idx !== i))
+  const updateSlot = (i: number, field: 'day' | 'time', value: string | number) =>
+    onChange(schedules.map((s, idx) => idx === i ? { ...s, [field]: value } : s))
+
+  const TIME_OPTIONS = []
+  for (let h = 6; h <= 22; h++) {
+    TIME_OPTIONS.push(`${String(h).padStart(2,'0')}:00`)
+    TIME_OPTIONS.push(`${String(h).padStart(2,'0')}:30`)
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        {schedules.map((s, i) => (
+          <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <select value={s.day}
+              onChange={e => updateSlot(i, 'day', Number(e.target.value))}
+              style={{ padding: '0.4rem 0.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', fontSize: '0.85rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white' }}>
+              {DAYS_KO.map((d, idx) => <option key={idx} value={idx}>{d}요일</option>)}
+            </select>
+            <select value={s.time}
+              onChange={e => updateSlot(i, 'time', e.target.value)}
+              style={{ flex: 1, padding: '0.4rem 0.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', fontSize: '0.85rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white' }}>
+              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <button onClick={() => removeSlot(i)}
+              style={{ padding: '0.4rem 0.6rem', border: '1.5px solid #fecaca', borderRadius: '0.5rem', background: '#fef2f2', color: '#b91c1c', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700 }}>✕</button>
+          </div>
+        ))}
+      </div>
+      <button onClick={addSlot}
+        style={{ width: '100%', padding: '0.5rem', border: '1.5px dashed #d1d5db', borderRadius: '0.625rem', background: 'white', color: '#6b7280', cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 600 }}>
+        + 요일/시간 추가
+      </button>
+    </div>
+  )
+}
+
+// 고정 스케줄 표시
+function FixedScheduleDisplay({ schedules }: { schedules: FixedSchedule[] | null }) {
+  if (!schedules || schedules.length === 0) return null
+  const sorted = [...schedules].sort((a, b) => a.day - b.day || a.time.localeCompare(b.time))
+  return (
+    <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+      {sorted.map((s, i) => (
+        <span key={i} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>
+          {DAYS_KO[s.day]} {s.time}
+        </span>
+      ))}
+    </div>
+  )
+}
 
 export default function ProgramsPage() {
   const [programs,     setPrograms]     = useState<Program[]>([])
@@ -34,7 +98,9 @@ export default function ProgramsPage() {
     description: '', customRatio: '', coach_id: '',
     default_amount: 0, per_session_price: 0, sort_order: 0,
   })
-  const [useCustom, setUseCustom] = useState(false)
+  const [useCustom,       setUseCustom]       = useState(false)
+  const [formSchedules,   setFormSchedules]   = useState<FixedSchedule[]>([])
+  const [editSchedules,   setEditSchedules]   = useState<FixedSchedule[]>([])
 
   const load = async () => {
     setLoading(true)
@@ -54,6 +120,12 @@ export default function ProgramsPage() {
 
   useEffect(() => { load() }, [])
 
+  // 수정 모달 열 때 schedules 초기화
+  const openEdit = (p: Program) => {
+    setSelected(p)
+    setEditSchedules(p.fixed_schedules ?? [])
+  }
+
   const filteredPrograms = programs.filter(p => {
     if (filterCoach === 'all')    return true
     if (filterCoach === 'common') return p.coach_id === null
@@ -72,8 +144,9 @@ export default function ProgramsPage() {
         unit_minutes: form.unit_minutes, description: form.description,
         coach_id: form.coach_id || null,
         default_amount:    form.default_amount,
-        per_session_price: form.per_session_price,  // ✅
-        sort_order: form.sort_order,
+        per_session_price: form.per_session_price,
+        sort_order:        form.sort_order,
+        fixed_schedules:   formSchedules.length > 0 ? formSchedules : null, // ✅
       }),
     })
     const data = await res.json()
@@ -81,6 +154,7 @@ export default function ProgramsPage() {
     if (!res.ok) return alert(data.error)
     setShowAdd(false)
     setForm({ name: '', ratio: '1:1', max_students: 1, unit_minutes: 60, description: '', customRatio: '', coach_id: '', default_amount: 0, per_session_price: 0, sort_order: 0 })
+    setFormSchedules([])
     setUseCustom(false)
     load()
   }
@@ -95,8 +169,9 @@ export default function ProgramsPage() {
         max_students: selected.max_students, unit_minutes: selected.unit_minutes,
         description: selected.description, coach_id: selected.coach_id,
         default_amount:    selected.default_amount,
-        per_session_price: selected.per_session_price,  // ✅
-        sort_order: selected.sort_order,
+        per_session_price: selected.per_session_price,
+        sort_order:        selected.sort_order,
+        fixed_schedules:   editSchedules.length > 0 ? editSchedules : null, // ✅
       }),
     })
     setSaving(false)
@@ -139,6 +214,9 @@ export default function ProgramsPage() {
     fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px',
   }
 
+  // 그룹수업 여부 판단
+  const isGroup = (maxStudents: number) => maxStudents > 1
+
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
       {/* 헤더 */}
@@ -153,7 +231,7 @@ export default function ProgramsPage() {
 
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem' }}>
 
-        {/* ── 요금 기준 설정 ✅ ── */}
+        {/* 요금 기준 설정 */}
         <div style={{ background: 'white', borderRadius: '1rem', border: '1.5px solid #dbeafe', padding: '1.25rem', marginBottom: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: '#1e40af' }}>⚙️ 요금 기준 설정</div>
@@ -204,7 +282,7 @@ export default function ProgramsPage() {
           <div style={{ fontSize: '0.8rem', color: '#1d4ed8', lineHeight: 1.7 }}>
             • <strong>공통 프로그램</strong> — 모든 코치에게 표시 (코치 미지정)<br/>
             • <strong>코치 전용 프로그램</strong> — 해당 코치를 선택할 때만 표시<br/>
-            • <strong>기준 횟수({config.session_threshold}회) 이상</strong> → 월정액 / 미만 → 회당 단가 × 횟수
+            • <strong>그룹수업 (최대인원 2명↑)</strong> — 고정 스케줄 등록 시 회원이 1클릭으로 신청 가능
           </div>
         </div>
 
@@ -236,7 +314,7 @@ export default function ProgramsPage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.875rem' }}>
             {filteredPrograms.map(p => (
-              <div key={p.id} onClick={() => setSelected(p)}
+              <div key={p.id} onClick={() => openEdit(p)}
                 style={{ background: 'white', borderRadius: '1rem', border: `1.5px solid ${p.is_active ? '#e5e7eb' : '#f3f4f6'}`, padding: '1.25rem', cursor: 'pointer', opacity: p.is_active ? 1 : 0.55, transition: 'box-shadow .15s' }}
                 onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
                 onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
@@ -253,21 +331,24 @@ export default function ProgramsPage() {
                     ) : (
                       <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#f3f4f6', color: '#6b7280' }}>공통</span>
                     )}
+                    {/* ✅ 그룹수업 배지 */}
+                    {isGroup(p.max_students) && (
+                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#fef9c3', color: '#854d0e' }}>
+                        그룹 최대 {p.max_students}명
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827', marginBottom: '4px' }}>{p.name}</div>
-                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>최대 {p.max_students}명 · {p.unit_minutes}분</div>
-                {/* ✅ 요금 표시 */}
+                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{p.unit_minutes}분</div>
+                {/* ✅ 고정 스케줄 표시 */}
+                <FixedScheduleDisplay schedules={p.fixed_schedules} />
                 <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   {p.default_amount > 0 && (
-                    <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700 }}>
-                      월정액: {fmt(p.default_amount)}원
-                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700 }}>월정액: {fmt(p.default_amount)}원</div>
                   )}
                   {p.per_session_price > 0 && (
-                    <div style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700 }}>
-                      회당: {fmt(p.per_session_price)}원
-                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700 }}>회당: {fmt(p.per_session_price)}원</div>
                   )}
                 </div>
                 {p.description && (
@@ -289,7 +370,7 @@ export default function ProgramsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <label style={labelStyle}>프로그램 이름 <span style={{ color: '#ef4444' }}>*</span></label>
-                <input style={inputStyle} placeholder="예) 개인레슨, 패밀리레슨" value={form.name}
+                <input style={inputStyle} placeholder="예) 개인레슨, 월수금 10시 그룹반" value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
@@ -299,7 +380,6 @@ export default function ProgramsPage() {
                   <option value="">🌐 공통 프로그램 (전체 코치)</option>
                   {coaches.map(c => <option key={c.id} value={c.id}>🎾 {c.name} 코치 전용</option>)}
                 </select>
-                <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '4px' }}>공통: 모든 코치에게 표시 / 코치 전용: 해당 코치 선택 시에만 표시</div>
               </div>
               <div>
                 <label style={labelStyle}>수업 비율 (코치:학생)</label>
@@ -318,10 +398,10 @@ export default function ProgramsPage() {
               <div>
                 <label style={labelStyle}>최대 학생 수</label>
                 <div style={{ display: 'flex', gap: '0.375rem' }}>
-                  {[1,2,3,4,5,6].map(n => (
+                  {[1,2,3,4,5,6,7,8,10,12].map(n => (
                     <button key={n} onClick={() => setForm(f => ({ ...f, max_students: n }))}
-                      style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: `1.5px solid ${form.max_students === n ? '#16A34A' : '#e5e7eb'}`, background: form.max_students === n ? '#f0fdf4' : 'white', color: form.max_students === n ? '#16A34A' : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}>
-                      {n}명
+                      style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: `1.5px solid ${form.max_students === n ? '#16A34A' : '#e5e7eb'}`, background: form.max_students === n ? '#f0fdf4' : 'white', color: form.max_students === n ? '#16A34A' : '#6b7280', fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem' }}>
+                      {n}
                     </button>
                   ))}
                 </div>
@@ -337,7 +417,17 @@ export default function ProgramsPage() {
                   ))}
                 </div>
               </div>
-              {/* ✅ 요금 입력 */}
+
+              {/* ✅ 그룹수업 고정 스케줄 */}
+              {form.max_students > 1 && (
+                <div style={{ background: '#eff6ff', borderRadius: '0.75rem', padding: '0.875rem' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e40af', marginBottom: '0.5rem' }}>
+                    📅 고정 수업 스케줄 <span style={{ fontWeight: 400, color: '#3b82f6' }}>(그룹수업 — 회원이 1클릭 신청)</span>
+                  </div>
+                  <FixedScheduleEditor schedules={formSchedules} onChange={setFormSchedules} />
+                </div>
+              )}
+
               <div style={{ background: '#f0fdf4', borderRadius: '0.75rem', padding: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>💰 요금 설정</div>
                 <div>
@@ -430,7 +520,17 @@ export default function ProgramsPage() {
                     onChange={e => setSelected(s => s ? { ...s, unit_minutes: Number(e.target.value) } : s)} />
                 </div>
               </div>
-              {/* ✅ 요금 수정 */}
+
+              {/* ✅ 그룹수업 고정 스케줄 수정 */}
+              {selected.max_students > 1 && (
+                <div style={{ background: '#eff6ff', borderRadius: '0.75rem', padding: '0.875rem' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e40af', marginBottom: '0.5rem' }}>
+                    📅 고정 수업 스케줄 <span style={{ fontWeight: 400, color: '#3b82f6' }}>(회원이 1클릭 신청)</span>
+                  </div>
+                  <FixedScheduleEditor schedules={editSchedules} onChange={setEditSchedules} />
+                </div>
+              )}
+
               <div style={{ background: '#f0fdf4', borderRadius: '0.75rem', padding: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>💰 요금 설정</div>
                 <div>
