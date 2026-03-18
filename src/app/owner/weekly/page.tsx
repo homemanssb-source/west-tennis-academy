@@ -29,30 +29,29 @@ function getMonday(d: Date) {
 }
 function toYMD(d: Date) { return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }) }
 
-// 슬롯 시작 분 계산 (KST 기준)
 function getStartMin(scheduledAt: string) {
   const d = new Date(scheduledAt)
   const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
   return (kst.getUTCHours() - START_HOUR) * 60 + kst.getUTCMinutes()
 }
 
-// 슬롯 KST 날짜 문자열
 function getKSTDate(scheduledAt: string) {
   const d = new Date(scheduledAt)
   return new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
 }
 
-// 같은 시간(분 단위 동일)끼리 겹침 컬럼 계산
+// 같은 코치 + 같은 시작분 기준으로 그룹핑 (다른 코치끼리는 겹침 없음)
 function assignColumns(slots: Slot[]): (Slot & { col: number; totalCols: number })[] {
-  // 시작 분 기준으로 그룹핑 (문자열 형식 차이 무시)
-  const groups: Record<number, Slot[]> = {}
+  const groups: Record<string, Slot[]> = {}
   for (const s of slots) {
-    const key = getStartMin(s.scheduled_at)
+    const coachId = s.lesson_plan?.coach?.id ?? ''
+    const key = coachId + '_' + getStartMin(s.scheduled_at)
     if (!groups[key]) groups[key] = []
     groups[key].push(s)
   }
   return slots.map(s => {
-    const key = getStartMin(s.scheduled_at)
+    const coachId = s.lesson_plan?.coach?.id ?? ''
+    const key = coachId + '_' + getStartMin(s.scheduled_at)
     const group = groups[key]
     const col = group.indexOf(s)
     return { ...s, col, totalCols: group.length }
@@ -96,7 +95,6 @@ export default function WeeklySchedulePage() {
   coaches.forEach((c, i) => { coachColorMap[c.id] = COACH_COLORS[i % COACH_COLORS.length] })
   const filteredSlots = selCoach === 'all' ? slots : slots.filter(s => s.lesson_plan?.coach?.id === selCoach)
 
-  // 선생님별 첫 코치 자동 선택
   useEffect(() => {
     if (viewMode === 'byCoach' && coaches.length > 0 && !selCoachByCoach) {
       setSelCoachByCoach(coaches[0].id)
@@ -118,7 +116,6 @@ export default function WeeklySchedulePage() {
             const ymd = toYMD(date)
             const isToday = ymd === toYMD(now)
             const dow = date.getDay()
-            // KST 날짜 기준으로 필터링
             const daySlots = assignColumns(slotsForGrid.filter(s => getKSTDate(s.scheduled_at) === ymd))
             const dayBlocks = blocksForGrid.filter(b =>
               b.repeat_weekly ? b.day_of_week === dow : b.block_date === ymd
@@ -168,7 +165,6 @@ export default function WeeklySchedulePage() {
                     const bg     = viewMode==='byCoach' && coachId ? coachColorMap[coachId]+'18' : STATUS_BG[status] ?? STATUS_BG.scheduled
                     const colW   = 100 / slot.totalCols
                     const leftPct = slot.col * colW
-                    // 시간 표시 (KST)
                     const kstD = new Date(new Date(slot.scheduled_at).getTime() + 9*60*60*1000)
                     const hh = String(kstD.getUTCHours()).padStart(2,'0')
                     const mm = String(kstD.getUTCMinutes()).padStart(2,'0')
