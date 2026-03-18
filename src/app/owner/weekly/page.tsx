@@ -3,13 +3,14 @@
 // ✅ fix: 그룹수업 슬롯 묶어서 표시 (겹침 해소)
 // ✅ fix: family_member_name 표시 (가족 신청 시 자녀 이름)
 // ✅ fix: KST 기준 날짜 그룹핑 (자정 근처 오표시 수정)
+// ✅ fix: 선생님별 탭 드롭다운 필터 추가
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 interface Slot {
   id: string; scheduled_at: string; duration_minutes: number; status: string; is_makeup: boolean
-  family_member_name: string | null  // ✅ 추가
+  family_member_name: string | null
   lesson_plan: { id: string; lesson_type: string; member: { id: string; name: string }; coach: { id: string; name: string } }
 }
 interface Block {
@@ -33,13 +34,11 @@ function getMonday(d: Date) {
   return mon
 }
 
-// ✅ fix: KST 기준 YYYY-MM-DD 반환
 function toYMD(d: Date) {
   const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
   return kst.toISOString().split('T')[0]
 }
 
-// ✅ fix: scheduled_at 문자열에서 KST 날짜 추출
 function slotToKSTDate(scheduled_at: string): string {
   const ms  = new Date(scheduled_at).getTime()
   const kst = new Date(ms + 9 * 60 * 60 * 1000)
@@ -82,7 +81,6 @@ export default function WeeklySchedulePage() {
   coaches.forEach((c, i) => { coachColorMap[c.id] = COACH_COLORS[i % COACH_COLORS.length] })
   const filteredSlots = selCoach === 'all' ? slots : slots.filter(s => s.lesson_plan?.coach?.id === selCoach)
 
-  // ✅ 회원 표시 이름: 가족 신청이면 "부모(자녀)" 형태
   function displayName(slot: Slot): string {
     const memberName = slot.lesson_plan?.member?.name ?? '-'
     if (slot.family_member_name) return `${slot.family_member_name}`
@@ -96,7 +94,6 @@ export default function WeeklySchedulePage() {
   function TimeGrid({ slotsForGrid, blocksForGrid }: { slotsForGrid: Slot[]; blocksForGrid: Block[] }) {
     return (
       <div style={{ display:'flex', minWidth:'700px' }}>
-        {/* 시간 축 */}
         <div style={{ width:'32px', flexShrink:0, marginTop:'40px' }}>
           <div style={{ position:'relative', height:TOTAL_CELLS*CELL_H }}>
             {timeLabels.map((h,i) => (
@@ -107,21 +104,17 @@ export default function WeeklySchedulePage() {
           </div>
         </div>
 
-        {/* 요일 컬럼 */}
         <div style={{ flex:1, display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'2px' }}>
           {weekDates.map((date, di) => {
             const ymd     = toYMD(date)
             const isToday = ymd === toYMD(now)
             const dow     = date.getDay()
-
-            // ✅ fix: KST 날짜 기준으로 슬롯 필터링
             const daySlots = slotsForGrid.filter(s => slotToKSTDate(s.scheduled_at) === ymd)
             const dayBlocks = blocksForGrid.filter(b =>
               b.repeat_weekly ? b.day_of_week === dow : b.block_date === ymd
             )
             const nowMin = isToday ? (now.getHours()-START_HOUR)*60+now.getMinutes() : -1
 
-            // ✅ fix: 같은 시간+코치 슬롯 그룹핑 (그룹수업 겹침 해소)
             const slotGroupMap = new Map<string, Slot[]>()
             daySlots.forEach(s => {
               const dt = new Date(s.scheduled_at)
@@ -135,27 +128,22 @@ export default function WeeklySchedulePage() {
 
             return (
               <div key={di} style={{ display:'flex', flexDirection:'column' }}>
-                {/* 요일 헤더 */}
                 <div style={{ textAlign:'center', height:'40px', background:isToday?'#16A34A':'white', border:'1.5px solid '+(isToday?'#16A34A':'#e5e7eb'), borderRadius:'8px 8px 0 0', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
                   <div style={{ fontFamily:'Oswald,sans-serif', fontWeight:700, fontSize:'0.8rem', color:isToday?'white':dow===0?'#ef4444':dow===6?'#3b82f6':'#374151' }}>{DAYS[di]}</div>
                   <div style={{ fontSize:'0.65rem', color:isToday?'rgba(255,255,255,0.8)':'#9ca3af' }}>{date.getMonth()+1}/{date.getDate()}</div>
                 </div>
 
-                {/* 시간 그리드 */}
                 <div style={{ position:'relative', height:TOTAL_CELLS*CELL_H, background:'white', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 8px 8px', overflow:'hidden' }}>
-                  {/* 배경 그리드 선 */}
                   {Array.from({ length:TOTAL_CELLS }, (_,i) => (
                     <div key={i} style={{ position:'absolute', left:0, right:0, top:i*CELL_H, height:CELL_H, borderBottom:i%6===5?'1px solid #e5e7eb':'1px solid #f3f4f6', background:i%6===0?'#fafafa':'transparent' }} />
                   ))}
 
-                  {/* 현재 시간 표시 */}
                   {isToday && nowMin>=0 && nowMin<=(END_HOUR-START_HOUR)*60 && (
                     <div style={{ position:'absolute', left:0, right:0, top:(nowMin/CELL_MIN)*CELL_H, borderTop:'2px solid #ef4444', zIndex:10, display:'flex', alignItems:'center' }}>
                       <div style={{ width:6, height:6, borderRadius:'50%', background:'#ef4444', marginTop:-3, marginLeft:-1, flexShrink:0 }} />
                     </div>
                   )}
 
-                  {/* 코치 휴무 블록 */}
                   {dayBlocks.map(b => {
                     const startMin = b.block_start
                       ? (Number(b.block_start.split(':')[0])*60 + Number(b.block_start.split(':')[1])) - START_HOUR*60
@@ -173,7 +161,6 @@ export default function WeeklySchedulePage() {
                     )
                   })}
 
-                  {/* ✅ 그룹핑된 슬롯 렌더링 */}
                   {slotGroups.map((group, gi) => {
                     const slot   = group[0]
                     const dt     = new Date(slot.scheduled_at)
@@ -191,9 +178,7 @@ export default function WeeklySchedulePage() {
                     const bg     = viewMode==='byCoach' && coachId ? coachColorMap[coachId]+'18' : STATUS_BG[status] ?? STATUS_BG.scheduled
                     const count  = group.length
 
-                    // ✅ 그룹수업: 2명 이상이면 하나의 블록에 합쳐서 표시
                     if (count >= 2) {
-                      // ✅ fix: 중복 이름 제거 (같은 회원 슬롯 여러 개인 경우)
                       const rawNames = group.map(s =>
                         s.family_member_name ? s.family_member_name : (s.lesson_plan?.member?.name ?? '-')
                       )
@@ -205,18 +190,15 @@ export default function WeeklySchedulePage() {
                           <div style={{ fontSize:'9px', fontWeight:700, color:groupColor, lineHeight:1.3 }}>
                             {String(kstH).padStart(2,'0')}:{String(kstMin).padStart(2,'0')}
                           </div>
-                          {/* 그룹 배지 — 중복 제거 후 실제 인원수 표시 */}
                           <div style={{ fontSize:'8px', fontWeight:700, background:groupColor, color:'white', borderRadius:'9999px', padding:'0 4px', display:'inline-block', marginBottom:'1px' }}>
                             그룹 {names.length}명
                           </div>
-                          {/* 이름 목록 (중복 제거됨) */}
                           {names.slice(0, 3).map((n, ni) => (
                             <div key={ni} style={{ fontSize:'9px', color:'#111827', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{n}</div>
                           ))}
                           {names.length > 3 && (
                             <div style={{ fontSize:'8px', color:'#6b7280' }}>외 {names.length-3}명</div>
                           )}
-                          {/* 코치 이름 */}
                           {height >= 48 && (
                             <div style={{ fontSize:'9px', color:'#6b7280', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                               {slot.lesson_plan?.coach?.name}
@@ -226,7 +208,6 @@ export default function WeeklySchedulePage() {
                       )
                     }
 
-                    // 개인수업: 기존 방식 그대로
                     const name = displayName(slot)
                     const sub  = subName(slot)
                     return (
@@ -234,7 +215,6 @@ export default function WeeklySchedulePage() {
                         <div style={{ fontSize:'9px', fontWeight:700, color, lineHeight:1.3 }}>
                           {String(kstH).padStart(2,'0')}:{String(kstMin).padStart(2,'0')}
                         </div>
-                        {/* ✅ 자녀 이름 있으면 메인으로, 부모 이름은 작게 */}
                         <div style={{ fontSize:'10px', fontWeight:700, color:'#111827', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</div>
                         {sub && height >= 42 && (
                           <div style={{ fontSize:'8px', color:'#3b82f6', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>({sub})</div>
@@ -271,10 +251,11 @@ export default function WeeklySchedulePage() {
           <button onClick={() => { setViewMode('byCoach'); setSelCoach('all') }}
             style={{ padding:'0.25rem 0.75rem', borderRadius:'0.5rem', border:'none', background:viewMode==='byCoach'?'white':'transparent', color:viewMode==='byCoach'?'#111827':'#9ca3af', fontWeight:viewMode==='byCoach'?700:400, fontSize:'0.8rem', cursor:'pointer', whiteSpace:'nowrap' }}>선생님별</button>
         </div>
-        {viewMode==='all' && coaches.length>0 && (
+        {/* ✅ fix: 두 모드 모두 드롭다운 표시 */}
+        {coaches.length > 0 && (
           <select value={selCoach} onChange={e => setSelCoach(e.target.value)}
             style={{ padding:'0.375rem 0.75rem', border:'1.5px solid #e5e7eb', borderRadius:'0.625rem', background:'white', fontSize:'0.8rem', color:'#374151', cursor:'pointer' }}>
-            <option value='all'>전체 코치</option>
+            <option value='all'>전체 선생님</option>
             {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 코치</option>)}
           </select>
         )}
@@ -308,7 +289,8 @@ export default function WeeklySchedulePage() {
           )}
           {viewMode==='byCoach' && (
             <>
-              {coaches.length > 0 && (
+              {/* ✅ fix: 전체 보기일 때만 범례 표시 */}
+              {selCoach === 'all' && coaches.length > 0 && (
                 <div style={{ display:'flex', gap:'1rem', marginBottom:'0.75rem', flexWrap:'wrap' }}>
                   {coaches.map((c,i) => (
                     <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', color:'#374151', fontWeight:600 }}>
@@ -321,22 +303,26 @@ export default function WeeklySchedulePage() {
                 <div style={{ textAlign:'center', padding:'3rem', color:'#9ca3af' }}>등록된 코치가 없습니다</div>
               ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:'2rem' }}>
-                  {coaches.map((coach,ci) => {
-                    const coachSlots = slots.filter(s => s.lesson_plan?.coach?.id===coach.id)
-                    const color = COACH_COLORS[ci%COACH_COLORS.length]
-                    return (
-                      <div key={coach.id}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 1rem', background:'white', borderRadius:'0.75rem', border:'2px solid '+color, marginBottom:'0.5rem' }}>
-                          <div style={{ width:12, height:12, borderRadius:'50%', background:color, flexShrink:0 }}/>
-                          <span style={{ fontFamily:'Oswald,sans-serif', fontWeight:700, fontSize:'1rem', color:'#111827' }}>{coach.name} 코치</span>
-                          <span style={{ marginLeft:'auto', fontSize:'0.75rem', color:'#6b7280' }}>이번 주 {coachSlots.length}건</span>
+                  {/* ✅ fix: selCoach 필터 적용, 색상 인덱스는 전체 목록 기준 유지 */}
+                  {coaches
+                    .filter(c => selCoach === 'all' || c.id === selCoach)
+                    .map(coach => {
+                      const ci = coaches.indexOf(coach)
+                      const coachSlots = slots.filter(s => s.lesson_plan?.coach?.id === coach.id)
+                      const color = COACH_COLORS[ci % COACH_COLORS.length]
+                      return (
+                        <div key={coach.id}>
+                          <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 1rem', background:'white', borderRadius:'0.75rem', border:'2px solid '+color, marginBottom:'0.5rem' }}>
+                            <div style={{ width:12, height:12, borderRadius:'50%', background:color, flexShrink:0 }}/>
+                            <span style={{ fontFamily:'Oswald,sans-serif', fontWeight:700, fontSize:'1rem', color:'#111827' }}>{coach.name} 코치</span>
+                            <span style={{ marginLeft:'auto', fontSize:'0.75rem', color:'#6b7280' }}>이번 주 {coachSlots.length}건</span>
+                          </div>
+                          <div style={{ overflowX:'auto' }}>
+                            <TimeGrid slotsForGrid={coachSlots} blocksForGrid={blocks.filter(b => b.coach_id === coach.id)} />
+                          </div>
                         </div>
-                        <div style={{ overflowX:'auto' }}>
-                          <TimeGrid slotsForGrid={coachSlots} blocksForGrid={blocks.filter(b => b.coach_id === coach.id)} />
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
                 </div>
               )}
             </>

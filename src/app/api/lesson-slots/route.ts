@@ -1,5 +1,6 @@
 ﻿// src/app/api/lesson-slots/route.ts
 // ✅ fix: POST 핸들러 추가 (슬롯 추가 기능)
+// ✅ fix: family_member_name 주입 (가족 신청 시 자녀 이름 표시)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -50,6 +51,38 @@ export async function GET(req: NextRequest) {
     ? data.filter((s: any) => s.lesson_plan?.coach?.id === coachId)
     : data
 
+  // ✅ fix: family_member_name 주입 (weekly-schedule API와 동일 방식)
+  const planIds = [...new Set(filtered.map((s: any) => s.lesson_plan?.id).filter(Boolean))]
+  const familyNameMap: Record<string, string> = {}
+
+  if (planIds.length > 0) {
+    const { data: apps } = await supabaseAdmin
+      .from('lesson_applications')
+      .select('lesson_plan_id, family_member_id')
+      .in('lesson_plan_id', planIds)
+      .not('family_member_id', 'is', null)
+
+    if (apps && apps.length > 0) {
+      const familyIds = [...new Set(apps.map((a: any) => a.family_member_id).filter(Boolean))]
+      const { data: familyMembers } = await supabaseAdmin
+        .from('family_members')
+        .select('id, name')
+        .in('id', familyIds)
+
+      const fmMap = new Map((familyMembers ?? []).map((f: any) => [f.id, f.name]))
+      apps.forEach((a: any) => {
+        if (a.lesson_plan_id && a.family_member_id && fmMap.has(a.family_member_id)) {
+          familyNameMap[a.lesson_plan_id] = fmMap.get(a.family_member_id)!
+        }
+      })
+    }
+  }
+
+  const enriched = filtered.map((s: any) => ({
+    ...s,
+    family_member_name: s.lesson_plan?.id ? (familyNameMap[s.lesson_plan.id] ?? null) : null,
+  }))
+
   let appSlots: any[] = []
   if (coachId) {
     const { data: appData } = await supabaseAdmin
@@ -67,10 +100,11 @@ export async function GET(req: NextRequest) {
       duration_minutes: 60,
       slot_type: null,
       lesson_plan: null,
+      family_member_name: null,
     }))
   }
 
-  const allSlots = [...filtered, ...appSlots]
+  const allSlots = [...enriched, ...appSlots]
   const countMap: Record<string, number> = {}
   allSlots.forEach((s: any) => {
     if (s.status === 'cancelled') return
@@ -138,4 +172,4 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
-}
+} 

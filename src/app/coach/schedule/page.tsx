@@ -1,6 +1,7 @@
 'use client'
 // src/app/coach/schedule/page.tsx
 // ✅ fix: 주간뷰 슬롯 날짜 그룹핑 KST 기준으로 수정 (자정 근처 오표시 버그)
+// ✅ fix: family_member_name 표시 (가족 신청 시 자녀 이름 표시)
 
 import { useEffect, useState, useCallback } from 'react'
 import CoachBottomNav from '@/components/CoachBottomNav'
@@ -12,6 +13,7 @@ interface Slot {
   status: string
   slot_type: string
   memo: string | null
+  family_member_name: string | null
   lesson_plan: {
     id: string
     lesson_type: string
@@ -66,6 +68,12 @@ function slotToKSTTime(scheduled_at: string): string {
   return `${String(kst.getUTCHours()).padStart(2,'0')}:${String(kst.getUTCMinutes()).padStart(2,'0')}`
 }
 
+// ✅ fix: 표시 이름 — 자녀이름(부모) 형태
+function displayName(s: Slot): string {
+  if (s.family_member_name) return `${s.family_member_name}(${s.lesson_plan?.member?.name ?? ''})`
+  return s.lesson_plan?.member?.name ?? '-'
+}
+
 export default function CoachSchedulePage() {
   const today = getTodayKST()
 
@@ -106,7 +114,6 @@ export default function CoachSchedulePage() {
   const loadWeek = useCallback(async () => {
     if (!coachId) return
     setLoading(true)
-    // ✅ fix: KST 기준 주간 날짜 사용
     const weekDates = getWeekDatesKST(today, weekOffset)
     const res = await fetch(`/api/lesson-slots?from=${weekDates[0]}&to=${weekDates[6]}&coach_id=${coachId}`)
     const data = await res.json()
@@ -178,7 +185,6 @@ export default function CoachSchedulePage() {
 
   const handleRescheduleOpen = () => {
     if (!selected) return
-    // ✅ fix: KST 기준으로 날짜/시간 추출
     const kstDate = slotToKSTDate(selected.scheduled_at)
     const kstTime = slotToKSTTime(selected.scheduled_at)
     setRescheduleDate(kstDate)
@@ -202,7 +208,6 @@ export default function CoachSchedulePage() {
     reload()
   }
 
-  // ✅ fix: KST 기준 시간 표시
   const fmtTime = (dt: string) => slotToKSTTime(dt)
 
   const changeDate = (days: number) => {
@@ -215,12 +220,11 @@ export default function CoachSchedulePage() {
     setDate(`${yy}-${mm}-${dd}`)
   }
 
-  // ✅ fix: KST 기준 주간 날짜 + 슬롯 그룹핑
   const weekDates = getWeekDatesKST(today, weekOffset)
   const slotsByDate: Record<string, Slot[]> = {}
   weekDates.forEach(d => { slotsByDate[d] = [] })
   weekSlots.forEach(s => {
-    const d = slotToKSTDate(s.scheduled_at)  // ✅ KST 날짜 추출
+    const d = slotToKSTDate(s.scheduled_at)
     if (slotsByDate[d]) slotsByDate[d].push(s)
   })
 
@@ -294,7 +298,8 @@ export default function CoachSchedulePage() {
                         style={{ background: st.bg, borderLeft: `4px solid ${st.border}`, borderRadius: '0 0.875rem 0.875rem 0', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
                         <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '48px' }}>{fmtTime(s.scheduled_at)}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
+                          {/* ✅ fix: 자녀이름(부모) 표시 */}
+                          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>{displayName(s)}</div>
                           <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
                           {s.memo && <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '2px' }}>📝 {s.memo}</div>}
                         </div>
@@ -336,7 +341,8 @@ export default function CoachSchedulePage() {
                                   style={{ background: st.bg, borderLeft: `3px solid ${st.border}`, borderRadius: '0 0.75rem 0.75rem 0', padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer' }}>
                                   <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '0.875rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '42px' }}>{fmtTime(s.scheduled_at)}</div>
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
+                                    {/* ✅ fix: 자녀이름(부모) 표시 */}
+                                    <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#111827' }}>{displayName(s)}</div>
                                     <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
                                   </div>
                                   <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '9999px', background: `${st.border}33`, color: st.color, flexShrink: 0 }}>{st.label}</span>
@@ -368,7 +374,8 @@ export default function CoachSchedulePage() {
             </div>
 
             <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '0.875rem 1rem', marginBottom: '1rem' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>{selected.lesson_plan?.member?.name}</div>
+              {/* ✅ fix: 모달에도 자녀이름(부모) 표시 */}
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>{displayName(selected)}</div>
               <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '3px' }}>
                 {fmtTime(selected.scheduled_at)} · {selected.duration_minutes}분 · {selected.lesson_plan?.lesson_type}
               </div>
