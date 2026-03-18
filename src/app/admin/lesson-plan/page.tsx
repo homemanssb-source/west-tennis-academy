@@ -1,6 +1,8 @@
-﻿'use client'
+'use client'
 // src/app/admin/lesson-plan/page.tsx
-// ✅ 레슨비 자동 계산 + 할인 미리보기 추가 (기존 구조 완전 유지)
+// ✅ fix: generateSchedules/saveEdit toISOString UTC 날짜 버그 수정
+// ✅ fix: fmtDt KST 기준으로 수정
+// ✅ fix: 등록 버튼 disabled 조건 + 안내 문구 추가
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -18,6 +20,18 @@ interface WtaConfig    { session_threshold: number; sat_surcharge: number; sun_s
 
 const DAYS = ['일','월','화','수','목','금','토']
 const fmt  = (n: number) => `₩${Math.max(0, n || 0).toLocaleString()}`
+
+// ✅ KST 기준 날짜 파트 추출 헬퍼
+function toKSTDateParts(dt: Date) {
+  const kst = new Date(dt.getTime() + 9 * 60 * 60 * 1000)
+  const y  = kst.getUTCFullYear()
+  const m  = String(kst.getUTCMonth() + 1).padStart(2, '0')
+  const d  = String(kst.getUTCDate()).padStart(2, '0')
+  const hh = String(kst.getUTCHours()).padStart(2, '0')
+  const mm = String(kst.getUTCMinutes()).padStart(2, '0')
+  const dow = kst.getUTCDay()
+  return { y, m, d, hh, mm, dow }
+}
 
 // ── 금액 계산 함수 (순수) ──────────────────────────────────────────
 function calcAmount(opts: {
@@ -138,14 +152,22 @@ export default function LessonPlanPage() {
     setManualAmount(null)
   }
 
+  const toggleDay = (d: number) =>
+    setSelectedDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
+
+  // ✅ fix: toISOString().split('T')[0] → 로컬 날짜 문자열로 교체 (UTC 변환 방지)
   const generateSchedules = () => {
     if (!startDate || !selectedDays.length || !count) return
     const result: Schedule[] = []
-    const cur = new Date(startDate)
+    const [y, mo, d] = startDate.split('-').map(Number)
+    const cur = new Date(y, mo - 1, d)
     let cnt = 0
     while (cnt < count) {
       if (selectedDays.includes(cur.getDay())) {
-        result.push({ datetime: `${cur.toISOString().split('T')[0]}T${time}:00+09:00`, duration: unitMin })
+        const yy  = cur.getFullYear()
+        const mm  = String(cur.getMonth() + 1).padStart(2, '0')
+        const dd  = String(cur.getDate()).padStart(2, '0')
+        result.push({ datetime: `${yy}-${mm}-${dd}T${time}:00+09:00`, duration: unitMin })
         cnt++
       }
       cur.setDate(cur.getDate() + 1)
@@ -155,41 +177,40 @@ export default function LessonPlanPage() {
     setManualAmount(null)
   }
 
-  const toggleDay = (d: number) =>
-    setSelectedDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
-
   const removeSlot = (i: number) => {
     setSchedules(prev => prev.filter((_, idx) => idx !== i))
     setManualAmount(null)
   }
 
+  // ✅ fix: KST 기준 시간 표시
   const startEdit = (i: number) => {
-    const d = new Date(schedules[i].datetime)
-    setEditTime(`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`)
+    const { hh, mm } = toKSTDateParts(new Date(schedules[i].datetime))
+    setEditTime(`${hh}:${mm}`)
     setEditIdx(i)
   }
 
+  // ✅ fix: KST 기준 날짜 추출 후 새 시간 조합
   const saveEdit = (i: number) => {
     setSchedules(prev => prev.map((s, idx) => {
       if (idx !== i) return s
-      const d = new Date(s.datetime)
-      const [h, m] = editTime.split(':').map(Number)
-      d.setHours(h, m, 0, 0)
-      return { ...s, datetime: `${d.toISOString().split('T')[0]}T${editTime}:00+09:00` }
+      const { y, m, d } = toKSTDateParts(new Date(s.datetime))
+      return { ...s, datetime: `${y}-${m}-${d}T${editTime}:00+09:00` }
     }))
     setEditIdx(null)
   }
 
+  // ✅ fix: KST 기준 날짜/시간 표시
   const fmtDt = (dt: string) => {
-    const d = new Date(dt)
-    return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+    const { y, m, d, hh, mm, dow } = toKSTDateParts(new Date(dt))
+    return `${Number(m)}/${Number(d)}(${DAYS[dow]}) ${hh}:${mm}`
   }
 
   // ── 레슨비 자동 계산 ──────────────────────────────────────────────
-  const selectedProgram    = programs.find(p => p.id === programId) ?? null
-  const effectiveBilling   = billingCount !== null ? billingCount : schedules.length
-  const satCount           = schedules.filter(s => new Date(s.datetime).getDay() === 6).length
-  const sunCount           = schedules.filter(s => new Date(s.datetime).getDay() === 0).length
+  const selectedProgram  = programs.find(p => p.id === programId) ?? null
+  const effectiveBilling = billingCount !== null ? billingCount : schedules.length
+  // ✅ fix: KST 기준 토/일 집계
+  const satCount = schedules.filter(s => toKSTDateParts(new Date(s.datetime)).dow === 6).length
+  const sunCount = schedules.filter(s => toKSTDateParts(new Date(s.datetime)).dow === 0).length
 
   const autoCalc = selectedProgram && schedules.length > 0
     ? calcAmount({
@@ -220,7 +241,7 @@ export default function LessonPlanPage() {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        member_id:       memberId,
+        member_id:        memberId,
         family_member_id: familyId || null,
         coach_id:         coachId,
         month_id:         monthId,
@@ -243,6 +264,9 @@ export default function LessonPlanPage() {
     borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif',
     color: '#111827', background: 'white', boxSizing: 'border-box' as const, outline: 'none',
   }
+
+  // ✅ fix: 등록 버튼 disabled 조건
+  const isSubmitDisabled = saving || !memberId || !coachId || !monthId || !schedules.length
 
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
@@ -316,7 +340,6 @@ export default function LessonPlanPage() {
                   </div>
                 )}
               </div>
-              {/* ✅ 할인 배지 */}
               {memberId && memberDiscount > 0 && (
                 <div style={{ marginTop: '4px', fontSize: '0.72rem', color: '#7e22ce', fontWeight: 700 }}>
                   💸 할인 적용: −{memberDiscount.toLocaleString()}원
@@ -353,7 +376,6 @@ export default function LessonPlanPage() {
                 {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
               </select>
             </div>
-
           </div>
         </div>
 
@@ -426,7 +448,7 @@ export default function LessonPlanPage() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '320px', overflowY: 'auto' }}>
               {schedules.map((s, i) => {
-                const dow = new Date(s.datetime).getDay()
+                const dow = toKSTDateParts(new Date(s.datetime)).dow
                 const isWeekend = dow === 0 || dow === 6
                 return (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '0.5rem 0.75rem', background: editIdx === i ? '#eff6ff' : isWeekend ? '#fffbeb' : '#f9fafb', borderRadius: '0.625rem', border: `1.5px solid ${editIdx === i ? '#3b82f6' : isWeekend ? '#fde68a' : 'transparent'}` }}>
@@ -464,8 +486,6 @@ export default function LessonPlanPage() {
                 <span style={{ fontSize: '0.7rem', background: '#fef3c7', color: '#92400e', borderRadius: '999px', padding: '2px 8px', fontWeight: 700 }}>수동 입력</span>
               )}
             </div>
-
-            {/* 계산 내역 */}
             {autoCalc && (
               <div style={{ marginBottom: '0.875rem', fontSize: '0.82rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #f3f4f6' }}>
@@ -502,14 +522,10 @@ export default function LessonPlanPage() {
                 )}
               </div>
             )}
-
-            {/* 최종 금액 */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', background: manualAmount !== null ? '#fffbeb' : '#eff6ff', borderRadius: '0.75rem', border: `1.5px solid ${manualAmount !== null ? '#fde68a' : '#bfdbfe'}`, marginBottom: '0.875rem' }}>
               <span style={{ fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af' }}>최종 레슨비</span>
               <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: '#1e40af' }}>{fmt(finalAmount)}</span>
             </div>
-
-            {/* 청구 횟수 조정 */}
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span>청구 횟수 조정 <span style={{ fontWeight: 400, color: '#9ca3af' }}>(서비스 제외 시 줄이기)</span></span>
@@ -526,8 +542,6 @@ export default function LessonPlanPage() {
                 <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>회 청구 <span style={{ color: '#9ca3af' }}>(실제 {schedules.length}회)</span></span>
               </div>
             </div>
-
-            {/* 수동 금액 입력 */}
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span>수동 금액 입력 (자동 계산 덮어쓰기)</span>
@@ -562,9 +576,16 @@ export default function LessonPlanPage() {
           </div>
         )}
 
-        {/* 등록 버튼 */}
-        <button onClick={handleSubmit} disabled={saving}
-          style={{ padding: '1rem', borderRadius: '0.75rem', border: 'none', background: saving ? '#e5e7eb' : '#16A34A', color: saving ? '#9ca3af' : 'white', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: '1rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
+        {/* ✅ fix: 일정 미생성 안내 문구 */}
+        {memberId && coachId && monthId && !schedules.length && (
+          <div style={{ padding: '0.75rem 1rem', background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '0.75rem', fontSize: '0.875rem', color: '#92400e', fontFamily: 'Noto Sans KR, sans-serif', textAlign: 'center' }}>
+            ⚠️ 날짜·요일·시간 선택 후 <strong>📅 일정 자동 생성</strong> 버튼을 눌러주세요
+          </div>
+        )}
+
+        {/* ✅ fix: disabled 조건 추가 */}
+        <button onClick={handleSubmit} disabled={isSubmitDisabled}
+          style={{ padding: '1rem', borderRadius: '0.75rem', border: 'none', background: isSubmitDisabled ? '#e5e7eb' : '#16A34A', color: isSubmitDisabled ? '#9ca3af' : 'white', fontWeight: 700, cursor: isSubmitDisabled ? 'not-allowed' : 'pointer', fontSize: '1rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
           {saving ? '등록 중...' : `🎾 레슨 플랜 등록${schedules.length > 0 ? ` (${schedules.length}회 · ${fmt(finalAmount)})` : ''}`}
         </button>
       </div>
