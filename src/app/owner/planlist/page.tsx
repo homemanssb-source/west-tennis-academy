@@ -11,6 +11,7 @@ interface Plan {
   completed_count: number
   payment_status: 'unpaid' | 'paid'
   amount: number
+  family_member_name: string | null  // ✅ 추가
   member: { id: string; name: string; phone: string }
   coach:  { id: string; name: string }
   month:  { id: string; year: number; month: number }
@@ -58,7 +59,7 @@ export default function LessonPlansListPage() {
   }
 
   const handleDelete = async (plan: Plan, e: React.MouseEvent) => {
-    e.preventDefault()  // Link 클릭 방지
+    e.preventDefault()
     e.stopPropagation()
     const label = `${plan.member?.name} · ${plan.month?.year}년 ${plan.month?.month}월 · ${plan.lesson_type}`
     if (!confirm(`[${label}]\n\n이 수업 플랜을 삭제할까요?\n수업 슬롯, 신청 기록이 모두 삭제됩니다.\n되돌릴 수 없습니다.`)) return
@@ -70,9 +71,16 @@ export default function LessonPlansListPage() {
     load()
   }
 
+  // ✅ fix: 가족 신청이면 "자녀명(부모명)" 표시
+  const displayName = (p: Plan) =>
+    p.family_member_name
+      ? `${p.family_member_name}(${p.member?.name})`
+      : p.member?.name
+
   const filtered = search
     ? plans.filter(p =>
         p.member?.name.includes(search) ||
+        (p.family_member_name ?? '').includes(search) ||
         p.coach?.name.includes(search) ||
         p.lesson_type.includes(search)
       )
@@ -115,7 +123,7 @@ export default function LessonPlansListPage() {
             <option value="paid">납부</option>
           </select>
           <input
-            placeholder="회원명 / 코치명 검색"
+            placeholder="회원명 / 자녀명 / 코치명 검색"
             value={search} onChange={e => setSearch(e.target.value)}
             style={{ ...selectStyle, flex: 1, minWidth: '140px' }}
           />
@@ -167,7 +175,8 @@ export default function LessonPlansListPage() {
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{p.member?.name}</span>
+                            {/* ✅ fix: 자녀명(부모명) 표시 */}
+                            <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{displayName(p)}</span>
                             <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px',
                               background: p.payment_status === 'paid' ? '#dcfce7' : '#fee2e2',
                               color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>
@@ -200,7 +209,6 @@ export default function LessonPlansListPage() {
                     </div>
                   </Link>
 
-                  {/* ── 삭제 버튼 (카드 바깥, Link와 분리) ── */}
                   <button
                     onClick={(e) => handleDelete(p, e)}
                     disabled={isDeleting}
