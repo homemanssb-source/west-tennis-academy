@@ -1,7 +1,7 @@
-'use client'
+﻿'use client'
 // src/app/member/apply/page.tsx
-// ✅ 그룹수업: 고정 스케줄 자동 표시 → 1클릭 신청
-// ✅ 개인수업: 기존 달력 선택 방식 유지
+// ??洹몃９?섏뾽: 怨좎젙 ?ㅼ?以??먮룞 ?쒖떆 ??1?대┃ ?좎껌
+// ??媛쒖씤?섏뾽: 湲곗〈 ?щ젰 ?좏깮 諛⑹떇 ?좎?
 
 import { useEffect, useState } from 'react'
 import MemberBottomNav from '@/components/MemberBottomNav'
@@ -24,16 +24,16 @@ interface MyApp {
   applicant_name?: string
 }
 
-const DAYS_KO = ['일','월','화','수','목','금','토']
+const DAYS_KO = ['??,'??,'??,'??,'紐?,'湲?,'??]
 
 const STATUS: Record<string, { label: string; color: string; bg: string }> = {
-  pending_coach: { label: '코치 확인 중', color: '#854d0e', bg: '#fef9c3' },
-  pending_admin: { label: '승인 대기',    color: '#1d4ed8', bg: '#eff6ff' },
-  approved:      { label: '확정',         color: '#15803d', bg: '#dcfce7' },
-  rejected:      { label: '거절',         color: '#b91c1c', bg: '#fee2e2' },
+  pending_coach: { label: '肄붿튂 ?뺤씤 以?, color: '#854d0e', bg: '#fef9c3' },
+  pending_admin: { label: '?뱀씤 ?湲?,    color: '#1d4ed8', bg: '#eff6ff' },
+  approved:      { label: '?뺤젙',         color: '#15803d', bg: '#dcfce7' },
+  rejected:      { label: '嫄곗젅',         color: '#b91c1c', bg: '#fee2e2' },
 }
 
-// ── 개인수업용 날짜 생성 함수 ─────────────────────────────────────
+// ?? 媛쒖씤?섏뾽???좎쭨 ?앹꽦 ?⑥닔 ?????????????????????????????????????
 function generateDates(
   year: number, month: number, startDate: Date,
   weekdays: number[], timeStr: string,
@@ -55,7 +55,7 @@ function generateDates(
     date.setHours(h, m, 0, 0)
     const ymd = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
 
-    // 휴무 체크
+    // ?대Т 泥댄겕
     const [th, tm] = tStr.split(':').map(Number)
     const reqS = th * 60 + tm
     const reqE = reqS + duration
@@ -67,9 +67,9 @@ function generateDates(
       const be = b.block_end   ? Number(b.block_end.split(':')[0])*60   + Number(b.block_end.split(':')[1])   : 24*60
       return reqS < be && reqE > bs
     })
-    if (blocked) { skipped.push({ date: ymd, time: tStr, reason: '코치 휴무' }); continue }
+    if (blocked) { skipped.push({ date: ymd, time: tStr, reason: '肄붿튂 ?대Т' }); continue }
 
-    // 정원 체크
+    // ?뺤썝 泥댄겕
     const matchingSlots = busySlots.filter(s => {
       if (s.status === 'cancelled') return false
       const sd = new Date(new Date(s.scheduled_at).getTime() + 9*60*60*1000)
@@ -84,7 +84,7 @@ function generateDates(
     const effectiveCount = matchingSlots.length > 0
       ? Math.max(...matchingSlots.map((s: any) => s.slot_count ?? 1)) : 0
     if (effectiveCount >= maxStudents) {
-      skipped.push({ date: ymd, time: tStr, reason: `정원 초과 (${effectiveCount}/${maxStudents}명)` }); continue
+      skipped.push({ date: ymd, time: tStr, reason: `?뺤썝 珥덇낵 (${effectiveCount}/${maxStudents}紐?` }); continue
     }
     dates.push(date)
   }
@@ -117,7 +117,7 @@ export default function MemberApplyPage() {
   const [programId, setProgramId] = useState('')
   const [duration,  setDuration]  = useState(60)
 
-  // 개인수업용 상태
+  // 媛쒖씤?섏뾽???곹깭
   const [weekOffset,     setWeekOffset]     = useState(0)
   const [busySlots,      setBusySlots]      = useState<SlotInfo[]>([])
   const [coachBlocks,    setCoachBlocks]    = useState<BlockInfo[]>([])
@@ -202,7 +202,7 @@ export default function MemberApplyPage() {
       .then(r => r.json()).then(d => setCoachBlocks(Array.isArray(d) ? d : []))
   }, [coachId, monthId])
 
-  // 개인수업 - 일정 자동 생성
+  // 媛쒖씤?섏뾽 - ?쇱젙 ?먮룞 ?앹꽦
   useEffect(() => {
     if (isGroupProgram || !selectedDate || !selectedMonth || !selectedTime) return
     const baseDow = selectedDate.getDay()
@@ -286,37 +286,37 @@ export default function MemberApplyPage() {
     return myApps.some(a => ['pending_coach','pending_admin'].includes(a.status) && a.requested_at?.startsWith(dt.slice(0,16)))
   }
 
-  // ── 그룹수업 신청 ────────────────────────────────────────────────
+  // ?? 洹몃９?섏뾽 ?좎껌 ????????????????????????????????????????????????
   const handleGroupSubmit = async () => {
-    if (!fixedSchedules || fixedSchedules.length === 0) return alert('고정 스케줄이 없습니다')
+    if (!fixedSchedules || fixedSchedules.length === 0) return alert('怨좎젙 ?ㅼ?以꾩씠 ?놁뒿?덈떎')
     const m = selectedMonth
     if (!m) return
     setSaving(true)
 
-    // ✅ fix #9: KST 오늘 날짜 기준으로 과거 날짜 제외
+    // ??fix #9: KST ?ㅻ뒛 ?좎쭨 湲곗??쇰줈 怨쇨굅 ?좎쭨 ?쒖쇅
     const todayKST = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    // 해당 월의 고정 스케줄 날짜 생성 (오늘 이후 + 휴무 제외)
+    // ?대떦 ?붿쓽 怨좎젙 ?ㅼ?以??좎쭨 ?앹꽦 (?ㅻ뒛 ?댄썑 + ?대Т ?쒖쇅)
     const lastDay = new Date(m.year, m.month, 0).getDate()
     const slots: string[] = []
     const skippedBlocked: string[] = []
 
     for (let d = 1; d <= lastDay; d++) {
       const ymd = `${m.year}-${String(m.month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-      if (ymd < todayKST) continue  // ✅ 오늘 이전 날짜 제외
+      if (ymd < todayKST) continue  // ???ㅻ뒛 ?댁쟾 ?좎쭨 ?쒖쇅
       const date = new Date(m.year, m.month - 1, d)
       const dow  = date.getDay()
       const sched = fixedSchedules.find(s => s.day === dow)
       if (!sched) continue
 
-      // ✅ fix: 코치 휴무 체크 추가
+      // ??fix: 肄붿튂 ?대Т 泥댄겕 異붽?
       const [sh, sm] = sched.time.split(':').map(Number)
       const reqS = sh * 60 + sm
       const reqE = reqS + duration
       const isBlocked = coachBlocks.some(b => {
         if (b.repeat_weekly) { if (b.day_of_week !== dow) return false }
         else { if (b.block_date !== ymd) return false }
-        if (!b.block_start && !b.block_end) return true  // 종일 휴무
+        if (!b.block_start && !b.block_end) return true  // 醫낆씪 ?대Т
         const bs = b.block_start ? Number(b.block_start.split(':')[0])*60 + Number(b.block_start.split(':')[1]) : 0
         const be = b.block_end   ? Number(b.block_end.split(':')[0])*60   + Number(b.block_end.split(':')[1])   : 24*60
         return reqS < be && reqE > bs
@@ -329,11 +329,11 @@ export default function MemberApplyPage() {
       slots.push(`${ymd}T${sched.time}:00+09:00`)
     }
 
-    if (slots.length === 0) { setSaving(false); return alert('남은 수업 날짜가 없습니다') }
+    if (slots.length === 0) { setSaving(false); return alert('?⑥? ?섏뾽 ?좎쭨媛 ?놁뒿?덈떎') }
 
-    // 휴무로 제외된 날짜 안내
+    // ?대Т濡??쒖쇅???좎쭨 ?덈궡
     if (skippedBlocked.length > 0) {
-      const msg = `아래 날짜는 코치 휴무로 제외됩니다:\n${skippedBlocked.join(', ')}\n\n나머지 ${slots.length}회로 신청하시겠습니까?`
+      const msg = `?꾨옒 ?좎쭨??肄붿튂 ?대Т濡??쒖쇅?⑸땲??\n${skippedBlocked.join(', ')}\n\n?섎㉧吏 ${slots.length}?뚮줈 ?좎껌?섏떆寃좎뒿?덇퉴?`
       if (!confirm(msg)) { setSaving(false); return }
     }
 
@@ -345,7 +345,7 @@ export default function MemberApplyPage() {
         month_id:         monthId,
         slots,
         duration_minutes: duration,
-        lesson_type:      selectedProgram?.name ?? '그룹레슨',
+        lesson_type:      selectedProgram?.name ?? '洹몃９?덉뒯',
         family_member_id: applicantType === 'family' ? familyId : null,
         program_id:       programId,
       }),
@@ -353,11 +353,11 @@ export default function MemberApplyPage() {
     const data = await res.json()
     setSaving(false)
     if (data.error) { alert(data.error); return }
-    alert(`${slots.length}회 수업 신청 완료!\n코치 확인 후 안내드립니다.`)
+    alert(`${slots.length}???섏뾽 ?좎껌 ?꾨즺!\n肄붿튂 ?뺤씤 ???덈궡?쒕┰?덈떎.`)
     setTab('list'); setStep(1); loadMyApps()
   }
 
-  // ── 개인수업 신청 ────────────────────────────────────────────────
+  // ?? 媛쒖씤?섏뾽 ?좎껌 ????????????????????????????????????????????????
   const handlePersonalSubmit = async () => {
     if (!finalDates.length) return
     setSaving(true)
@@ -372,7 +372,7 @@ export default function MemberApplyPage() {
       body: JSON.stringify({
         coach_id: coachId, month_id: monthId, slots,
         duration_minutes: duration,
-        lesson_type: selectedProgram?.name ?? '개인레슨',
+        lesson_type: selectedProgram?.name ?? '媛쒖씤?덉뒯',
         family_member_id: applicantType === 'family' ? familyId : null,
         ...(programId ? { program_id: programId } : {}),
       }),
@@ -380,18 +380,18 @@ export default function MemberApplyPage() {
     const data = await res.json()
     setSaving(false)
     if (data.error) { alert(data.error); return }
-    alert(`${finalDates.length}회 수업 신청 완료!\n코치 확인 후 안내드립니다.`)
+    alert(`${finalDates.length}???섏뾽 ?좎껌 ?꾨즺!\n肄붿튂 ?뺤씤 ???덈궡?쒕┰?덈떎.`)
     setTab('list'); setStep(1); loadMyApps()
   }
 
   const handleCancel = async (appId: string) => {
-    if (!confirm('수업 신청을 취소하시겠습니까?')) return
+    if (!confirm('?섏뾽 ?좎껌??痍⑥냼?섏떆寃좎뒿?덇퉴?')) return
     setCancelling(appId)
     const res = await fetch(`/api/lesson-applications/${appId}`, { method: 'DELETE' })
     const data = await res.json()
     setCancelling(null)
-    if (!res.ok) { alert(data.error ?? '취소 실패'); return }
-    alert('신청이 취소되었습니다.')
+    if (!res.ok) { alert(data.error ?? '痍⑥냼 ?ㅽ뙣'); return }
+    alert('?좎껌??痍⑥냼?섏뿀?듬땲??')
     loadMyApps()
   }
 
@@ -405,21 +405,21 @@ export default function MemberApplyPage() {
     prevBtn: { flex: 1, padding: '0.875rem', borderRadius: '0.875rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', cursor: 'pointer' as const, fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 600, fontSize: '0.875rem' },
   }
 
-  // STEP1 다음 버튼 disabled
+  // STEP1 ?ㅼ쓬 踰꾪듉 disabled
   const step1Disabled = !coachId || !monthId || !programId
     || (applicantType === 'family' && !familyId)
     || !!months.find(m => m.id === monthId)?.draft_open
 
   return (
     <div className="mobile-wrap" style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      {/* 헤더 */}
+      {/* ?ㅻ뜑 */}
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.25rem', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>🎾 수업 신청</div>
+        <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>?렱 ?섏뾽 ?좎껌</div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {(['new','list'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ flex: 1, padding: '0.5rem', borderRadius: '0.75rem', border: 'none', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 700, fontSize: '0.85rem', background: tab === t ? '#16A34A' : '#f3f4f6', color: tab === t ? 'white' : '#6b7280' }}>
-              {t === 'new' ? '+ 새 신청' : `내 신청 (${myApps.length})`}
+              {t === 'new' ? '+ ???좎껌' : `???좎껌 (${myApps.length})`}
             </button>
           ))}
         </div>
@@ -428,23 +428,23 @@ export default function MemberApplyPage() {
       {tab === 'new' && (
         <div style={{ padding: '1rem 1.25rem 6rem' }}>
 
-          {/* ── STEP 1: 기본 정보 (공통) ── */}
+          {/* ?? STEP 1: 湲곕낯 ?뺣낫 (怨듯넻) ?? */}
           {step === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={s.card}>
-                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>기본 정보</h2>
+                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>湲곕낯 ?뺣낫</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
 
                   {family.length > 0 && (
                     <div>
-                      <label style={s.label}>신청자</label>
+                      <label style={s.label}>?좎껌??/label>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => setApplicantType('self')} style={applicantType === 'self' ? s.btnOn : s.btn}>본인</button>
-                        <button onClick={() => setApplicantType('family')} style={applicantType === 'family' ? s.btnOn : s.btn}>가족</button>
+                        <button onClick={() => setApplicantType('self')} style={applicantType === 'self' ? s.btnOn : s.btn}>蹂몄씤</button>
+                        <button onClick={() => setApplicantType('family')} style={applicantType === 'family' ? s.btnOn : s.btn}>媛議?/button>
                       </div>
                       {applicantType === 'family' && (
                         <select value={familyId} onChange={e => setFamilyId(e.target.value)} style={{ ...s.input, marginTop: '0.5rem' }}>
-                          <option value="">가족 선택</option>
+                          <option value="">媛議??좏깮</option>
                           {family.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                         </select>
                       )}
@@ -452,19 +452,19 @@ export default function MemberApplyPage() {
                   )}
 
                   <div>
-                    <label style={s.label}>코치</label>
+                    <label style={s.label}>肄붿튂</label>
                     <select value={coachId} onChange={e => setCoachId(e.target.value)} style={s.input}>
-                      <option value="">코치를 선택해주세요</option>
-                      {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 코치</option>)}
+                      <option value="">肄붿튂瑜??좏깮?댁＜?몄슂</option>
+                      {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 肄붿튂</option>)}
                     </select>
                   </div>
 
                   <div>
-                    <label style={s.label}>수업 월</label>
+                    <label style={s.label}>?섏뾽 ??/label>
                     <select value={monthId} onChange={e => setMonthId(e.target.value)} style={s.input}>
                       {months.map(m => (
                         <option key={m.id} value={m.id} disabled={!!m.draft_open}>
-                          {m.year}년 {m.month}월{m.draft_open ? ' (일정 준비 중)' : ''}
+                          {m.year}??{m.month}??m.draft_open ? ' (?쇱젙 以鍮?以?' : ''}
                         </option>
                       ))}
                     </select>
@@ -472,16 +472,16 @@ export default function MemberApplyPage() {
 
                   <div>
                     <label style={s.label}>
-                      프로그램 <span style={{ color: '#ef4444', fontSize: '0.7rem' }}>* 필수</span>
-                      {coachId && <span style={{ fontWeight: 400, color: '#3b82f6', marginLeft: '6px' }}>— {coaches.find(c=>c.id===coachId)?.name} 코치</span>}
+                      ?꾨줈洹몃옩 <span style={{ color: '#ef4444', fontSize: '0.7rem' }}>* ?꾩닔</span>
+                      {coachId && <span style={{ fontWeight: 400, color: '#3b82f6', marginLeft: '6px' }}>??{coaches.find(c=>c.id===coachId)?.name} 肄붿튂</span>}
                     </label>
                     {!coachId ? (
                       <div style={{ padding: '0.625rem', background: '#f9fafb', borderRadius: '0.625rem', border: '1.5px dashed #e5e7eb', fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center' }}>
-                        👆 먼저 코치를 선택해주세요
+                        ?몘 癒쇱? 肄붿튂瑜??좏깮?댁＜?몄슂
                       </div>
                     ) : programs.length === 0 ? (
                       <div style={{ padding: '0.625rem', background: '#fef9c3', borderRadius: '0.625rem', border: '1.5px solid #fde68a', fontSize: '0.8rem', color: '#854d0e' }}>
-                        ⚠️ 등록된 수업 프로그램이 없습니다
+                        ?좑툘 ?깅줉???섏뾽 ?꾨줈洹몃옩???놁뒿?덈떎
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -501,12 +501,12 @@ export default function MemberApplyPage() {
                                 <span style={{ fontWeight: 700, fontSize: '0.875rem', color: isSelected ? '#15803d' : '#111827' }}>{p.name}</span>
                                 <div style={{ display: 'flex', gap: '4px' }}>
                                   <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 7px', borderRadius: '9999px', background: isGroup ? '#fef9c3' : '#eff6ff', color: isGroup ? '#854d0e' : '#1d4ed8' }}>
-                                    {isGroup ? `그룹 최대 ${p.max_students}명` : '개인'}
+                                    {isGroup ? `洹몃９ 理쒕? ${p.max_students}紐? : '媛쒖씤'}
                                   </span>
-                                  <span style={{ fontSize: '0.68rem', color: '#9ca3af', padding: '2px 7px' }}>{p.unit_minutes}분</span>
+                                  <span style={{ fontSize: '0.68rem', color: '#9ca3af', padding: '2px 7px' }}>{p.unit_minutes}遺?/span>
                                 </div>
                               </div>
-                              {/* 그룹수업 고정 스케줄 미리보기 */}
+                              {/* 洹몃９?섏뾽 怨좎젙 ?ㅼ?以?誘몃━蹂닿린 */}
                               {isGroup && p.fixed_schedules && p.fixed_schedules.length > 0 && (
                                 <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                   {[...p.fixed_schedules].sort((a,b)=>a.day-b.day).map((sch, i) => (
@@ -517,7 +517,7 @@ export default function MemberApplyPage() {
                                 </div>
                               )}
                               {isGroup && (!p.fixed_schedules || p.fixed_schedules.length === 0) && (
-                                <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#9ca3af' }}>스케줄 미등록 (관리자 문의)</div>
+                                <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#9ca3af' }}>?ㅼ?以?誘몃벑濡?(愿由ъ옄 臾몄쓽)</div>
                               )}
                             </button>
                           )
@@ -528,67 +528,66 @@ export default function MemberApplyPage() {
                 </div>
               </div>
 
-              {/* 그룹수업: 바로 신청 가능 미리보기 */}
+              {/* 洹몃９?섏뾽: 諛붾줈 ?좎껌 媛??誘몃━蹂닿린 */}
               {selectedProgram && isGroupProgram && fixedSchedules && fixedSchedules.length > 0 && (
                 <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '1rem', padding: '1.25rem' }}>
                   <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1e40af', marginBottom: '0.75rem' }}>
-                    📅 {selectedProgram.name} 수업 일정
+                    ?뱟 {selectedProgram.name} ?섏뾽 ?쇱젙
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
                     {[...fixedSchedules].sort((a,b)=>a.day-b.day).map((sch, i) => (
                       <div key={i} style={{ padding: '0.5rem 0.875rem', background: 'white', borderRadius: '0.625rem', border: '1.5px solid #93c5fd', fontSize: '0.85rem', fontWeight: 700, color: '#1e40af' }}>
-                        매주 {DAYS_KO[sch.day]}요일 {sch.time}
+                        留ㅼ＜ {DAYS_KO[sch.day]}?붿씪 {sch.time}
                       </div>
                     ))}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#3b82f6' }}>
-                    ※ {selectedMonth?.year}년 {selectedMonth?.month}월 해당 요일 전체 수업이 신청됩니다
-                  </div>
+                    ??{selectedMonth?.year}??{selectedMonth?.month}???대떦 ?붿씪 ?꾩껜 ?섏뾽???좎껌?⑸땲??                  </div>
                 </div>
               )}
 
               {coachId && !programId && programs.length > 0 && (
                 <div style={{ padding: '0.625rem', background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '0.75rem', fontSize: '0.8rem', color: '#92400e', textAlign: 'center', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                  ⚠️ 프로그램을 선택해주세요
+                  ?좑툘 ?꾨줈洹몃옩???좏깮?댁＜?몄슂
                 </div>
               )}
 
-              {/* 그룹수업: 바로 신청 / 개인수업: 다음으로 */}
+              {/* 洹몃９?섏뾽: 諛붾줈 ?좎껌 / 媛쒖씤?섏뾽: ?ㅼ쓬?쇰줈 */}
               {isGroupProgram && fixedSchedules && fixedSchedules.length > 0 ? (
                 <button onClick={handleGroupSubmit} disabled={step1Disabled || saving}
                   style={{ ...s.nextBtn(step1Disabled || saving), flex: 'none', width: '100%', fontSize: '1rem' }}>
-                  {saving ? '신청 중...' : `🎾 ${selectedProgram?.name} 신청하기`}
+                  {saving ? '?좎껌 以?..' : `?렱 ${selectedProgram?.name} ?좎껌?섍린`}
                 </button>
               ) : (
                 <button onClick={() => setStep(2)}
                   disabled={step1Disabled || (isGroupProgram && (!fixedSchedules || fixedSchedules.length === 0))}
                   style={s.nextBtn(step1Disabled || (isGroupProgram && (!fixedSchedules || fixedSchedules.length === 0)))}>
-                  {isGroupProgram ? '⚠️ 스케줄 미등록 — 관리자 문의' : '다음 → 날짜 선택'}
+                  {isGroupProgram ? '?좑툘 ?ㅼ?以?誘몃벑濡???愿由ъ옄 臾몄쓽' : '?ㅼ쓬 ???좎쭨 ?좏깮'}
                 </button>
               )}
             </div>
           )}
 
-          {/* ── STEP 2: 날짜 선택 (개인수업 전용) ── */}
+          {/* ?? STEP 2: ?좎쭨 ?좏깮 (媛쒖씤?섏뾽 ?꾩슜) ?? */}
           {step === 2 && !isGroupProgram && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ padding: '0.75rem 1rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.875rem', fontSize: '0.8rem', color: '#1d4ed8' }}>
-                <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 첫 수업 날짜와 시간을 선택하세요</div>
-                <div style={{ color: '#3b82f6', lineHeight: 1.5 }}>이 날짜를 기준으로 반복 수업 일정이 자동 생성됩니다</div>
+                <div style={{ fontWeight: 700, marginBottom: '4px' }}>?뱟 泥??섏뾽 ?좎쭨? ?쒓컙???좏깮?섏꽭??/div>
+                <div style={{ color: '#3b82f6', lineHeight: 1.5 }}>???좎쭨瑜?湲곗??쇰줈 諛섎났 ?섏뾽 ?쇱젙???먮룞 ?앹꽦?⑸땲??/div>
               </div>
               <div style={s.card}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                  <button onClick={() => setWeekOffset(w => w-1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>← 이전</button>
+                  <button onClick={() => setWeekOffset(w => w-1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>???댁쟾</button>
                   <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827' }}>
                     {weekDates[0].getMonth()+1}/{weekDates[0].getDate()} ~ {weekDates[6].getMonth()+1}/{weekDates[6].getDate()}
                   </span>
-                  <button onClick={() => setWeekOffset(w => w+1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>다음 →</button>
+                  <button onClick={() => setWeekOffset(w => w+1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>?ㅼ쓬 ??/button>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.625rem', fontSize: '0.7rem', color: '#6b7280' }}>
-                  <span style={{ color: '#15803d' }}>○ 가능</span>
-                  <span style={{ color: '#b91c1c' }}>✕ 수업있음</span>
-                  <span style={{ color: '#854d0e' }}>… 신청대기</span>
-                  <span style={{ color: '#7c3aed' }}>휴 코치휴무</span>
+                  <span style={{ color: '#15803d' }}>??媛??/span>
+                  <span style={{ color: '#b91c1c' }}>???섏뾽?덉쓬</span>
+                  <span style={{ color: '#854d0e' }}>???좎껌?湲?/span>
+                  <span style={{ color: '#7c3aed' }}>??肄붿튂?대Т</span>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '340px' }}>
@@ -617,7 +616,7 @@ export default function MemberApplyPage() {
                                 <button disabled={isPast || busy || blocked || pending}
                                   onClick={() => { setSelectedDate(new Date(date)); setSelectedTime(tStr) }}
                                   style={{ width: '100%', padding: '3px 0', borderRadius: '4px', border: isSel ? '2px solid #16A34A' : 'none', fontSize: '0.65rem', cursor: (isPast||busy||blocked||pending)?'not-allowed':'pointer', background: isSel?'#16A34A':busy?'#fee2e2':blocked?'#f3f0ff':pending?'#fef9c3':isPast?'#f9fafb':'#f0fdf4', color: isSel?'white':busy?'#fca5a5':blocked?'#7c3aed':pending?'#854d0e':isPast?'#d1d5db':'#15803d' }}>
-                                  {isSel?'✓':busy?'✕':blocked?'휴':pending?'…':'○'}
+                                  {isSel?'??:busy?'??:blocked?'??:pending?'??:'??}
                                 </button>
                               </td>
                             )
@@ -629,24 +628,24 @@ export default function MemberApplyPage() {
                 </div>
                 {selectedDate && selectedTime && (
                   <div style={{ marginTop: '0.75rem', padding: '0.625rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.625rem', fontSize: '0.8rem', color: '#15803d', fontWeight: 600 }}>
-                    ✅ 선택: {fmtDate(selectedDate)} {selectedTime}
+                    ???좏깮: {fmtDate(selectedDate)} {selectedTime}
                   </div>
                 )}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setStep(1)} style={s.prevBtn}>← 이전</button>
-                <button onClick={() => setStep(3)} disabled={!selectedDate || !selectedTime} style={s.nextBtn(!selectedDate || !selectedTime)}>다음 → 반복 설정</button>
+                <button onClick={() => setStep(1)} style={s.prevBtn}>???댁쟾</button>
+                <button onClick={() => setStep(3)} disabled={!selectedDate || !selectedTime} style={s.nextBtn(!selectedDate || !selectedTime)}>?ㅼ쓬 ??諛섎났 ?ㅼ젙</button>
               </div>
             </div>
           )}
 
-          {/* ── STEP 3: 반복 설정 (개인수업 전용) ── */}
+          {/* ?? STEP 3: 諛섎났 ?ㅼ젙 (媛쒖씤?섏뾽 ?꾩슜) ?? */}
           {step === 3 && !isGroupProgram && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={s.card}>
-                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem', color: '#111827' }}>반복 요일 설정</h2>
+                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem', color: '#111827' }}>諛섎났 ?붿씪 ?ㅼ젙</h2>
                 <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '0.875rem' }}>
-                  기본 요일({selectedDate ? DAYS_KO[selectedDate.getDay()] : ''})에 추가로 반복할 요일 선택
+                  湲곕낯 ?붿씪({selectedDate ? DAYS_KO[selectedDate.getDay()] : ''})??異붽?濡?諛섎났???붿씪 ?좏깮
                 </div>
                 <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1rem' }}>
                   {DAYS_KO.map((d, i) => {
@@ -664,13 +663,13 @@ export default function MemberApplyPage() {
                 </div>
                 {repeatDays.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>추가 요일 시간</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151' }}>異붽? ?붿씪 ?쒓컙</div>
                     {repeatDays.map(dow => (
                       <div key={dow} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.625rem' }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', minWidth: '20px' }}>{DAYS_KO[dow]}</span>
                         <select value={dayTimes[dow] ?? ''} onChange={e => setDayTimes(prev => ({ ...prev, [dow]: e.target.value }))}
                           style={{ flex: 1, padding: '0.375rem 0.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', fontSize: '0.8rem', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                          <option value="">시간 선택</option>
+                          <option value="">?쒓컙 ?좏깮</option>
                           {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
@@ -680,15 +679,15 @@ export default function MemberApplyPage() {
                 {generatedDates.length > 0 ? (
                   <>
                     <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>
-                      생성 예정 일정 <span style={{ color: '#16A34A' }}>({generatedDates.length}회)</span>
-                      {skippedDates.length > 0 && <span style={{ color: '#d97706', marginLeft: '0.5rem' }}>⚠️ {skippedDates.length}회 제외</span>}
+                      ?앹꽦 ?덉젙 ?쇱젙 <span style={{ color: '#16A34A' }}>({generatedDates.length}??</span>
+                      {skippedDates.length > 0 && <span style={{ color: '#d97706', marginLeft: '0.5rem' }}>?좑툘 {skippedDates.length}???쒖쇅</span>}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '180px', overflowY: 'auto' }}>
                       {generatedDates.map((d, i) => (
                         <div key={i} onClick={() => {
                           setExcludedIdxs(prev => { const next = new Set(prev); next.has(i) ? next.delete(i) : next.add(i); return next })
                         }} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0.625rem', background: excludedIdxs.has(i)?'#fef2f2':'#f0fdf4', borderRadius: '0.5rem', cursor: 'pointer', border: `1px solid ${excludedIdxs.has(i)?'#fecaca':'#86efac'}` }}>
-                          <span style={{ fontSize: '0.7rem', color: excludedIdxs.has(i)?'#b91c1c':'#16A34A' }}>{excludedIdxs.has(i)?'✕':'✓'}</span>
+                          <span style={{ fontSize: '0.7rem', color: excludedIdxs.has(i)?'#b91c1c':'#16A34A' }}>{excludedIdxs.has(i)?'??:'??}</span>
                           <span style={{ fontSize: '0.78rem', color: excludedIdxs.has(i)?'#9ca3af':'#374151', textDecoration: excludedIdxs.has(i)?'line-through':'none' }}>{fmtDateTime(d)}</span>
                         </div>
                       ))}
@@ -696,60 +695,58 @@ export default function MemberApplyPage() {
                   </>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '1.5rem', color: '#9ca3af', background: '#f9fafb', borderRadius: '0.75rem', fontSize: '0.85rem' }}>
-                    선택한 날짜 기준으로 일정이 생성됩니다
-                  </div>
+                    ?좏깮???좎쭨 湲곗??쇰줈 ?쇱젙???앹꽦?⑸땲??                  </div>
                 )}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setStep(2)} style={s.prevBtn}>← 이전</button>
+                <button onClick={() => setStep(2)} style={s.prevBtn}>???댁쟾</button>
                 <button onClick={() => setStep(4)}
                   disabled={!selectedDate || !selectedTime || repeatDays.some(dow => !dayTimes[dow])}
                   style={s.nextBtn(!selectedDate || !selectedTime || repeatDays.some(dow => !dayTimes[dow]))}>
-                  다음 → 미리보기
+                  ?ㅼ쓬 ??誘몃━蹂닿린
                 </button>
               </div>
             </div>
           )}
 
-          {/* ── STEP 4: 미리보기 (개인수업 전용) ── */}
+          {/* ?? STEP 4: 誘몃━蹂닿린 (媛쒖씤?섏뾽 ?꾩슜) ?? */}
           {step === 4 && !isGroupProgram && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={s.card}>
-                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>📋 신청 미리보기</h2>
+                <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>?뱥 ?좎껌 誘몃━蹂닿린</h2>
                 <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1rem' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem', fontSize: '0.8rem' }}>
                     {[
-                      ['코치',    `${selectedCoach?.name} 코치`],
-                      ['레슨',    selectedProgram?.name ?? '개인레슨'],
-                      ['시간',    `${duration}분`],
-                      ['수업 월', `${selectedMonth?.year}년 ${selectedMonth?.month}월`],
-                      ['총 횟수', `${finalDates.length}회`],
+                      ['肄붿튂',    `${selectedCoach?.name} 肄붿튂`],
+                      ['?덉뒯',    selectedProgram?.name ?? '媛쒖씤?덉뒯'],
+                      ['?쒓컙',    `${duration}遺?],
+                      ['?섏뾽 ??, `${selectedMonth?.year}??${selectedMonth?.month}??],
+                      ['珥??잛닔', `${finalDates.length}??],
                     ].map(([label, val]) => (
                       <div key={label}>
                         <span style={{ color: '#6b7280' }}>{label}</span><br/>
-                        <strong style={{ color: label==='총 횟수'?'#16A34A':'#111827', fontSize: label==='총 횟수'?'1.1rem':'0.875rem' }}>{val}</strong>
+                        <strong style={{ color: label==='珥??잛닔'?'#16A34A':'#111827', fontSize: label==='珥??잛닔'?'1.1rem':'0.875rem' }}>{val}</strong>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>전체 일정</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>?꾩껜 ?쇱젙</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '220px', overflowY: 'auto' }}>
                   {finalDates.map((d, i) => (
                     <div key={i} style={{ display: 'flex', gap: '0.5rem', padding: '0.375rem 0.625rem', background: '#f9fafb', borderRadius: '0.5rem' }}>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16A34A', minWidth: '28px' }}>{i+1}회</span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16A34A', minWidth: '28px' }}>{i+1}??/span>
                       <span style={{ fontSize: '0.8rem', color: '#374151' }}>{fmtDateTime(d)}</span>
                     </div>
                   ))}
                 </div>
                 <div style={{ marginTop: '0.875rem', padding: '0.625rem', background: '#fef9c3', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#854d0e' }}>
-                  ※ 금액은 관리자가 별도 입력합니다
-                </div>
+                  ??湲덉븸? 愿由ъ옄媛 蹂꾨룄 ?낅젰?⑸땲??                </div>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setStep(3)} style={s.prevBtn}>← 수정</button>
+                <button onClick={() => setStep(3)} style={s.prevBtn}>???섏젙</button>
                 <button onClick={handlePersonalSubmit} disabled={saving}
                   style={{ flex: 2, padding: '0.875rem', borderRadius: '0.875rem', border: 'none', fontWeight: 700, fontSize: '1rem', fontFamily: 'Noto Sans KR, sans-serif', cursor: saving?'not-allowed':'pointer', background: saving?'#e5e7eb':'#16A34A', color: saving?'#9ca3af':'white' }}>
-                  {saving ? '신청 중...' : `🎾 ${finalDates.length}회 신청하기`}
+                  {saving ? '?좎껌 以?..' : `?렱 ${finalDates.length}???좎껌?섍린`}
                 </button>
               </div>
             </div>
@@ -757,15 +754,15 @@ export default function MemberApplyPage() {
         </div>
       )}
 
-      {/* ── 내 신청 목록 ── */}
+      {/* ?? ???좎껌 紐⑸줉 ?? */}
       {tab === 'list' && (
         <div style={{ padding: '1.25rem', paddingBottom: '6rem' }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>遺덈윭?ㅻ뒗 以?..</div>
           ) : myApps.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎾</div>
-              <p style={{ fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>신청 내역이 없습니다</p>
+              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>?렱</div>
+              <p style={{ fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>?좎껌 ?댁뿭???놁뒿?덈떎</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -776,12 +773,11 @@ export default function MemberApplyPage() {
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                          {app.coach?.name} 코치{app.lesson_type && ` · ${app.lesson_type}`}
+                          {app.coach?.name} 肄붿튂{app.lesson_type && ` 쨌 ${app.lesson_type}`}
                           {app.applicant_name && <span style={{ color: '#6b7280', fontWeight: 400 }}> ({app.applicant_name})</span>}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>
-                          {app.month?.year}년 {app.month?.month}월 · {app.duration_minutes}분
-                        </div>
+                          {app.month?.year}??{app.month?.month}??쨌 {app.duration_minutes}遺?                        </div>
                       </div>
                       <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: '9999px', background: st.bg, color: st.color, whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {st.label}
@@ -789,22 +785,22 @@ export default function MemberApplyPage() {
                     </div>
                     {(app.coach_note || app.admin_note) && (
                       <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#6b7280' }}>
-                        {app.coach_note && <div>코치: {app.coach_note}</div>}
-                        {app.admin_note && <div>관리자: {app.admin_note}</div>}
+                        {app.coach_note && <div>肄붿튂: {app.coach_note}</div>}
+                        {app.admin_note && <div>愿由ъ옄: {app.admin_note}</div>}
                       </div>
                     )}
                     <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '0.5rem' }}>
-                      신청일: {new Date(app.requested_at).toLocaleDateString('ko-KR')}
+                      ?좎껌?? {new Date(app.requested_at).toLocaleDateString('ko-KR')}
                     </div>
                     {app.status === 'pending_coach' && (
                       <button onClick={() => handleCancel(app.id)} disabled={cancelling === app.id}
                         style={{ marginTop: '0.625rem', width: '100%', padding: '0.5rem', borderRadius: '0.625rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontSize: '0.78rem', fontWeight: 700, cursor: cancelling===app.id?'not-allowed':'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                        {cancelling === app.id ? '취소 중...' : '✕ 신청 취소'}
+                        {cancelling === app.id ? '痍⑥냼 以?..' : '???좎껌 痍⑥냼'}
                       </button>
                     )}
                     {app.status === 'pending_admin' && (
                       <div style={{ marginTop: '0.5rem', padding: '0.4rem 0.75rem', background: '#eff6ff', borderRadius: '0.5rem', fontSize: '0.72rem', color: '#1d4ed8' }}>
-                        ℹ️ 코치 확인 완료. 관리자 최종 승인 대기 중입니다.
+                        ?뱄툘 肄붿튂 ?뺤씤 ?꾨즺. 愿由ъ옄 理쒖쥌 ?뱀씤 ?湲?以묒엯?덈떎.
                       </div>
                     )}
                   </div>
