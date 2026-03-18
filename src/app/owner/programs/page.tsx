@@ -32,7 +32,7 @@ function FixedScheduleEditor({
   const updateSlot = (i: number, field: 'day' | 'time', value: string | number) =>
     onChange(schedules.map((s, idx) => idx === i ? { ...s, [field]: value } : s))
 
-  const TIME_OPTIONS = []
+  const TIME_OPTIONS: string[] = []
   for (let h = 6; h <= 22; h++) {
     TIME_OPTIONS.push(`${String(h).padStart(2,'0')}:00`)
     TIME_OPTIONS.push(`${String(h).padStart(2,'0')}:30`)
