@@ -2,6 +2,7 @@
 // ✅ fix: 단체수업 max_students 정원 체크 추가
 // ✅ fix: 충돌 에러 메시지 KST 기준으로 수정
 // ✅ fix: 코치 휴무 체크 KST 기준으로 수정
+// ✅ fix: family_member_id 저장 추가
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
       member_id, coach_id, month_id, lesson_type,
       unit_minutes, schedules, amount, program_id,
       billing_count: reqBillingCount,
+      family_member_id,
     } = await req.json()
 
     if (!member_id || !coach_id || !month_id || !lesson_type || !schedules?.length) {
@@ -207,7 +209,8 @@ export async function POST(req: NextRequest) {
         sun_count,
         discount_amount,
         discount_memo,
-        ...(program_id ? { program_id } : {}),
+        ...(program_id       ? { program_id }       : {}),
+        ...(family_member_id ? { family_member_id } : {}),
       })
       .select()
       .single()

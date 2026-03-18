@@ -1,5 +1,5 @@
 ﻿// src/app/api/weekly-schedule/route.ts
-// ✅ fix: family_member_name 추가 (가족 신청 표시)
+// ✅ fix: family_member_name 주입 (lesson_plans.family_member_id 직접 조회)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
         lesson_plan:lesson_plan_id (
           id, lesson_type,
           member:member_id ( id, name ),
-          coach:coach_id ( id, name )
+          coach:coach_id ( id, name ),
+          family_member:family_member_id ( name )
         )
       `)
       .gte('scheduled_at', startStr)
@@ -47,37 +48,10 @@ export async function GET(req: NextRequest) {
       .or(`and(repeat_weekly.eq.false,block_date.gte.${startDate},block_date.lte.${endDate}),repeat_weekly.eq.true`),
   ])
 
-  // ✅ plan_id 목록으로 lesson_applications 조회 → family_member_id 확보
-  const planIds = [...new Set((slots ?? []).map((s: any) => s.lesson_plan?.id).filter(Boolean))]
-  const familyNameMap: Record<string, string> = {}  // plan_id → 자녀 이름
-
-  if (planIds.length > 0) {
-    const { data: apps } = await supabaseAdmin
-      .from('lesson_applications')
-      .select('lesson_plan_id, family_member_id')
-      .in('lesson_plan_id', planIds)
-      .not('family_member_id', 'is', null)
-
-    if (apps && apps.length > 0) {
-      const familyIds = [...new Set(apps.map((a: any) => a.family_member_id).filter(Boolean))]
-      const { data: familyMembers } = await supabaseAdmin
-        .from('family_members')
-        .select('id, name')
-        .in('id', familyIds)
-
-      const fmMap = new Map((familyMembers ?? []).map((f: any) => [f.id, f.name]))
-      apps.forEach((a: any) => {
-        if (a.lesson_plan_id && a.family_member_id && fmMap.has(a.family_member_id)) {
-          familyNameMap[a.lesson_plan_id] = fmMap.get(a.family_member_id)!
-        }
-      })
-    }
-  }
-
-  // ✅ 슬롯에 family_member_name 주입
+  // ✅ fix: lesson_plans.family_member_id 직접 조회
   const enrichedSlots = (slots ?? []).map((s: any) => ({
     ...s,
-    family_member_name: s.lesson_plan?.id ? (familyNameMap[s.lesson_plan.id] ?? null) : null,
+    family_member_name: s.lesson_plan?.family_member?.name ?? null,
   }))
 
   const blocks = (allBlocks ?? []).filter(b =>

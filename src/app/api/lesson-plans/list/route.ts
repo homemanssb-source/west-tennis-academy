@@ -1,3 +1,4 @@
+// ✅ fix: family_member_name 주입 (lesson_plans.family_member_id 직접 조회)
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -21,7 +22,8 @@ export async function GET(req: Request) {
       member:profiles!lesson_plans_member_id_fkey(id, name, phone),
       coach:profiles!lesson_plans_coach_id_fkey(id, name),
       month:months(id, year, month),
-      slots:lesson_slots(id, status)
+      slots:lesson_slots(id, status),
+      family_member:family_member_id(name)
     `)
     .order('created_at', { ascending: false })
 
@@ -33,43 +35,11 @@ export async function GET(req: Request) {
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // total_count를 실제 슬롯 수로 보정
-  const plans = (data ?? []).map((p: any) => ({
+  const result = (data ?? []).map((p: any) => ({
     ...p,
-    total_count:      p.slots?.length ?? p.total_count,
-    completed_count:  p.slots?.filter((s: any) => s.status === 'completed').length ?? p.completed_count,
-  }))
-
-  // ✅ fix: family_member_name 주입
-  const planIds = plans.map((p: any) => p.id)
-  const familyNameMap: Record<string, string> = {}
-
-  if (planIds.length > 0) {
-    const { data: apps } = await supabaseAdmin
-      .from('lesson_applications')
-      .select('lesson_plan_id, family_member_id')
-      .in('lesson_plan_id', planIds)
-      .not('family_member_id', 'is', null)
-
-    if (apps && apps.length > 0) {
-      const familyIds = [...new Set(apps.map((a: any) => a.family_member_id).filter(Boolean))]
-      const { data: familyMembers } = await supabaseAdmin
-        .from('family_members')
-        .select('id, name')
-        .in('id', familyIds)
-
-      const fmMap = new Map((familyMembers ?? []).map((f: any) => [f.id, f.name]))
-      apps.forEach((a: any) => {
-        if (a.lesson_plan_id && a.family_member_id && fmMap.has(a.family_member_id)) {
-          familyNameMap[a.lesson_plan_id] = fmMap.get(a.family_member_id)!
-        }
-      })
-    }
-  }
-
-  const result = plans.map((p: any) => ({
-    ...p,
-    family_member_name: familyNameMap[p.id] ?? null,
+    total_count:        p.slots?.length ?? p.total_count,
+    completed_count:    p.slots?.filter((s: any) => s.status === 'completed').length ?? p.completed_count,
+    family_member_name: p.family_member?.name ?? null,
   }))
 
   return NextResponse.json(result)
