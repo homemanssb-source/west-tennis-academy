@@ -1,9 +1,6 @@
 'use client'
 // src/app/coach/schedule/page.tsx
-// ✅ [FIX] getWeekDates UTC → KST 기준 날짜 키 사용
-// ✅ [FIX] handleRescheduleOpen 기본값 UTC 버그 수정
-// ✅ [FIX] 모든 fetch 핸들러 try-catch + saving/requesting 해제 보장
-// ✅ [FIX] slotsByDate 매핑 키를 KST 날짜 기준으로 통일
+// ✅ fix: 주간뷰 슬롯 날짜 그룹핑 KST 기준으로 수정 (자정 근처 오표시 버그)
 
 import { useEffect, useState, useCallback } from 'react'
 import CoachBottomNav from '@/components/CoachBottomNav'
@@ -30,31 +27,24 @@ const STATUS_STYLE: Record<string, { bg: string; border: string; color: string; 
   makeup:    { bg: '#fdf4ff', border: '#c084fc', color: '#7e22ce', label: '보강' },
 }
 
-const DAY_KO = ['일', '월', '화', '수', '목', '금', '토']
+const DAY_KO = ['일','월','화','수','목','금','토']
 
-// ✅ [FIX] KST 기준 today 문자열
-function getTodayKST(): string {
-  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000)
-  const y = kst.getUTCFullYear()
-  const m = String(kst.getUTCMonth() + 1).padStart(2, '0')
-  const d = String(kst.getUTCDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+// ✅ KST 기준 today
+function getTodayKST() {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
 }
 
-// ✅ [FIX] KST 기준 주간 날짜 배열 (toISOString 사용 안 함)
-function getWeekDates(baseDateStr: string): string[] {
-  // baseDateStr: 'YYYY-MM-DD' (KST 기준)
-  const [y, m, d] = baseDateStr.split('-').map(Number)
-  const base = new Date(y, m - 1, d)          // 로컬(브라우저) 기준 — 클라이언트 사이드이므로 OK
-  const dow  = base.getDay()
-  const diff = dow === 0 ? -6 : 1 - dow        // 월요일로
+// ✅ fix: KST 기준 주간 날짜 배열 생성
+function getWeekDatesKST(todayKST: string, offset: number): string[] {
+  const [y, m, d] = todayKST.split('-').map(Number)
+  const base = new Date(y, m - 1, d)
+  base.setDate(base.getDate() + offset * 7)
+  const dow = base.getDay()
   const monday = new Date(base)
-  monday.setDate(base.getDate() + diff)
-
+  monday.setDate(base.getDate() - (dow === 0 ? 6 : dow - 1))
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday)
     date.setDate(monday.getDate() + i)
-    // ✅ 로컬 날짜 기준으로 문자열 생성 (브라우저 KST)
     const yy = date.getFullYear()
     const mm = String(date.getMonth() + 1).padStart(2, '0')
     const dd = String(date.getDate()).padStart(2, '0')
@@ -62,39 +52,24 @@ function getWeekDates(baseDateStr: string): string[] {
   })
 }
 
-// ✅ [FIX] scheduled_at에서 KST 날짜 문자열 추출 (브라우저 로컬 = KST)
-function getKSTDateStr(scheduledAt: string): string {
-  const d = new Date(scheduledAt)
-  const yy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yy}-${mm}-${dd}`
+// ✅ fix: scheduled_at → KST 날짜 추출
+function slotToKSTDate(scheduled_at: string): string {
+  const ms  = new Date(scheduled_at).getTime()
+  const kst = new Date(ms + 9 * 60 * 60 * 1000)
+  return kst.toISOString().split('T')[0]
 }
 
-// ✅ [FIX] KST 기준 시간 문자열 (브라우저 로컬 = KST)
-function fmtTime(dt: string): string {
-  const d = new Date(dt)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-// ✅ [FIX] scheduled_at에서 KST 기준 날짜/시간 input 기본값 추출
-function getKSTInputValues(scheduledAt: string): { date: string; time: string } {
-  const d = new Date(scheduledAt)
-  const yy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mi = String(d.getMinutes()).padStart(2, '0')
-  return {
-    date: `${yy}-${mm}-${dd}`,
-    time: `${hh}:${mi}`,
-  }
+// ✅ fix: scheduled_at → KST HH:MM
+function slotToKSTTime(scheduled_at: string): string {
+  const ms  = new Date(scheduled_at).getTime()
+  const kst = new Date(ms + 9 * 60 * 60 * 1000)
+  return `${String(kst.getUTCHours()).padStart(2,'0')}:${String(kst.getUTCMinutes()).padStart(2,'0')}`
 }
 
 export default function CoachSchedulePage() {
   const today = getTodayKST()
 
-  const [tab,            setTab]            = useState<'day' | 'week'>('day')
+  const [tab,            setTab]            = useState<'day'|'week'>('day')
   const [date,           setDate]           = useState(today)
   const [coachId,        setCoachId]        = useState('')
   const [slots,          setSlots]          = useState<Slot[]>([])
@@ -110,223 +85,142 @@ export default function CoachSchedulePage() {
   const [showReschedule, setShowReschedule] = useState(false)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
-  const [errorMsg,       setErrorMsg]       = useState('')
 
   useEffect(() => {
-    fetch('/api/session')
-      .then(r => r.json())
-      .then(d => { if (d?.id) setCoachId(d.id) })
+    fetch('/api/session').then(r => r.json()).then(d => {
+      if (d?.id) setCoachId(d.id)
+    })
   }, [])
 
   const load = useCallback(async () => {
     if (!coachId) return
     setLoading(true)
-    try {
-      const res  = await fetch(`/api/lesson-slots?date=${date}&coach_id=${coachId}`)
-      const data = await res.json()
-      setSlots(
-        (Array.isArray(data) ? data : []).filter(
-          (s: Slot) => s.lesson_plan?.coach?.id === coachId
-        )
-      )
-    } catch {
-      setErrorMsg('목록을 불러오지 못했습니다.')
-    } finally {
-      setLoading(false)
-    }
+    const res = await fetch(`/api/lesson-slots?date=${date}&coach_id=${coachId}`)
+    const data = await res.json()
+    setSlots((Array.isArray(data) ? data : []).filter(
+      (s: Slot) => s.lesson_plan?.coach?.id === coachId
+    ))
+    setLoading(false)
   }, [date, coachId])
 
   const loadWeek = useCallback(async () => {
     if (!coachId) return
     setLoading(true)
-    try {
-      // ✅ [FIX] KST 기준 weekDates 계산
-      const baseDate = new Date(today)
-      baseDate.setDate(baseDate.getDate() + weekOffset * 7)
-      const yy = baseDate.getFullYear()
-      const mm = String(baseDate.getMonth() + 1).padStart(2, '0')
-      const dd = String(baseDate.getDate()).padStart(2, '0')
-      const weekDates = getWeekDates(`${yy}-${mm}-${dd}`)
-
-      const res  = await fetch(
-        `/api/lesson-slots?from=${weekDates[0]}&to=${weekDates[6]}&coach_id=${coachId}`
-      )
-      const data = await res.json()
-      setWeekSlots(
-        (Array.isArray(data) ? data : []).filter(
-          (s: Slot) => s.lesson_plan?.coach?.id === coachId
-        )
-      )
-    } catch {
-      setErrorMsg('주간 목록을 불러오지 못했습니다.')
-    } finally {
-      setLoading(false)
-    }
+    // ✅ fix: KST 기준 주간 날짜 사용
+    const weekDates = getWeekDatesKST(today, weekOffset)
+    const res = await fetch(`/api/lesson-slots?from=${weekDates[0]}&to=${weekDates[6]}&coach_id=${coachId}`)
+    const data = await res.json()
+    setWeekSlots((Array.isArray(data) ? data : []).filter(
+      (s: Slot) => s.lesson_plan?.coach?.id === coachId
+    ))
+    setLoading(false)
   }, [coachId, weekOffset, today])
 
   useEffect(() => { if (tab === 'day')  load() },     [load, tab])
   useEffect(() => { if (tab === 'week') loadWeek() }, [loadWeek, tab])
 
-  const reload = () => {
-    setErrorMsg('')
-    tab === 'day' ? load() : loadWeek()
-  }
+  const reload = () => tab === 'day' ? load() : loadWeek()
 
   const closeModal = () => {
     setSelected(null)
     setMemo('')
     setShowMakeup(false)
     setShowReschedule(false)
-    setErrorMsg('')
   }
 
-  // ✅ [FIX] try-catch + finally로 saving 해제 보장
   const handleStatus = async (status: string) => {
     if (!selected) return
-    if (status === 'makeup') {
-      setShowMakeup(true)
-      setShowReschedule(false)
-      return
-    }
+    if (status === 'makeup') { setShowMakeup(true); setShowReschedule(false); return }
     setSaving(true)
-    setErrorMsg('')
-    try {
-      const res = await fetch(`/api/lesson-slots/${selected.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, memo: memo || null }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setErrorMsg(data.error ?? '처리에 실패했습니다')
-        return
-      }
-      closeModal()
-      reload()
-    } catch {
-      setErrorMsg('네트워크 오류가 발생했습니다')
-    } finally {
-      setSaving(false)
-    }
+    await fetch(`/api/lesson-slots/${selected.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, memo: memo || null }),
+    })
+    setSaving(false)
+    closeModal()
+    reload()
   }
 
-  // ✅ [FIX] try-catch + finally
   const handleCancel = async () => {
     if (!selected) return
     const reason = prompt('취소 사유 (선택사항)')
     if (reason === null) return
     setSaving(true)
-    setErrorMsg('')
-    try {
-      const res = await fetch('/api/lesson-slots/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slot_id: selected.id, reason }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setErrorMsg(data.error ?? '취소에 실패했습니다')
-        return
-      }
-      closeModal()
-      reload()
-    } catch {
-      setErrorMsg('네트워크 오류가 발생했습니다')
-    } finally {
-      setSaving(false)
-    }
+    await fetch('/api/lesson-slots/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot_id: selected.id, reason }),
+    })
+    setSaving(false)
+    closeModal()
+    reload()
   }
 
-  // ✅ [FIX] KST 기준 날짜/시간 기본값
-  const handleRescheduleOpen = () => {
-    if (!selected) return
-    const { date: d, time: t } = getKSTInputValues(selected.scheduled_at)
-    setRescheduleDate(d)
-    setRescheduleTime(t)
-    setShowReschedule(true)
-    setShowMakeup(false)
-    setErrorMsg('')
-  }
-
-  // ✅ [FIX] try-catch + finally
-  const handleRescheduleSubmit = async () => {
-    if (!selected || !rescheduleDate || !rescheduleTime) return
-    setSaving(true)
-    setErrorMsg('')
-    try {
-      const res = await fetch(`/api/lesson-slots/${selected.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scheduled_at: `${rescheduleDate}T${rescheduleTime}:00+09:00`,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setErrorMsg(data.error ?? '수정에 실패했습니다')
-        return
-      }
-      closeModal()
-      reload()
-    } catch {
-      setErrorMsg('네트워크 오류가 발생했습니다')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // ✅ [FIX] try-catch + finally
   const handleMakeupSubmit = async () => {
     if (!selected || !makeupDate || !makeupTime) return
     setSaving(true)
-    setErrorMsg('')
-    try {
-      const res = await fetch('/api/makeup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          original_slot_id: selected.id,
-          makeup_datetime: `${makeupDate}T${makeupTime}:00+09:00`,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setErrorMsg(data.error ?? '보강 처리에 실패했습니다')
-        return
-      }
-      setShowMakeup(false)
-      setMakeupDate('')
-      setMakeupTime('')
-      closeModal()
-      reload()
-    } catch {
-      setErrorMsg('네트워크 오류가 발생했습니다')
-    } finally {
-      setSaving(false)
-    }
+    await fetch('/api/makeup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        original_slot_id: selected.id,
+        makeup_datetime: `${makeupDate}T${makeupTime}:00+09:00`,
+      }),
+    })
+    setSaving(false)
+    setShowMakeup(false)
+    setMakeupDate('')
+    setMakeupTime('')
+    closeModal()
+    reload()
   }
 
+  const handleRescheduleOpen = () => {
+    if (!selected) return
+    // ✅ fix: KST 기준으로 날짜/시간 추출
+    const kstDate = slotToKSTDate(selected.scheduled_at)
+    const kstTime = slotToKSTTime(selected.scheduled_at)
+    setRescheduleDate(kstDate)
+    setRescheduleTime(kstTime)
+    setShowReschedule(true)
+    setShowMakeup(false)
+  }
+
+  const handleRescheduleSubmit = async () => {
+    if (!selected || !rescheduleDate || !rescheduleTime) return
+    setSaving(true)
+    const res = await fetch(`/api/lesson-slots/${selected.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduled_at: `${rescheduleDate}T${rescheduleTime}:00+09:00` }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) { alert(data.error ?? '수정에 실패했습니다'); return }
+    closeModal()
+    reload()
+  }
+
+  // ✅ fix: KST 기준 시간 표시
+  const fmtTime = (dt: string) => slotToKSTTime(dt)
+
   const changeDate = (days: number) => {
-    const d = new Date(date)
-    d.setDate(d.getDate() + days)
-    const yy = d.getFullYear()
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const dd = String(d.getDate()).padStart(2, '0')
+    const [y, m, d] = date.split('-').map(Number)
+    const next = new Date(y, m - 1, d)
+    next.setDate(next.getDate() + days)
+    const yy = next.getFullYear()
+    const mm = String(next.getMonth() + 1).padStart(2, '0')
+    const dd = String(next.getDate()).padStart(2, '0')
     setDate(`${yy}-${mm}-${dd}`)
   }
 
-  // ✅ [FIX] weekDates + slotsByDate를 KST 날짜 기준으로 통일
-  const baseDate = new Date(today)
-  baseDate.setDate(baseDate.getDate() + weekOffset * 7)
-  const weekDates = getWeekDates(
-    `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}-${String(baseDate.getDate()).padStart(2, '0')}`
-  )
-
+  // ✅ fix: KST 기준 주간 날짜 + 슬롯 그룹핑
+  const weekDates = getWeekDatesKST(today, weekOffset)
   const slotsByDate: Record<string, Slot[]> = {}
   weekDates.forEach(d => { slotsByDate[d] = [] })
   weekSlots.forEach(s => {
-    // ✅ [FIX] scheduled_at → KST 날짜 키
-    const d = getKSTDateStr(s.scheduled_at)
+    const d = slotToKSTDate(s.scheduled_at)  // ✅ KST 날짜 추출
     if (slotsByDate[d]) slotsByDate[d].push(s)
   })
 
@@ -335,8 +229,14 @@ export default function CoachSchedulePage() {
     setMemo(s.memo ?? '')
     setShowMakeup(false)
     setShowReschedule(false)
-    setErrorMsg('')
   }
+
+  const weekLabel = (() => {
+    const [f0, f1] = [weekDates[0], weekDates[6]]
+    const [, fm, fd] = f0.split('-')
+    const [, tm, td] = f1.split('-')
+    return `${Number(fm)}/${Number(fd)} ~ ${Number(tm)}/${Number(td)}`
+  })()
 
   return (
     <div className="mobile-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -346,7 +246,7 @@ export default function CoachSchedulePage() {
         <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827', marginBottom: '0.75rem' }}>스케줄</div>
 
         <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.75rem' }}>
-          {(['day', 'week'] as const).map(t => (
+          {(['day','week'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               style={{ flex: 1, padding: '0.5rem', borderRadius: '0.625rem', border: 'none', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', background: tab === t ? '#1d4ed8' : '#f3f4f6', color: tab === t ? 'white' : '#6b7280' }}>
               {t === 'day' ? '📅 일간' : '📆 주간'}
@@ -365,11 +265,11 @@ export default function CoachSchedulePage() {
 
         {tab === 'week' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <button onClick={() => setWeekOffset(w => w - 1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>‹</button>
+            <button onClick={() => setWeekOffset(w => w-1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>‹</button>
             <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', fontWeight: 700, color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
-              {weekDates[0].slice(5).replace('-', '/')} ~ {weekDates[6].slice(5).replace('-', '/')}
+              {weekLabel}
             </div>
-            <button onClick={() => setWeekOffset(w => w + 1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>›</button>
+            <button onClick={() => setWeekOffset(w => w+1)} style={{ padding: '0.375rem 0.75rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '1rem' }}>›</button>
           </div>
         )}
       </div>
@@ -412,8 +312,8 @@ export default function CoachSchedulePage() {
             : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {weekDates.map(d => {
                   const daySlots = slotsByDate[d] ?? []
-                  const [yy, mm, dd] = d.split('-').map(Number)
-                  const dateObj = new Date(yy, mm - 1, dd)
+                  const [dy, dm, dd] = d.split('-').map(Number)
+                  const dateObj = new Date(dy, dm - 1, dd)
                   const isToday = d === today
                   const dow     = dateObj.getDay()
                   return (
@@ -429,7 +329,7 @@ export default function CoachSchedulePage() {
                       {daySlots.length === 0
                         ? <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: '#d1d5db' }}>수업 없음</div>
                         : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                            {daySlots.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)).map(s => {
+                            {daySlots.sort((a,b) => a.scheduled_at.localeCompare(b.scheduled_at)).map(s => {
                               const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
                               return (
                                 <div key={s.id} onClick={() => openSlot(s)}
@@ -459,15 +359,7 @@ export default function CoachSchedulePage() {
         <div
           onClick={e => { if (e.target === e.currentTarget) closeModal() }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div style={{
-            background: 'white',
-            width: '100%',
-            maxWidth: '390px',
-            borderRadius: '1.5rem 1.5rem 0 0',
-            padding: '1.25rem 1.25rem 2rem',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-          }}>
+          <div style={{ background: 'white', width: '100%', maxWidth: '390px', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.25rem 1.25rem 2rem', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }} />
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
@@ -475,7 +367,6 @@ export default function CoachSchedulePage() {
               <button onClick={closeModal} style={{ background: 'none', border: 'none', fontSize: '1.25rem', color: '#9ca3af', cursor: 'pointer', padding: '0 0.25rem' }}>✕</button>
             </div>
 
-            {/* 수업 정보 */}
             <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '0.875rem 1rem', marginBottom: '1rem' }}>
               <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>{selected.lesson_plan?.member?.name}</div>
               <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '3px' }}>
@@ -483,26 +374,17 @@ export default function CoachSchedulePage() {
               </div>
             </div>
 
-            {/* ✅ 에러 메시지 */}
-            {errorMsg && (
-              <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.625rem', padding: '0.625rem 0.875rem', marginBottom: '0.75rem', fontSize: '0.8rem', color: '#b91c1c', fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 600 }}>
-                ❌ {errorMsg}
-              </div>
-            )}
-
-            {/* 메모 */}
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>메모 (선택)</label>
               <input className="input-base" placeholder="특이사항 입력" value={memo} onChange={e => setMemo(e.target.value)} />
             </div>
 
-            {/* 상태 버튼 2x2 */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
               {[
-                { status: 'completed', label: '✅ 완료', bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-                { status: 'absent',   label: '❌ 결석', bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
-                { status: 'makeup',   label: '🔁 보강', bg: '#fdf4ff', color: '#7e22ce', border: '#e9d5ff' },
-                { status: 'scheduled',label: '🔄 예정', bg: '#f0fdf4', color: '#15803d', border: '#86efac' },
+                { status: 'completed', label: '✅ 완료',  bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+                { status: 'absent',    label: '❌ 결석',  bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' },
+                { status: 'makeup',    label: '🔁 보강',  bg: '#fdf4ff', color: '#7e22ce', border: '#e9d5ff' },
+                { status: 'scheduled', label: '🔄 예정',  bg: '#f0fdf4', color: '#15803d', border: '#86efac' },
               ].map(btn => (
                 <button key={btn.status} onClick={() => handleStatus(btn.status)} disabled={saving}
                   style={{ padding: '0.75rem', borderRadius: '0.75rem', border: `1.5px solid ${btn.border}`, background: btn.bg, color: btn.color, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', opacity: saving ? 0.6 : 1 }}>
@@ -511,7 +393,6 @@ export default function CoachSchedulePage() {
               ))}
             </div>
 
-            {/* 날짜/시간 수정 버튼 (scheduled 상태만) */}
             {selected.status === 'scheduled' && (
               <button onClick={handleRescheduleOpen} disabled={saving}
                 style={{ width: '100%', padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #fde68a', background: '#fffbeb', color: '#92400e', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
@@ -519,7 +400,6 @@ export default function CoachSchedulePage() {
               </button>
             )}
 
-            {/* 날짜/시간 수정 폼 */}
             {showReschedule && (
               <div style={{ background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '0.875rem', padding: '1rem', marginBottom: '0.5rem' }}>
                 <div style={{ fontWeight: 700, color: '#92400e', marginBottom: '0.875rem', fontSize: '0.875rem' }}>📝 수업 일정 수정</div>
@@ -551,7 +431,6 @@ export default function CoachSchedulePage() {
               </div>
             )}
 
-            {/* 보강 폼 */}
             {showMakeup && (
               <div style={{ background: '#fdf4ff', border: '1.5px solid #c084fc', borderRadius: '0.875rem', padding: '1rem', marginBottom: '0.5rem' }}>
                 <div style={{ fontWeight: 700, color: '#7e22ce', marginBottom: '0.875rem', fontSize: '0.875rem' }}>📅 보강 날짜 선택</div>
@@ -580,7 +459,6 @@ export default function CoachSchedulePage() {
               </div>
             )}
 
-            {/* 수업 취소 버튼 */}
             {selected.status !== 'completed' && (
               <button onClick={handleCancel} disabled={saving}
                 style={{ width: '100%', padding: '0.75rem', borderRadius: '0.75rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', fontSize: '0.875rem', opacity: saving ? 0.6 : 1 }}>

@@ -15,7 +15,10 @@ interface Program {
   id: string; name: string; unit_minutes: number
   default_amount: number; per_session_price: number
   coach_id: string | null; is_active?: boolean
+  max_students?: number
+  fixed_schedules?: { day: number; time: string }[] | null  // ✅ 추가
 }
+interface BlockInfo { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
 interface Schedule { datetime: string; duration: number }
 interface WtaConfig { session_threshold: number; sat_surcharge: number; sun_surcharge: number }
 
@@ -91,6 +94,8 @@ export default function LessonPlanCreatePage() {
   const [schedules,    setSchedules]    = useState<Schedule[]>([])
   const [editIdx,      setEditIdx]      = useState<number|null>(null)
   const [editTime,     setEditTime]     = useState('')
+  const [coachBlocks,  setCoachBlocks]  = useState<BlockInfo[]>([])   // ✅ 추가
+  const [blockedDates, setBlockedDates] = useState<string[]>([])      // ✅ 생성된 일정 중 휴무 날짜
 
   // ✅ 레슨비 계산 상태
   const [billingCount,   setBillingCount]   = useState<number | null>(null)
@@ -122,9 +127,11 @@ export default function LessonPlanCreatePage() {
     if (!coachId) {
       setPrograms(allPrograms.filter(x => x.coach_id === null))
       setProgramId(''); setLessonType('')
+      setCoachBlocks([])
       return
     }
     fetch(`/api/programs?coach_id=${coachId}`).then(r => r.json()).then(d => setPrograms(Array.isArray(d) ? d : []))
+    fetch(`/api/coach-blocks?coach_id=${coachId}`).then(r => r.json()).then(d => setCoachBlocks(Array.isArray(d) ? d : []))  // ✅ 추가
     setProgramId(''); setLessonType('')
     setManualAmount(null)
   }, [coachId])
@@ -156,6 +163,13 @@ export default function LessonPlanCreatePage() {
     setLessonType(p.name)
     setUnitMinutes(p.unit_minutes || 60)
     setManualAmount(null)
+    // ✅ 그룹수업 고정 스케줄 있으면 요일+시간 자동 세팅
+    if (p.fixed_schedules && p.fixed_schedules.length > 0) {
+      const days = [...new Set(p.fixed_schedules.map(s => s.day))]
+      setSelectedDays(days)
+      // 첫 번째 스케줄 시간으로 자동 세팅
+      setTime(p.fixed_schedules[0].time)
+    }
   }
 
   const toggleDay = (d: number) =>
@@ -165,7 +179,7 @@ export default function LessonPlanCreatePage() {
   const generateSchedules = () => {
     if (!startDate || !selectedDays.length) return
     const result: Schedule[] = []
-    // "YYYY-MM-DD" 를 로컬 자정으로 파싱 (UTC 변환 방지)
+    const warned: string[] = []
     const [y, mo, d] = startDate.split('-').map(Number)
     const cur = new Date(y, mo - 1, d)
     let cnt = 0
@@ -174,12 +188,28 @@ export default function LessonPlanCreatePage() {
         const yy  = cur.getFullYear()
         const mm  = String(cur.getMonth() + 1).padStart(2, '0')
         const dd  = String(cur.getDate()).padStart(2, '0')
-        result.push({ datetime: `${yy}-${mm}-${dd}T${time}:00+09:00`, duration: unitMinutes })
+        const ymd = `${yy}-${mm}-${dd}`
+        const dow = cur.getDay()
+        // ✅ 휴무 체크
+        const [th, tm] = time.split(':').map(Number)
+        const reqS = th * 60 + tm
+        const reqE = reqS + unitMinutes
+        const isBlocked = coachBlocks.some(b => {
+          if (b.repeat_weekly) { if (b.day_of_week !== dow) return false }
+          else { if (b.block_date !== ymd) return false }
+          if (!b.block_start && !b.block_end) return true
+          const bs = b.block_start ? Number(b.block_start.split(':')[0])*60+Number(b.block_start.split(':')[1]) : 0
+          const be = b.block_end   ? Number(b.block_end.split(':')[0])*60+Number(b.block_end.split(':')[1])   : 24*60
+          return reqS < be && reqE > bs
+        })
+        if (isBlocked) warned.push(ymd)
+        result.push({ datetime: `${ymd}T${time}:00+09:00`, duration: unitMinutes })
         cnt++
       }
       cur.setDate(cur.getDate() + 1)
     }
     setSchedules(result)
+    setBlockedDates(warned)  // ✅ 휴무 날짜 저장 (경고 표시용)
     setBillingCount(null)
     setManualAmount(null)
   }
@@ -375,6 +405,17 @@ export default function LessonPlanCreatePage() {
                     {selectedProgram.per_session_price > 0 && <span style={{ color: '#1d4ed8' }}>회당 {selectedProgram.per_session_price.toLocaleString()}원</span>}
                   </div>
                 )}
+                {/* ✅ 그룹수업 고정스케줄 자동 세팅 안내 */}
+                {selectedProgram?.fixed_schedules && selectedProgram.fixed_schedules.length > 0 && (
+                  <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.875rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#1d4ed8' }}>
+                    📅 고정 스케줄이 있어 요일/시간이 자동 선택됐습니다 —
+                    {[...selectedProgram.fixed_schedules].sort((a,b)=>a.day-b.day).map((s,i) => (
+                      <span key={i} style={{ fontWeight: 700, marginLeft: '4px' }}>
+                        {['일','월','화','수','목','금','토'][s.day]}{s.time}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -429,15 +470,27 @@ export default function LessonPlanCreatePage() {
               <div>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>
                   생성된 일정 <span style={{ color: '#16A34A' }}>({schedules.length}회)</span>
+                  {blockedDates.length > 0 && (
+                    <span style={{ color: '#dc2626', marginLeft: '0.5rem' }}>⚠️ 코치 휴무 {blockedDates.length}일 포함</span>
+                  )}
                   <span style={{ fontWeight: 400, color: '#9ca3af', marginLeft: '0.5rem' }}>✏️ 시간수정 · 🗑️ 삭제 가능</span>
                 </div>
+                {/* ✅ 휴무 날짜 경고 배너 */}
+                {blockedDates.length > 0 && (
+                  <div style={{ marginBottom: '0.5rem', padding: '0.625rem 0.875rem', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#b91c1c' }}>
+                    ⚠️ <strong>코치 휴무 날짜가 포함되어 있습니다.</strong> 아래 🔴 표시된 날짜를 삭제해주세요.<br/>
+                    {blockedDates.join(', ')}
+                  </div>
+                )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', maxHeight: '240px', overflowY: 'auto' }}>
                   {schedules.map((s, i) => {
-                    const dow = toKSTDateParts(new Date(s.datetime)).dow
-                    const isWeekend = dow === 0 || dow === 6
+                    const { y, m, d, dow } = toKSTDateParts(new Date(s.datetime))
+                    const ymd = `${y}-${m}-${d}`
+                    const isWeekend  = dow === 0 || dow === 6
+                    const isBlocked  = blockedDates.includes(ymd)  // ✅ 휴무 여부
                     return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: isWeekend ? '#fffbeb' : '#f9fafb', borderRadius: '0.5rem', border: `1px solid ${isWeekend ? '#fde68a' : '#f3f4f6'}` }}>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: isWeekend ? '#d97706' : '#16A34A', minWidth: '28px' }}>{i+1}회</span>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: isBlocked ? '#fef2f2' : isWeekend ? '#fffbeb' : '#f9fafb', borderRadius: '0.5rem', border: `1px solid ${isBlocked ? '#fecaca' : isWeekend ? '#fde68a' : '#f3f4f6'}` }}>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: isBlocked ? '#dc2626' : isWeekend ? '#d97706' : '#16A34A', minWidth: '28px' }}>{i+1}회</span>
                         {editIdx === i ? (
                           <>
                             <input type="time" value={editTime} onChange={e => setEditTime(e.target.value)}
@@ -449,7 +502,8 @@ export default function LessonPlanCreatePage() {
                           <>
                             <span style={{ fontSize: '0.85rem', color: '#374151', flex: 1 }}>{fmtDt(s.datetime)}</span>
                             <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{s.duration}분</span>
-                            {isWeekend && <span style={{ fontSize: '0.65rem', color: '#d97706', fontWeight: 700 }}>주말</span>}
+                            {isBlocked  && <span style={{ fontSize: '0.65rem', color: '#dc2626', fontWeight: 700 }}>🔴 휴무</span>}
+                            {!isBlocked && isWeekend && <span style={{ fontSize: '0.65rem', color: '#d97706', fontWeight: 700 }}>주말</span>}
                             <button onClick={() => startEdit(i)} style={{ fontSize: '0.85rem', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 5px', color: '#6b7280' }}>✏️</button>
                             <button onClick={() => { if (confirm(`${fmtDt(s.datetime)} 삭제할까요?`)) removeSlot(i) }} style={{ fontSize: '0.85rem', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 5px', color: '#ef4444' }}>🗑️</button>
                           </>
