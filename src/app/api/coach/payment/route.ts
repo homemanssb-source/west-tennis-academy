@@ -1,4 +1,5 @@
 ﻿// src/app/api/coach/payment/route.ts
+// ✅ fix: family_member join 추가 (자녀 이름 표시)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -17,7 +18,9 @@ export async function GET(req: NextRequest) {
     .select(`
       id, lesson_type, unit_minutes, total_count, completed_count,
       payment_status, amount,
+      family_member_id,
       member:profiles!lesson_plans_member_id_fkey(id, name, phone),
+      family_member:family_member_id(id, name),
       month:months(id, year, month),
       slots:lesson_slots(id, status)
     `)
@@ -33,14 +36,14 @@ export async function GET(req: NextRequest) {
     ...p,
     total_count:     p.slots?.length ?? p.total_count,
     completed_count: p.slots?.filter((s: any) => s.status === 'completed').length ?? p.completed_count,
+    // ✅ 자녀 이름 주입: 부모이름(자녀이름) 형태로 표시용
+    family_member_name: p.family_member?.name ?? null,
   }))
 
   return NextResponse.json(result)
 }
 
-// ✅ 추가: 코치가 납부 확인 처리 (미납 → 납부 확인 요청)
-// - 코치는 본인 플랜만 paid 처리 가능
-// - unpaid → paid 단방향만 허용 (paid → unpaid 는 관리자만)
+// ✅ 코치가 납부 확인 처리 (미납 → 납부 확인 요청)
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session || session.role !== 'coach') {
@@ -50,7 +53,6 @@ export async function PATCH(req: NextRequest) {
   const { plan_id } = await req.json()
   if (!plan_id) return NextResponse.json({ error: 'plan_id 필요' }, { status: 400 })
 
-  // 본인 플랜인지 + 현재 unpaid 상태인지 확인
   const { data: plan, error: fetchErr } = await supabaseAdmin
     .from('lesson_plans')
     .select('id, coach_id, payment_status, member:profiles!lesson_plans_member_id_fkey(name), month:months(year, month)')
@@ -74,7 +76,6 @@ export async function PATCH(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 운영자/관리자에게 알림
   const { data: admins } = await supabaseAdmin
     .from('profiles')
     .select('id')

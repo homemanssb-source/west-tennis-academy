@@ -1,12 +1,8 @@
 'use client'
 // src/app/pay/[planId]/page.tsx
-// 카톡 링크로 접근하는 결제 페이지 (로그인 불필요)
-// URL: /pay/[planId]?orderId=wta_xxx
-//
-// 흐름:
-// 1. GET /api/payment/toss?plan_id=xxx  → 플랜 정보 + 기존 orderId 조회
-// 2. orderId 없으면 → POST /api/payment/toss/order 로 새로 생성
-// 3. 토스 결제창 호출
+// ✅ fix: 결제창 닫고 돌아왔을 때 버튼 블럭 해제
+//   - visibilitychange 이벤트로 앱 복귀 시 paying 리셋
+//   - 취소 관련 에러코드 모두 처리 (USER_CANCEL, PAYMENT_CANCELED, PAY_PROCESS_CANCELED 등)
 
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
@@ -29,10 +25,19 @@ declare global {
   }
 }
 
+// ✅ 토스페이먼츠 취소/종료 관련 에러코드 목록
+const CANCEL_CODES = new Set([
+  'USER_CANCEL',
+  'PAYMENT_CANCELED',
+  'PAY_PROCESS_CANCELED',
+  'CANCEL',
+  'ABORTED',
+])
+
 export default function PayCheckoutPage() {
-  const { planId }    = useParams<{ planId: string }>()
-  const searchParams  = useSearchParams()
-  const urlOrderId    = searchParams.get('orderId')  // 운영자가 생성한 orderId
+  const { planId }   = useParams<{ planId: string }>()
+  const searchParams = useSearchParams()
+  const urlOrderId   = searchParams.get('orderId')
 
   const [info,     setInfo]     = useState<PlanInfo | null>(null)
   const [loading,  setLoading]  = useState(true)
@@ -40,18 +45,27 @@ export default function PayCheckoutPage() {
   const [error,    setError]    = useState('')
   const [sdkReady, setSdkReady] = useState(false)
 
+  // ✅ 페이지/앱이 다시 활성화될 때 paying 리셋
+  // 토스 결제창이 redirect 방식이거나 PWA에서 앱을 background로 보낸 경우 대응
   useEffect(() => {
-    // 1. 공개 API로 플랜 정보 조회
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setPaying(false)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
+
+  useEffect(() => {
     fetch(`/api/payment/toss?plan_id=${planId}`)
       .then(r => r.json())
       .then(async d => {
         if (d.error) { setError(d.error); setLoading(false); return }
 
-        // 2. orderId 확정: URL > DB 기존 pending > 새로 생성
         let orderId = urlOrderId ?? d.order_id
 
         if (!orderId) {
-          // 새 orderId 생성 (공개 order 생성 API)
           const orderRes  = await fetch('/api/payment/toss/order', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -93,8 +107,12 @@ export default function PayCheckoutPage() {
         successUrl:   `${baseUrl}/pay/success?planId=${planId}`,
         failUrl:      `${baseUrl}/pay/fail?planId=${planId}`,
       })
+      // ✅ requestPayment가 정상 resolve되면 success 페이지로 이동하므로
+      // 여기까지 오면 redirect 중 → paying은 visibilitychange가 처리
     } catch (e: any) {
-      if (e?.code !== 'USER_CANCEL') {
+      // ✅ 취소 코드 범위 확장 (USER_CANCEL 외 다른 취소 코드도 포함)
+      const isCanceled = !e?.code || CANCEL_CODES.has(e.code)
+      if (!isCanceled) {
         setError(e?.message ?? '결제 중 오류가 발생했습니다')
       }
       setPaying(false)
@@ -123,7 +141,7 @@ export default function PayCheckoutPage() {
             <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af', fontFamily: 'Noto Sans KR, sans-serif' }}>
               불러오는 중...
             </div>
-          ) : error ? (
+          ) : error && !info ? (
             <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '1rem', padding: '1.5rem', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
               <div style={{ color: '#b91c1c', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif' }}>{error}</div>
@@ -171,6 +189,7 @@ export default function PayCheckoutPage() {
                     fontWeight: 700, fontSize: '1rem',
                     cursor:     paying || !sdkReady ? 'not-allowed' : 'pointer',
                     fontFamily: 'Noto Sans KR, sans-serif',
+                    transition: 'background 0.15s',
                   }}>
                   {paying ? '결제 진행 중...' : !sdkReady ? '준비 중...' : `💳 ${fmt(info.amount)}원 카드 결제`}
                 </button>

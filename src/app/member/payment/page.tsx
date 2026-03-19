@@ -1,5 +1,8 @@
 'use client'
 // src/app/member/payment/page.tsx
+// ✅ fix: family_member_name 추가 (자녀 이름 표시)
+// ✅ fix: visibilitychange로 PWA 복귀 시 paying 리셋
+// ✅ fix: 취소 코드 확장 (USER_CANCEL 외 다른 취소 코드도 처리)
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -14,6 +17,7 @@ interface Plan {
   total_count: number
   completed_count: number
   unit_minutes: number
+  family_member_name: string | null  // ✅ 추가
   coach: { name: string }
   month: { year: number; month: number }
 }
@@ -26,11 +30,20 @@ declare global {
   }
 }
 
+// ✅ 토스페이먼츠 취소/종료 관련 에러코드 목록
+const CANCEL_CODES = new Set([
+  'USER_CANCEL',
+  'PAYMENT_CANCELED',
+  'PAY_PROCESS_CANCELED',
+  'CANCEL',
+  'ABORTED',
+])
+
 export default function MemberPaymentPage() {
   const router = useRouter()
   const [plans,    setPlans]    = useState<Plan[]>([])
   const [loading,  setLoading]  = useState(true)
-  const [paying,   setPaying]   = useState<string | null>(null) // 결제 중인 plan_id
+  const [paying,   setPaying]   = useState<string | null>(null)
   const [sdkReady, setSdkReady] = useState(false)
 
   const load = () => {
@@ -42,6 +55,17 @@ export default function MemberPaymentPage() {
 
   useEffect(() => { load() }, [])
 
+  // ✅ PWA에서 홈버튼 눌렀다가 복귀 시 paying 리셋
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setPaying(null)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
+
   const fmt = (n: number) => n.toLocaleString('ko-KR')
 
   const handlePay = async (plan: Plan) => {
@@ -51,7 +75,6 @@ export default function MemberPaymentPage() {
     setPaying(plan.id)
 
     try {
-      // 1. orderId 생성 (공개 API)
       const orderRes  = await fetch('/api/payment/toss/order', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -60,7 +83,6 @@ export default function MemberPaymentPage() {
       const orderData = await orderRes.json()
       if (orderData.error) { alert(orderData.error); setPaying(null); return }
 
-      // 2. 토스 결제창 호출
       const clientKey = process.env.NEXT_PUBLIC_TOSSPAYMENTS_CLIENT_KEY!
       const toss      = window.TossPayments(clientKey)
       const baseUrl   = 'https://west-tennis-academy-1.vercel.app'
@@ -73,12 +95,14 @@ export default function MemberPaymentPage() {
         failUrl:      `${baseUrl}/pay/fail?planId=${plan.id}`,
       })
     } catch (e: any) {
-      if (e?.code !== 'USER_CANCEL') {
+      // ✅ USER_CANCEL 외 다른 취소 코드도 에러 메시지 없이 처리
+      const isCanceled = !e?.code || CANCEL_CODES.has(e.code)
+      if (!isCanceled) {
         alert(e?.message ?? '결제 중 오류가 발생했습니다')
       }
     } finally {
       setPaying(null)
-      load() // 결제 후 상태 새로고침
+      load()
     }
   }
 
@@ -113,8 +137,16 @@ export default function MemberPaymentPage() {
                   {/* 헤더 */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>
-                        {p.month?.year}년 {p.month?.month}월
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>
+                          {p.month?.year}년 {p.month?.month}월
+                        </div>
+                        {/* ✅ 자녀 이름 뱃지 */}
+                        {p.family_member_name && (
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 8px', borderRadius: '9999px' }}>
+                            자녀: {p.family_member_name}
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
                         {p.lesson_type} · {p.coach?.name} 코치
@@ -145,7 +177,7 @@ export default function MemberPaymentPage() {
                     </div>
                   </div>
 
-                  {/* ✅ 미납 플랜만 결제 버튼 표시 */}
+                  {/* 미납 플랜만 결제 버튼 표시 */}
                   {p.payment_status === 'unpaid' && (
                     <button
                       onClick={() => handlePay(p)}
