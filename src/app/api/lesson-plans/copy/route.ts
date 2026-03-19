@@ -1,6 +1,7 @@
 // src/app/api/lesson-plans/copy/route.ts
 // ✅ 할인 정보(discount_amount, discount_memo) 승계 추가
 // ✅ fix: isBlocked KST 기준 날짜/요일, 분 단위 시간 비교로 수정
+// ✅ fix: family_member_id 승계 — 새 plan에 lesson_applications 레코드 생성
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '복사할 플랜이 없습니다', debug: plansErr?.message }, { status: 404 })
   }
 
+  // ── 회원별 최신 할인 정보 조회 ────────────────────────────────────────
   const memberIds = [...new Set(sourcePlans.map((p: any) => p.member_id))]
   const { data: memberProfiles } = await supabaseAdmin
     .from('profiles')
@@ -62,6 +64,34 @@ export async function POST(req: NextRequest) {
     }])
   )
 
+  // ── 원본 플랜의 family_member_id 조회 ────────────────────────────────
+  // lesson_applications에서 원본 plan_id별 family_member_id 확보
+  const sourcePlanIds = sourcePlans.map((p: any) => p.id)
+  const familyMemberMap = new Map<string, { memberId: string; coachId: string; familyMemberId: string }>()
+  // key: member_id_coach_id → family_member_id
+
+  if (sourcePlanIds.length > 0) {
+    const { data: srcApps } = await supabaseAdmin
+      .from('lesson_applications')
+      .select('lesson_plan_id, member_id, coach_id, family_member_id')
+      .in('lesson_plan_id', sourcePlanIds)
+      .not('family_member_id', 'is', null)
+
+    if (srcApps && srcApps.length > 0) {
+      for (const app of srcApps) {
+        const key = `${app.member_id}_${app.coach_id}`
+        if (!familyMemberMap.has(key)) {
+          familyMemberMap.set(key, {
+            memberId:       app.member_id,
+            coachId:        app.coach_id,
+            familyMemberId: app.family_member_id,
+          })
+        }
+      }
+    }
+  }
+
+  // ── 대상 월 이미 있는 플랜 확인 ───────────────────────────────────────
   const { data: existingPlans } = await supabaseAdmin
     .from('lesson_plans')
     .select('member_id, coach_id')
@@ -80,10 +110,11 @@ export async function POST(req: NextRequest) {
     (existingPlansFull ?? []).map((p: any) => [`${p.member_id}_${p.coach_id}`, p.id])
   )
 
+  // ── 코치 휴무 조회 ────────────────────────────────────────────────────
   const { data: coachBlocks } = await supabaseAdmin.from('coach_blocks').select('*')
   const blocks = coachBlocks ?? []
 
-  // ✅ fix: KST 기준 날짜/요일, 분 단위 시간 비교
+  // ✅ KST 기준 날짜/요일, 분 단위 시간 비교
   const isBlocked = (coachId: string, dateObj: Date, timeStr: string, duration: number): boolean => {
     const kst       = new Date(dateObj.getTime() + 9 * 60 * 60 * 1000)
     const dateStr   = kst.toISOString().split('T')[0]
@@ -106,12 +137,16 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  // ── 대상 월 날짜 목록 ─────────────────────────────────────────────────
   const daysInToMonth = new Date(toYear, toMonth, 0).getDate()
   const toMonthDates: { date: Date; dayOfWeek: number }[] = []
   for (let d = 1; d <= daysInToMonth; d++) {
     const date = new Date(toYear, toMonth - 1, d)
     toMonthDates.push({ date, dayOfWeek: date.getDay() })
   }
+
+  // 대상 월 첫날 (dummy application의 requested_at용)
+  const toMonthFirstDay = `${toYear}-${String(toMonth).padStart(2,'0')}-01T00:00:00+09:00`
 
   let copiedPlans   = 0
   let skippedPlans  = 0
@@ -146,7 +181,6 @@ export async function POST(req: NextRequest) {
           next_month_synced: false,
           discount_amount:   memberDiscount.discount_amount,
           discount_memo:     memberDiscount.discount_memo,
-          family_member_id:  plan.family_member_id ?? null,
         })
         .select('id')
         .single()
@@ -154,8 +188,28 @@ export async function POST(req: NextRequest) {
       if (planErr || !newPlan) continue
       newPlanId = newPlan.id
       copiedPlans++
+
+      // ✅ family_member_id가 있으면 새 plan에도 lesson_applications 레코드 생성
+      // → schedule-draft GET에서 family_member_name 조회 가능하게 됨
+      const familyInfo = familyMemberMap.get(planKey)
+      if (familyInfo) {
+        await supabaseAdmin
+          .from('lesson_applications')
+          .insert({
+            member_id:        plan.member_id,
+            coach_id:         plan.coach_id,
+            month_id:         to_month_id,
+            lesson_plan_id:   newPlanId,
+            family_member_id: familyInfo.familyMemberId,
+            requested_at:     toMonthFirstDay,
+            duration_minutes: plan.unit_minutes ?? 60,
+            lesson_type:      plan.lesson_type  ?? '개인레슨',
+            status:           'approved',
+          })
+      }
     }
 
+    // ── 슬롯 패턴 추출 ──────────────────────────────────────────────────
     const slots = (plan.slots ?? []).filter((s: any) =>
       !s.is_makeup && !['cancelled', 'draft'].includes(s.status)
     )
@@ -183,6 +237,7 @@ export async function POST(req: NextRequest) {
 
     if (patterns.length === 0) continue
 
+    // ── 이미 있는 슬롯 확인 (반복 실행 중복 방지) ───────────────────────
     const { data: existingSlots } = await supabaseAdmin
       .from('lesson_slots')
       .select('scheduled_at')
@@ -193,6 +248,7 @@ export async function POST(req: NextRequest) {
       (existingSlots ?? []).map((s: any) => s.scheduled_at.slice(0, 16))
     )
 
+    // ── 대상 월 슬롯 생성 ───────────────────────────────────────────────
     const draftSlotsToInsert: any[] = []
 
     for (const pattern of patterns) {
@@ -208,7 +264,6 @@ export async function POST(req: NextRequest) {
           continue
         }
 
-        // ✅ fix: duration 전달
         const blocked = isBlocked(plan.coach_id, slotDate, pattern.time, pattern.duration)
         if (blocked) conflictSlots++
 
