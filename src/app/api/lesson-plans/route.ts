@@ -3,12 +3,12 @@
 // ✅ fix: 충돌 에러 메시지 KST 기준으로 수정
 // ✅ fix: 코치 휴무 체크 KST 기준으로 수정
 // ✅ fix: family_member_id 저장 추가
+// ✅ fix: 코치 지정 프로그램 8회 이상 월정액 고정
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 import { calcAmount, getConfig } from '@/lib/calcAmount'
 
-// ✅ KST 기준 날짜/시간 포맷 (서버용)
 function fmtKST(isoStr: string) {
   const d   = new Date(isoStr)
   const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
@@ -21,21 +21,18 @@ function fmtKST(isoStr: string) {
   return `${m}/${dd}(${days[dow]}) ${hh}:${mm}`
 }
 
-// ✅ KST 기준 날짜 문자열 (YYYY-MM-DD)
 function toKSTDateStr(isoStr: string) {
   const d   = new Date(isoStr)
   const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
   return kst.toISOString().split('T')[0]
 }
 
-// ✅ KST 기준 HH:MM
 function toKSTHHMM(isoStr: string) {
   const d   = new Date(isoStr)
   const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
   return `${String(kst.getUTCHours()).padStart(2,'0')}:${String(kst.getUTCMinutes()).padStart(2,'0')}`
 }
 
-// ✅ KST 기준 요일 (0=일~6=토)
 function toKSTDayOfWeek(isoStr: string) {
   const d   = new Date(isoStr)
   const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
@@ -71,11 +68,10 @@ export async function POST(req: NextRequest) {
       if (prog?.max_students) maxStudents = prog.max_students
     }
 
-    // ── 중복 시간대 체크 (단체수업 정원 고려) ────────────────────────
+    // ── 중복 시간대 체크 ─────────────────────────────────────────────
     const datetimes = schedules.map((s: { datetime: string }) => s.datetime)
 
     if (maxStudents <= 1) {
-      // 1:1 수업 → 기존대로 하나라도 있으면 충돌
       const { data: conflicts } = await supabaseAdmin
         .from('lesson_slots')
         .select('scheduled_at, lesson_plans!inner(coach_id)')
@@ -91,9 +87,7 @@ export async function POST(req: NextRequest) {
         )
       }
     } else {
-      // ✅ 단체수업 → 시간대별 현재 인원 수 체크
       const overCapacity: string[] = []
-
       for (const datetime of datetimes) {
         const { data: existing } = await supabaseAdmin
           .from('lesson_slots')
@@ -103,7 +97,6 @@ export async function POST(req: NextRequest) {
           .neq('status', 'cancelled')
 
         const currentCount = (existing ?? []).length
-
         if (currentCount >= maxStudents) {
           overCapacity.push(`${fmtKST(datetime)} (${currentCount}/${maxStudents}명 정원 초과)`)
         }
@@ -117,11 +110,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 코치 휴무 체크 (KST 기준으로 수정) ──────────────────────────
+    // ── 코치 휴무 체크 ────────────────────────────────────────────────
     for (const s of schedules) {
-      const dateStr   = toKSTDateStr(s.datetime)   // ✅ KST 날짜
-      const hhmm      = toKSTHHMM(s.datetime)       // ✅ KST 시간
-      const dayOfWeek = toKSTDayOfWeek(s.datetime)  // ✅ KST 요일
+      const dateStr   = toKSTDateStr(s.datetime)
+      const hhmm      = toKSTHHMM(s.datetime)
+      const dayOfWeek = toKSTDayOfWeek(s.datetime)
       const duration  = s.duration || unit_minutes || 60
       const endDt     = new Date(new Date(s.datetime).getTime() + duration * 60 * 1000)
       const endHhmm   = toKSTHHMM(endDt.toISOString())
@@ -154,18 +147,16 @@ export async function POST(req: NextRequest) {
 
     // ── 레슨비 자동 계산 ──────────────────────────────────────────────
     const billing_count = reqBillingCount ?? schedules.length
-
-    // ✅ KST 기준 토·일 횟수 집계
     const sat_count = schedules.filter((s: { datetime: string }) => toKSTDayOfWeek(s.datetime) === 6).length
     const sun_count = schedules.filter((s: { datetime: string }) => toKSTDayOfWeek(s.datetime) === 0).length
 
-    let finalAmount    = amount || 0
+    let finalAmount     = amount || 0
     let discount_amount = 0
     let discount_memo: string | null = null
 
     if (program_id) {
       const [progRes, configRes, memberRes] = await Promise.all([
-        supabaseAdmin.from('lesson_programs').select('default_amount, per_session_price').eq('id', program_id).single(),
+        supabaseAdmin.from('lesson_programs').select('default_amount, per_session_price, coach_id').eq('id', program_id).single(), // ✅ coach_id 추가
         getConfig(),
         supabaseAdmin.from('profiles').select('discount_amount, discount_memo').eq('id', member_id).single(),
       ])
@@ -186,6 +177,7 @@ export async function POST(req: NextRequest) {
           sat_count,
           sun_count,
           discount_amount,
+          is_coach_program:  !!prog.coach_id,  // ✅ 추가
         })
         finalAmount = calc.amount
       }

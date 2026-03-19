@@ -4,6 +4,7 @@
 // ✅ fix: fmtDt KST 기준으로 수정
 // ✅ fix: 등록 버튼 안내 문구 추가
 // ✅ fix: 가족 구성원 선택 추가
+// ✅ fix: 코치 지정 프로그램 8회 이상 월정액 고정
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -38,19 +39,26 @@ function toKSTDateParts(dt: Date) {
   return { y, m, d, hh, mm, dow }
 }
 
+// ✅ fix: 코치 지정 프로그램 여부에 따라 계산 방식 분기
 function calcAmount(opts: {
   config: WtaConfig
   default_amount: number; per_session_price: number
   billing_count: number; sat_count: number; sun_count: number
   discount_amount: number
+  is_coach_program?: boolean
 }) {
-  const { config, default_amount, per_session_price, billing_count, sat_count, sun_count, discount_amount } = opts
+  const { config, default_amount, per_session_price, billing_count,
+          sat_count, sun_count, discount_amount, is_coach_program = false } = opts
   const { session_threshold, sat_surcharge, sun_surcharge } = config
 
   let base_amount: number
   if (billing_count >= session_threshold) {
-    const over = billing_count - session_threshold
-    base_amount = default_amount + (over > 0 ? over * per_session_price : 0)
+    if (is_coach_program) {
+      base_amount = default_amount  // ✅ 코치 지정: 8회 이상 월정액 고정
+    } else {
+      const over  = billing_count - session_threshold
+      base_amount = default_amount + (over > 0 ? over * per_session_price : 0)
+    }
   } else {
     base_amount = per_session_price * billing_count
   }
@@ -58,7 +66,6 @@ function calcAmount(opts: {
   const sat_extra = sat_count > 0 ? sat_surcharge : 0
   const sun_extra = sun_count > 0 ? sun_surcharge : 0
   const amount    = Math.max(0, base_amount + sat_extra + sun_extra - discount_amount)
-
   return { base_amount, sat_extra, sun_extra, amount }
 }
 
@@ -74,7 +81,6 @@ export default function LessonPlanCreatePage() {
   const [saving,        setSaving]        = useState(false)
   const [error,         setError]         = useState('')
 
-  // ✅ 가족 구성원
   const [familyMembers,   setFamilyMembers]   = useState<FamilyMember[]>([])
   const [familyMemberId,  setFamilyMemberId]  = useState<string>('')
 
@@ -138,7 +144,6 @@ export default function LessonPlanCreatePage() {
     setManualAmount(null)
   }, [coachId])
 
-  // ✅ 회원 선택 시 할인 정보 + 가족 구성원 불러오기
   useEffect(() => {
     const m = members.find(x => x.id === memberId)
     setMemberDiscount(m?.discount_amount ?? 0)
@@ -187,7 +192,6 @@ export default function LessonPlanCreatePage() {
     const result: Schedule[] = []
     const warned: string[] = []
     const [sy, sm, sd] = startDate.split('-').map(Number)
-    const start = new Date(sy, sm - 1, sd)
     const daysInMonth = new Date(sy, sm, 0).getDate()
     let generated = 0
 
@@ -252,6 +256,7 @@ export default function LessonPlanCreatePage() {
   const sunCount = schedules.filter(s => toKSTDateParts(new Date(s.datetime)).dow === 0).length
   const effectiveBillingCount = billingCount !== null ? billingCount : schedules.length
 
+  // ✅ fix: is_coach_program 전달
   const autoCalc = selectedProgram
     ? calcAmount({
         config,
@@ -261,6 +266,7 @@ export default function LessonPlanCreatePage() {
         sat_count:         satCount,
         sun_count:         sunCount,
         discount_amount:   memberDiscount,
+        is_coach_program:  !!selectedProgram.coach_id,
       })
     : null
 
@@ -279,7 +285,6 @@ export default function LessonPlanCreatePage() {
         schedules, amount: finalAmount, payment_status: payment,
         program_id: programId || undefined,
         billing_count: effectiveBillingCount,
-        // ✅ 가족 선택 시 전달
         family_member_id: familyMemberId || undefined,
       }),
     })
@@ -352,7 +357,7 @@ export default function LessonPlanCreatePage() {
               </div>
             </div>
 
-            {/* ✅ 가족 구성원 선택 (회원 선택 후 가족이 있을 때만 표시) */}
+            {/* 가족 구성원 선택 */}
             {memberId && familyMembers.length > 0 && (
               <div>
                 <label style={labelStyle}>수업 대상 <span style={{ fontWeight: 400, color: '#9ca3af' }}>(본인 수업이면 선택 안 해도 됩니다)</span></label>
@@ -524,8 +529,8 @@ export default function LessonPlanCreatePage() {
                   {schedules.map((s, i) => {
                     const { y, m, d, dow } = toKSTDateParts(new Date(s.datetime))
                     const ymd = `${y}-${m}-${d}`
-                    const isWeekend  = dow === 0 || dow === 6
-                    const isBlocked  = blockedDates.includes(ymd)
+                    const isWeekend = dow === 0 || dow === 6
+                    const isBlocked = blockedDates.includes(ymd)
                     return (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', background: isBlocked ? '#fef2f2' : isWeekend ? '#fffbeb' : '#f9fafb', borderRadius: '0.5rem', border: `1px solid ${isBlocked ? '#fecaca' : isWeekend ? '#fde68a' : '#f3f4f6'}` }}>
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, color: isBlocked ? '#dc2626' : isWeekend ? '#d97706' : '#16A34A', minWidth: '28px' }}>{i+1}회</span>
@@ -569,8 +574,13 @@ export default function LessonPlanCreatePage() {
                   <span style={{ color: '#4b5563' }}>
                     기본금액
                     <span style={{ color: '#9ca3af', fontSize: '0.72rem', marginLeft: '4px' }}>
+                      {/* ✅ fix: 코치 지정 프로그램 설명 텍스트 */}
                       ({effectiveBillingCount >= config.session_threshold
-                        ? effectiveBillingCount === config.session_threshold ? '월정액' : `월정액 + ${effectiveBillingCount - config.session_threshold}회 초과`
+                        ? selectedProgram.coach_id
+                          ? '월정액 고정'
+                          : effectiveBillingCount === config.session_threshold
+                            ? '월정액'
+                            : `월정액 + ${effectiveBillingCount - config.session_threshold}회 초과`
                         : `${selectedProgram.per_session_price.toLocaleString()}원 × ${effectiveBillingCount}회`})
                     </span>
                   </span>
