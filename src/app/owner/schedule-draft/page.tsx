@@ -1,5 +1,6 @@
 'use client'
 // src/app/owner/schedule-draft/page.tsx
+// ✅ fix: fmtSlot KST 변환 (Supabase UTC 반환 대응)
 // ✅ fix: family_member_name 표시 (부모(자녀) 형태)
 
 import { useEffect, useState } from 'react'
@@ -13,7 +14,7 @@ interface DraftSlot {
   duration_minutes: number
   status: 'draft' | 'conflict_pending'
   has_conflict: boolean
-  family_member_name: string | null  // ✅ API에서 주입
+  family_member_name: string | null
   lesson_plan?: {
     id: string
     lesson_type: string
@@ -42,12 +43,20 @@ interface Month { id: string; year: number; month: number; draft_open?: boolean 
 
 const DAY_KO = ['일','월','화','수','목','금','토']
 
+// ✅ fix: Date 객체로 파싱 후 KST 변환 (Supabase가 UTC로 반환하는 것 대응)
 function fmtSlot(iso: string) {
-  const [datePart, timePart] = iso.split('T')
-  const [y, mo, d] = datePart.split('-').map(Number)
-  const day = DAY_KO[new Date(y, mo - 1, d).getDay()]
-  const [hh, mm] = timePart.split('+')[0].split(':')
-  return { date: `${mo}/${d}(${day})`, time: `${hh}:${mm}`, full: `${mo}/${d}(${day}) ${hh}:${mm}` }
+  const d   = new Date(iso)
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000)
+  const mo  = kst.getUTCMonth() + 1
+  const day = kst.getUTCDate()
+  const dow = DAY_KO[kst.getUTCDay()]
+  const hh  = String(kst.getUTCHours()).padStart(2, '0')
+  const mm  = String(kst.getUTCMinutes()).padStart(2, '0')
+  return {
+    date: `${mo}/${day}(${dow})`,
+    time: `${hh}:${mm}`,
+    full: `${mo}/${day}(${dow}) ${hh}:${mm}`,
+  }
 }
 
 export default function ScheduleDraftPage() {
@@ -229,9 +238,9 @@ export default function ScheduleDraftPage() {
             {reqTab && (
               <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {requests.map(r => {
-                  const isPending = ['pending_coach','pending_admin'].includes(r.status)
-                  const typeLabel = r.request_type === 'exclude' ? '🚫 제외 요청' :
-                                    r.request_type === 'change'  ? '🔄 변경 요청' : '➕ 추가 요청'
+                  const isPending   = ['pending_coach','pending_admin'].includes(r.status)
+                  const typeLabel   = r.request_type === 'exclude' ? '🚫 제외 요청' :
+                                      r.request_type === 'change'  ? '🔄 변경 요청' : '➕ 추가 요청'
                   const statusLabel = r.status === 'approved' ? '✅ 승인' :
                                       r.status === 'rejected' ? '❌ 거절' : '⏳ 검토 중'
                   return (
@@ -330,15 +339,13 @@ function SlotCard({ slot, onConfirm, onDelete, saving }: {
   saving: boolean
 }) {
   const { full } = fmtSlot(slot.scheduled_at)
-  const isConflict  = slot.has_conflict
-  const memberName  = slot.lesson_plan?.member?.name ?? '-'
-  const coachName   = slot.lesson_plan?.coach?.name  ?? '-'
-  const lessonType  = slot.lesson_plan?.lesson_type  ?? ''
+  const isConflict = slot.has_conflict
+  const memberName = slot.lesson_plan?.member?.name ?? '-'
+  const coachName  = slot.lesson_plan?.coach?.name  ?? '-'
+  const lessonType = slot.lesson_plan?.lesson_type  ?? ''
 
-  // ✅ family_member_name: API에서 lesson_plans.family_member.name으로 주입됨
+  // ✅ 자녀 이름: API 주입값 우선, 없으면 lesson_plan.family_member.name
   const childName   = slot.family_member_name ?? slot.lesson_plan?.family_member?.name ?? null
-
-  // 부모(자녀) 형태로 표시
   const displayName = childName ? `${memberName}(${childName})` : memberName
 
   return (
