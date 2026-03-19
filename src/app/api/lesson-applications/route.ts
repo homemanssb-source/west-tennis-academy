@@ -1,8 +1,11 @@
 ﻿// src/app/api/lesson-applications/route.ts
+// ✅ FIX N+1: family_member 개별 조회 → IN 쿼리 일괄 조회
+// ✅ FIX 코치휴무: POST에 checkCoachBlock 호출 추가
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPushToUser } from '@/lib/push'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
+import { checkCoachBlock } from '@/lib/checkCoachBlock'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -30,16 +33,23 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const result = await Promise.all((data ?? []).map(async (app: any) => {
-    if (app.family_member_id) {
-      const { data: fm } = await supabaseAdmin
-        .from('family_members')
-        .select('name')
-        .eq('id', app.family_member_id)
-        .single()
-      return { ...app, applicant_name: fm?.name ?? null }
-    }
-    return app
+  // ✅ FIX N+1: family_member_id 있는 항목을 IN 쿼리로 일괄 조회
+  const familyIds = (data ?? [])
+    .filter((a: any) => a.family_member_id)
+    .map((a: any) => a.family_member_id)
+
+  let familyMap: Record<string, string> = {}
+  if (familyIds.length > 0) {
+    const { data: families } = await supabaseAdmin
+      .from('family_members')
+      .select('id, name')
+      .in('id', familyIds)
+    familyMap = Object.fromEntries((families ?? []).map((f: any) => [f.id, f.name]))
+  }
+
+  const result = (data ?? []).map((app: any) => ({
+    ...app,
+    applicant_name: app.family_member_id ? (familyMap[app.family_member_id] ?? null) : null,
   }))
 
   return NextResponse.json(result)
@@ -95,6 +105,10 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existing) { errors.push(`${requested_at} 중복`); continue }
+
+    // ✅ FIX: 코치 휴무 블록 체크 추가 (KST 기준)
+    const block = await checkCoachBlock(coach_id, requested_at, duration_minutes ?? 60)
+    if (block) { errors.push(requested_at + ' 코치 휴무'); continue }
 
     // 확정 슬롯 충돌 확인 — 개인레슨만 차단, 그룹레슨은 정원 체크로 대체
     if (!isGroup) {

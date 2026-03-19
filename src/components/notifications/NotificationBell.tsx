@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePush } from '@/lib/usePush'
 
@@ -28,8 +28,6 @@ export default function NotificationBell() {
   const [open,        setOpen]        = useState(false)
   const [loading,     setLoading]     = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
-  const bellRef = useRef<HTMLButtonElement>(null)
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
 
   const unread = notifs.filter(n => !n.is_read).length
 
@@ -49,10 +47,7 @@ export default function NotificationBell() {
   }
 
   const handleClick = async (n: Notification) => {
-    if (n.link) {
-      setOpen(false)
-      router.push(n.link)
-    }
+    if (n.link) { setOpen(false); router.push(n.link) }
   }
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -71,18 +66,9 @@ export default function NotificationBell() {
     }
   }
 
-  // 벨 버튼 위치를 기준으로 드롭다운 좌표 계산
   const handleBellClick = async () => {
     const next = !open
-    if (next && bellRef.current) {
-      const rect = bellRef.current.getBoundingClientRect()
-      setDropdownPos({
-        top: rect.bottom + 8,
-        right: window.innerWidth - rect.right,
-      })
-      await load()
-      await markAllRead()
-    }
+    if (next) { await load(); await markAllRead() }
     setOpen(next)
   }
 
@@ -95,127 +81,114 @@ export default function NotificationBell() {
   }
 
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-
-        {/* 푸시 알림 버튼 */}
-        {supported && (
-          <button
-            onClick={handlePushToggle}
-            disabled={pushLoading}
-            title={subscribed ? '푸시 알림 끄기' : '푸시 알림 켜기'}
-            style={{
-              background: subscribed ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
-              border: `1.5px solid ${subscribed ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.3)'}`,
-              borderRadius: '0.625rem',
-              padding: '0.35rem 0.6rem',
-              cursor: pushLoading ? 'wait' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.25rem',
-              fontSize: '0.7rem',
-              fontWeight: 700,
-              color: 'white',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <span style={{ fontSize: '0.85rem' }}>{subscribed ? '🔔' : '🔕'}</span>
-            <span>{pushLoading ? '...' : subscribed ? 'ON' : 'OFF'}</span>
-          </button>
+    <>
+      {/* 벨 버튼 — 헤더에 배치 */}
+      <button
+        onClick={handleBellClick}
+        style={{
+          position: 'relative',
+          background: 'rgba(255,255,255,0.15)',
+          border: '1.5px solid rgba(255,255,255,0.3)',
+          borderRadius: '0.75rem',
+          width: '2.5rem', height: '2.5rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', fontSize: '1.1rem', flexShrink: 0,
+        }}
+        aria-label="알림"
+      >
+        🔔
+        {unread > 0 && (
+          <span style={{
+            position: 'absolute', top: '-4px', right: '-4px',
+            background: '#ef4444', color: 'white',
+            fontSize: '0.6rem', fontWeight: 700,
+            minWidth: '16px', height: '16px',
+            borderRadius: '9999px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 3px', pointerEvents: 'none',
+          }}>
+            {unread > 99 ? '99+' : unread}
+          </span>
         )}
+      </button>
 
-        {/* 벨 버튼 */}
-        <button
-          ref={bellRef}
-          onClick={handleBellClick}
-          style={{
-            position: 'relative',
-            background: 'rgba(255,255,255,0.15)',
-            border: '1.5px solid rgba(255,255,255,0.3)',
-            borderRadius: '0.75rem',
-            width: '2.5rem',
-            height: '2.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '1.1rem',
-          }}
-        >
-          🔔
-          {unread > 0 && (
-            <span style={{
-              position: 'absolute',
-              top: '-4px',
-              right: '-4px',
-              background: '#ef4444',
-              color: 'white',
-              fontSize: '0.6rem',
-              fontWeight: 700,
-              minWidth: '16px',
-              height: '16px',
-              borderRadius: '9999px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0 3px',
-            }}>
-              {unread}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* 드롭다운 — position: fixed 로 뷰포트 기준 배치 → 짤림 없음 */}
+      {/* 바텀시트 (position:fixed 드롭다운 오류 해결) */}
       {open && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setOpen(false)} />
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.35)' }}
+            onClick={() => setOpen(false)}
+          />
           <div style={{
-            position: 'fixed',
-            top: dropdownPos.top,
-            right: dropdownPos.right,
-            width: '320px',
-            maxWidth: 'calc(100vw - 1rem)',
-            background: 'white',
-            borderRadius: '1rem',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+            position: 'fixed', left: 0, right: 0, bottom: 0,
             zIndex: 50,
-            overflow: 'hidden',
+            background: 'white',
+            borderRadius: '1.25rem 1.25rem 0 0',
+            boxShadow: '0 -4px 32px rgba(0,0,0,0.15)',
+            maxHeight: 'calc(100dvh - 80px)',
+            display: 'flex', flexDirection: 'column',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           }}>
+            {/* 드래그 핸들 */}
+            <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0.75rem auto 0', flexShrink: 0 }} />
+
             {/* 헤더 */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0.875rem 1rem',
-              borderBottom: '1px solid #f3f4f6',
-            }}>
-              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>알림</span>
-              {notifs.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1rem 0.75rem', borderBottom: '1px solid #f3f4f6', flexShrink: 0 }}>
+              <span style={{ fontWeight: 700, fontSize: '1rem', color: '#111827' }}>
+                알림
+                {unread > 0 && (
+                  <span style={{ marginLeft: '0.5rem', background: '#ef4444', color: 'white', fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: '9999px' }}>
+                    {unread}
+                  </span>
+                )}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {notifs.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      await Promise.all(notifs.map(n => fetch(`/api/notifications/${n.id}`, { method: 'DELETE' })))
+                      setNotifs([])
+                    }}
+                    style={{ fontSize: '0.8rem', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem' }}
+                  >
+                    전체 삭제
+                  </button>
+                )}
                 <button
-                  onClick={async () => {
-                    await Promise.all(notifs.map(n =>
-                      fetch(`/api/notifications/${n.id}`, { method: 'DELETE' })
-                    ))
-                    setNotifs([])
-                  }}
-                  style={{ fontSize: '0.72rem', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  전체 삭제
-                </button>
-              )}
+                  onClick={() => setOpen(false)}
+                  style={{ background: '#f3f4f6', border: 'none', borderRadius: '50%', width: '1.75rem', height: '1.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6b7280', fontSize: '0.85rem', fontWeight: 700 }}
+                >✕</button>
+              </div>
             </div>
 
-            {/* 알림 목록 */}
-            <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
-              {loading ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
-                  로딩 중...
+            {/* 푸시 구독 상태 — 드롭다운 내 배치 */}
+            {supported && (
+              <div style={{ padding: '0.625rem 1rem', background: subscribed ? '#f0fdf4' : '#f9fafb', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '1rem' }}>{subscribed ? '🔔' : '🔕'}</span>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: subscribed ? '#15803d' : '#6b7280' }}>{subscribed ? '푸시 알림 켜짐' : '푸시 알림 꺼짐'}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{subscribed ? '새 알림을 즉시 받습니다' : '알림을 받으려면 켜세요'}</div>
+                  </div>
                 </div>
+                <button
+                  onClick={handlePushToggle}
+                  disabled={pushLoading}
+                  style={{ background: subscribed ? 'transparent' : '#7e22ce', border: subscribed ? '1.5px solid #e5e7eb' : 'none', borderRadius: '0.625rem', padding: '0.375rem 0.875rem', fontSize: '0.8rem', fontWeight: 700, color: subscribed ? '#6b7280' : 'white', cursor: pushLoading ? 'wait' : 'pointer', minWidth: '3.5rem', minHeight: '2.25rem' }}
+                >
+                  {pushLoading ? '...' : subscribed ? '끄기' : '켜기'}
+                </button>
+              </div>
+            )}
+
+            {/* 알림 목록 */}
+            <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              {loading ? (
+                <div style={{ padding: '2.5rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>불러오는 중...</div>
               ) : notifs.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
-                  알림이 없습니다
+                <div style={{ padding: '2.5rem', textAlign: 'center', color: '#9ca3af' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🔔</div>
+                  <p style={{ fontSize: '0.875rem' }}>알림이 없습니다</p>
                 </div>
               ) : (
                 notifs.map(n => {
@@ -224,42 +197,19 @@ export default function NotificationBell() {
                     <div
                       key={n.id}
                       onClick={() => handleClick(n)}
-                      style={{
-                        padding: '0.875rem 1rem',
-                        borderBottom: '1px solid #f9fafb',
-                        cursor: n.link ? 'pointer' : 'default',
-                        background: n.is_read ? 'white' : '#f0f9ff',
-                        display: 'flex',
-                        gap: '0.75rem',
-                        alignItems: 'flex-start',
-                      }}
+                      style={{ padding: '0.875rem 1rem', borderBottom: '1px solid #f9fafb', cursor: n.link ? 'pointer' : 'default', background: n.is_read ? 'white' : '#f0f9ff', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', minHeight: '3.5rem' }}
                     >
-                      <span style={{ fontSize: '1rem', flexShrink: 0, marginTop: '1px' }}>{st.emoji}</span>
+                      <span style={{ fontSize: '1.1rem', flexShrink: 0, marginTop: '1px' }}>{st.emoji}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: n.is_read ? 500 : 700, fontSize: '0.8rem', color: '#111827' }}>{n.title}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px', lineHeight: 1.4 }}>{n.body}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '4px' }}>{fmt(n.created_at)}</div>
+                        <div style={{ fontWeight: n.is_read ? 500 : 700, fontSize: '0.875rem', color: '#111827' }}>{n.title}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px', lineHeight: 1.4 }}>{n.body}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '4px' }}>{fmt(n.created_at)}</div>
                       </div>
-                      {/* 단건 삭제 버튼 */}
                       <button
                         onClick={e => handleDelete(e, n.id)}
-                        title="삭제"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          color: '#d1d5db',
-                          fontSize: '0.85rem',
-                          padding: '2px 4px',
-                          borderRadius: '4px',
-                          flexShrink: 0,
-                          lineHeight: 1,
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
-                        onMouseLeave={e => (e.currentTarget.style.color = '#d1d5db')}
-                      >
-                        ✕
-                      </button>
+                        aria-label="알림 삭제"
+                        style={{ background: '#f3f4f6', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '0.75rem', padding: '0.25rem 0.375rem', borderRadius: '0.375rem', flexShrink: 0, minWidth: '1.75rem', minHeight: '1.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >✕</button>
                     </div>
                   )
                 })
@@ -268,6 +218,6 @@ export default function NotificationBell() {
           </div>
         </>
       )}
-    </div>
+    </>
   )
 }

@@ -168,7 +168,7 @@ export default async function OwnerDashboard() {
           </div>
 
           <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-            <LogoutButton />
+            <LogoutButton role={session.role} />
           </div>
         </div>
       </div>
