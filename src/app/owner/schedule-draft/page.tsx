@@ -1,4 +1,6 @@
 'use client'
+// src/app/owner/schedule-draft/page.tsx
+// ✅ fix: family_member_name 표시 (가족 신청 시 부모(자녀) 형태)
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -10,9 +12,15 @@ interface DraftSlot {
   duration_minutes: number
   status: 'draft' | 'conflict_pending'
   has_conflict: boolean
-  member_name: string
-  coach_name: string
-  lesson_type: string
+  family_member_name: string | null  // ✅ 추가
+  lesson_plan?: {
+    id: string
+    lesson_type: string
+    unit_minutes: number
+    amount: number
+    member?: { id: string; name: string; phone: string }
+    coach?: { id: string; name: string }
+  }
 }
 
 interface MemberRequest {
@@ -47,7 +55,7 @@ export default function ScheduleDraftPage() {
   const [loading,  setLoading]  = useState(false)
   const [saving,   setSaving]   = useState(false)
   const [msg,      setMsg]      = useState('')
-  const [reqTab,   setReqTab]   = useState(false) // 회원 요청 탭 열림 여부
+  const [reqTab,   setReqTab]   = useState(false)
 
   useEffect(() => {
     fetch('/api/months').then(r => r.json()).then((d: Month[]) => {
@@ -124,7 +132,6 @@ export default function ScheduleDraftPage() {
     loadAll(monthId)
   }
 
-  // 충돌 슬롯 일괄 삭제
   const handleDeleteAllConflict = async () => {
     if (!monthId) return
     const cnt = conflictDrafts.length
@@ -142,7 +149,6 @@ export default function ScheduleDraftPage() {
     loadAll(monthId)
   }
 
-  // 회원 요청 처리 (승인/거절)
   const handleRequestAction = async (reqId: string, action: 'approve' | 'reject') => {
     setSaving(true)
     await fetch(`/api/lesson-applications/${reqId}`, {
@@ -156,7 +162,6 @@ export default function ScheduleDraftPage() {
     loadAll(monthId)
   }
 
-  // draft_open 토글
   const handleToggleDraftOpen = async () => {
     const selMonth = months.find(m => m.id === monthId)
     const newVal   = !selMonth?.draft_open
@@ -192,7 +197,7 @@ export default function ScheduleDraftPage() {
 
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem' }}>
 
-        {/* draft_open 토글 + 안내 */}
+        {/* draft_open 토글 */}
         <div style={{ background: selMonth?.draft_open ? '#f0fdf4' : '#eff6ff', border: `1.5px solid ${selMonth?.draft_open ? '#86efac' : '#bfdbfe'}`, borderRadius: '1rem', padding: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ flex: 1, fontSize: '0.875rem', color: selMonth?.draft_open ? '#15803d' : '#1d4ed8', fontFamily: 'Noto Sans KR, sans-serif' }}>
             {selMonth?.draft_open
@@ -206,15 +211,13 @@ export default function ScheduleDraftPage() {
           </button>
         </div>
 
-        {/* 회원 수정 요청 배지 + 탭 */}
+        {/* 회원 수정 요청 탭 */}
         {requests.length > 0 && (
           <div style={{ marginBottom: '1rem' }}>
             <button onClick={() => setReqTab(v => !v)}
               style={{ width: '100%', padding: '0.75rem 1rem', background: pendingReqs.length > 0 ? '#fef9c3' : 'white', border: `1.5px solid ${pendingReqs.length > 0 ? '#fde68a' : '#e5e7eb'}`, borderRadius: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
               <span style={{ fontSize: '1rem' }}>📝</span>
-              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', flex: 1, textAlign: 'left' }}>
-                회원 수정 요청
-              </span>
+              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', flex: 1, textAlign: 'left' }}>회원 수정 요청</span>
               {pendingReqs.length > 0 && (
                 <span style={{ background: '#f59e0b', color: 'white', fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px' }}>
                   검토 필요 {pendingReqs.length}건
@@ -308,7 +311,9 @@ export default function ScheduleDraftPage() {
                     🗑 충돌 전체 삭제
                   </button>
                 </div>
-                {conflictDrafts.map(s => <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving} />)}
+                {conflictDrafts.map(s => (
+                  <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving} />
+                ))}
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '0.75rem', marginBottom: '0.25rem' }}>✅ 정상 항목</div>
               </>
             )}
@@ -329,17 +334,32 @@ function SlotCard({ slot, onConfirm, onDelete, saving }: {
   saving: boolean
 }) {
   const { full } = fmtSlot(slot.scheduled_at)
-  const isConflict = slot.has_conflict
-  const memberName = (slot as any).lesson_plan?.member?.name ?? slot.member_name ?? '-'
-  const coachName  = (slot as any).lesson_plan?.coach?.name  ?? slot.coach_name  ?? '-'
-  const lessonType = (slot as any).lesson_plan?.lesson_type  ?? slot.lesson_type  ?? ''
+  const isConflict  = slot.has_conflict
+  const memberName  = slot.lesson_plan?.member?.name ?? '-'
+  const coachName   = slot.lesson_plan?.coach?.name  ?? '-'
+  const lessonType  = slot.lesson_plan?.lesson_type  ?? ''
+
+  // ✅ 자녀 이름 있으면 "부모(자녀)" 형태로 표시
+  const displayName = slot.family_member_name
+    ? `${memberName}(${slot.family_member_name})`
+    : memberName
 
   return (
     <div style={{ background: 'white', border: `1.5px solid ${isConflict ? '#fecaca' : '#e5e7eb'}`, borderLeft: `4px solid ${isConflict ? '#b91c1c' : '#16A34A'}`, borderRadius: '0.875rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px' }}>
-          {isConflict && <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>휴무충돌</span>}
-          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>{memberName}</span>
+          {isConflict && (
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>휴무충돌</span>
+          )}
+          {/* ✅ 부모(자녀) 표시 */}
+          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
+            {displayName}
+          </span>
+          {slot.family_member_name && (
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 6px', borderRadius: '9999px' }}>
+              자녀
+            </span>
+          )}
           <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{coachName} 코치</span>
         </div>
         <div style={{ fontSize: '0.8rem', color: isConflict ? '#b91c1c' : '#374151', fontWeight: isConflict ? 700 : 400, fontFamily: 'Noto Sans KR, sans-serif' }}>

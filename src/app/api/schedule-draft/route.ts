@@ -1,4 +1,5 @@
 // src/app/api/schedule-draft/route.ts
+// ✅ fix: family_member_name 추가 (가족 신청 시 자녀 이름 표시)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -37,7 +38,40 @@ export async function GET(req: NextRequest) {
   const validPlanIds = new Set((planIds ?? []).map((p: any) => p.id))
   const filtered = (data ?? []).filter((s: any) => validPlanIds.has(s.lesson_plan?.id))
 
-  return NextResponse.json(filtered)
+  // ✅ plan_id 목록으로 lesson_applications 조회 → family_member_id 확보
+  const planIdList = [...validPlanIds]
+  const familyNameMap: Record<string, string> = {}  // plan_id → 자녀 이름
+
+  if (planIdList.length > 0) {
+    const { data: apps } = await supabaseAdmin
+      .from('lesson_applications')
+      .select('lesson_plan_id, family_member_id')
+      .in('lesson_plan_id', planIdList)
+      .not('family_member_id', 'is', null)
+
+    if (apps && apps.length > 0) {
+      const familyIds = [...new Set(apps.map((a: any) => a.family_member_id).filter(Boolean))]
+      const { data: familyMembers } = await supabaseAdmin
+        .from('family_members')
+        .select('id, name')
+        .in('id', familyIds)
+
+      const fmMap = new Map((familyMembers ?? []).map((f: any) => [f.id, f.name]))
+      apps.forEach((a: any) => {
+        if (a.lesson_plan_id && a.family_member_id && fmMap.has(a.family_member_id)) {
+          familyNameMap[a.lesson_plan_id] = fmMap.get(a.family_member_id)!
+        }
+      })
+    }
+  }
+
+  // ✅ 슬롯에 family_member_name 주입
+  const enriched = filtered.map((s: any) => ({
+    ...s,
+    family_member_name: s.lesson_plan?.id ? (familyNameMap[s.lesson_plan.id] ?? null) : null,
+  }))
+
+  return NextResponse.json(enriched)
 }
 
 // POST /api/schedule-draft
@@ -89,7 +123,6 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // total_count 업데이트 → 금액 재계산 ✅
     await updatePlanTotalCount(slot.lesson_plan_id)
     await recalcAndSavePlan(slot.lesson_plan_id)
 
@@ -127,14 +160,12 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // total_count 업데이트 → 금액 재계산 ✅
     const affectedPlanIds = [...new Set(draftSlots.map((s: any) => s.lesson_plan_id))]
     for (const planId of affectedPlanIds) {
       await updatePlanTotalCount(planId)
       await recalcAndSavePlan(planId)
     }
 
-    // 회원 알림
     const { data: plans } = await supabaseAdmin
       .from('lesson_plans')
       .select('member_id, month:month_id(year, month)')
