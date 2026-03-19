@@ -1,25 +1,28 @@
 'use client'
 // src/app/owner/schedule-draft/page.tsx
-// ✅ fix: family_member_name 표시 (가족 신청 시 부모(자녀) 형태)
+// ✅ fix: family_member_name 표시 (부모(자녀) 형태)
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
+interface FamilyMember { id: string; name: string }
+
 interface DraftSlot {
   id: string
-  lesson_plan_id: string
   scheduled_at: string
   duration_minutes: number
   status: 'draft' | 'conflict_pending'
   has_conflict: boolean
-  family_member_name: string | null  // ✅ 추가
+  family_member_name: string | null  // ✅ API에서 주입
   lesson_plan?: {
     id: string
     lesson_type: string
     unit_minutes: number
     amount: number
+    family_member_id: string | null
+    family_member: FamilyMember | null
     member?: { id: string; name: string; phone: string }
-    coach?: { id: string; name: string }
+    coach?:  { id: string; name: string }
   }
 }
 
@@ -154,9 +157,7 @@ export default function ScheduleDraftPage() {
     await fetch(`/api/lesson-applications/${reqId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: action === 'approve' ? 'approved' : 'rejected',
-      }),
+      body: JSON.stringify({ status: action === 'approve' ? 'approved' : 'rejected' }),
     })
     setSaving(false)
     loadAll(monthId)
@@ -225,7 +226,6 @@ export default function ScheduleDraftPage() {
               )}
               <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>{reqTab ? '▲' : '▼'}</span>
             </button>
-
             {reqTab && (
               <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {requests.map(r => {
@@ -241,20 +241,16 @@ export default function ScheduleDraftPage() {
                         <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#7c3aed', fontFamily: 'Noto Sans KR, sans-serif' }}>{typeLabel}</span>
                         <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, color: isPending ? '#854d0e' : r.status === 'approved' ? '#15803d' : '#b91c1c', fontFamily: 'Noto Sans KR, sans-serif' }}>{statusLabel}</span>
                       </div>
-                      <div style={{ fontSize: '0.78rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif', marginBottom: isPending ? '0.625rem' : '0' }}>
+                      <div style={{ fontSize: '0.78rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif', marginBottom: isPending ? '0.625rem' : 0 }}>
                         {r.requested_at ? fmtSlot(r.requested_at).full : ''} · {r.lesson_type}
                         {r.admin_note && <span style={{ marginLeft: '0.5rem', color: '#9ca3af' }}>— {r.admin_note}</span>}
                       </div>
                       {isPending && (
                         <div style={{ display: 'flex', gap: '0.375rem' }}>
                           <button onClick={() => handleRequestAction(r.id, 'approve')} disabled={saving}
-                            style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: 'none', background: '#16A34A', color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                            ✅ 반영
-                          </button>
+                            style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: 'none', background: '#16A34A', color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>✅ 반영</button>
                           <button onClick={() => handleRequestAction(r.id, 'reject')} disabled={saving}
-                            style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                            ❌ 거절
-                          </button>
+                            style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>❌ 거절</button>
                         </div>
                       )}
                     </div>
@@ -339,26 +335,24 @@ function SlotCard({ slot, onConfirm, onDelete, saving }: {
   const coachName   = slot.lesson_plan?.coach?.name  ?? '-'
   const lessonType  = slot.lesson_plan?.lesson_type  ?? ''
 
-  // ✅ 자녀 이름 있으면 "부모(자녀)" 형태로 표시
-  const displayName = slot.family_member_name
-    ? `${memberName}(${slot.family_member_name})`
-    : memberName
+  // ✅ family_member_name: API에서 lesson_plans.family_member.name으로 주입됨
+  const childName   = slot.family_member_name ?? slot.lesson_plan?.family_member?.name ?? null
+
+  // 부모(자녀) 형태로 표시
+  const displayName = childName ? `${memberName}(${childName})` : memberName
 
   return (
     <div style={{ background: 'white', border: `1.5px solid ${isConflict ? '#fecaca' : '#e5e7eb'}`, borderLeft: `4px solid ${isConflict ? '#b91c1c' : '#16A34A'}`, borderRadius: '0.875rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
       <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px', flexWrap: 'wrap' }}>
           {isConflict && (
             <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>휴무충돌</span>
           )}
-          {/* ✅ 부모(자녀) 표시 */}
           <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
             {displayName}
           </span>
-          {slot.family_member_name && (
-            <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 6px', borderRadius: '9999px' }}>
-              자녀
-            </span>
+          {childName && (
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 6px', borderRadius: '9999px' }}>자녀</span>
           )}
           <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{coachName} 코치</span>
         </div>
