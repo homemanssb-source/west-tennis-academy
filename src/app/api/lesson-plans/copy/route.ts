@@ -1,5 +1,6 @@
 // src/app/api/lesson-plans/copy/route.ts
 // ✅ 할인 정보(discount_amount, discount_memo) 승계 추가
+// ✅ fix: isBlocked KST 기준 날짜/요일, 분 단위 시간 비교로 수정
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -18,7 +19,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '원본과 대상 월이 같습니다' }, { status: 400 })
   }
 
-  // ── 대상 월 정보 조회 ─────────────────────────────────────────────────
   const { data: toMonthRecord } = await supabaseAdmin
     .from('months')
     .select('year, month')
@@ -31,7 +31,6 @@ export async function POST(req: NextRequest) {
 
   const { year: toYear, month: toMonth } = toMonthRecord
 
-  // ── 원본 월 플랜 조회 ─────────────────────────────────────────────────
   let query = supabaseAdmin
     .from('lesson_plans')
     .select(`
@@ -50,7 +49,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '복사할 플랜이 없습니다', debug: plansErr?.message }, { status: 404 })
   }
 
-  // ── 회원별 최신 할인 정보 조회 ✅ ────────────────────────────────────
   const memberIds = [...new Set(sourcePlans.map((p: any) => p.member_id))]
   const { data: memberProfiles } = await supabaseAdmin
     .from('profiles')
@@ -64,7 +62,6 @@ export async function POST(req: NextRequest) {
     }])
   )
 
-  // ── 대상 월에 이미 있는 플랜 확인 (중복 방지) ────────────────────────
   const { data: existingPlans } = await supabaseAdmin
     .from('lesson_plans')
     .select('member_id, coach_id')
@@ -83,28 +80,32 @@ export async function POST(req: NextRequest) {
     (existingPlansFull ?? []).map((p: any) => [`${p.member_id}_${p.coach_id}`, p.id])
   )
 
-  // ── 코치 휴무 전체 조회 ───────────────────────────────────────────────
   const { data: coachBlocks } = await supabaseAdmin.from('coach_blocks').select('*')
   const blocks = coachBlocks ?? []
 
-  const isBlocked = (coachId: string, dateObj: Date, timeStr: string): boolean => {
-    const dateStr   = dateObj.toISOString().split('T')[0]
-    const dayOfWeek = dateObj.getDay()
+  // ✅ fix: KST 기준 날짜/요일, 분 단위 시간 비교
+  const isBlocked = (coachId: string, dateObj: Date, timeStr: string, duration: number): boolean => {
+    const kst       = new Date(dateObj.getTime() + 9 * 60 * 60 * 1000)
+    const dateStr   = kst.toISOString().split('T')[0]
+    const dayOfWeek = kst.getUTCDay()
+    const [th, tm]  = timeStr.split(':').map(Number)
+    const reqS      = th * 60 + tm
+    const reqE      = reqS + duration
+
     return blocks.some((b: any) => {
       if (b.coach_id !== coachId) return false
-      if (b.block_date && b.block_date === dateStr) {
-        if (!b.block_start) return true
-        return timeStr >= b.block_start && timeStr <= (b.block_end ?? '23:59')
+      if (b.repeat_weekly) {
+        if (b.day_of_week !== dayOfWeek) return false
+      } else {
+        if (b.block_date !== dateStr) return false
       }
-      if (b.repeat_weekly && b.day_of_week === dayOfWeek) {
-        if (!b.block_start) return true
-        return timeStr >= b.block_start && timeStr <= (b.block_end ?? '23:59')
-      }
-      return false
+      if (!b.block_start && !b.block_end) return true
+      const bs = b.block_start ? Number(b.block_start.split(':')[0])*60+Number(b.block_start.split(':')[1]) : 0
+      const be = b.block_end   ? Number(b.block_end.split(':')[0])*60+Number(b.block_end.split(':')[1])   : 24*60
+      return reqS < be && reqE > bs
     })
   }
 
-  // ── 대상 월 날짜 목록 ─────────────────────────────────────────────────
   const daysInToMonth = new Date(toYear, toMonth, 0).getDate()
   const toMonthDates: { date: Date; dayOfWeek: number }[] = []
   for (let d = 1; d <= daysInToMonth; d++) {
@@ -122,7 +123,6 @@ export async function POST(req: NextRequest) {
     const planKey = `${plan.member_id}_${plan.coach_id}`
     let newPlanId: string
 
-    // 회원 최신 할인 정보 ✅
     const memberDiscount = memberDiscountMap.get(plan.member_id) ?? { discount_amount: 0, discount_memo: null }
 
     if (existingPlanSet.has(planKey)) {
@@ -137,15 +137,16 @@ export async function POST(req: NextRequest) {
           month_id:          to_month_id,
           lesson_type:       plan.lesson_type,
           total_count:       0,
-          billing_count:     0,               // ✅ confirm_all 때 재계산
+          billing_count:     0,
           completed_count:   0,
           payment_status:    'unpaid',
           amount:            plan.amount,
           unit_minutes:      plan.unit_minutes,
           program_id:        plan.program_id ?? null,
           next_month_synced: false,
-          discount_amount:   memberDiscount.discount_amount,  // ✅ 최신 할인
-          discount_memo:     memberDiscount.discount_memo,    // ✅
+          discount_amount:   memberDiscount.discount_amount,
+          discount_memo:     memberDiscount.discount_memo,
+          family_member_id:  plan.family_member_id ?? null,
         })
         .select('id')
         .single()
@@ -155,7 +156,6 @@ export async function POST(req: NextRequest) {
       copiedPlans++
     }
 
-    // ── 슬롯 패턴 추출 ──────────────────────────────────────────────────
     const slots = (plan.slots ?? []).filter((s: any) =>
       !s.is_makeup && !['cancelled', 'draft'].includes(s.status)
     )
@@ -183,7 +183,6 @@ export async function POST(req: NextRequest) {
 
     if (patterns.length === 0) continue
 
-    // ── 이미 있는 슬롯 확인 (반복 실행 중복 방지) ───────────────────────
     const { data: existingSlots } = await supabaseAdmin
       .from('lesson_slots')
       .select('scheduled_at')
@@ -194,7 +193,6 @@ export async function POST(req: NextRequest) {
       (existingSlots ?? []).map((s: any) => s.scheduled_at.slice(0, 16))
     )
 
-    // ── 대상 월 슬롯 생성 ───────────────────────────────────────────────
     const draftSlotsToInsert: any[] = []
 
     for (const pattern of patterns) {
@@ -210,7 +208,8 @@ export async function POST(req: NextRequest) {
           continue
         }
 
-        const blocked = isBlocked(plan.coach_id, slotDate, pattern.time)
+        // ✅ fix: duration 전달
+        const blocked = isBlocked(plan.coach_id, slotDate, pattern.time, pattern.duration)
         if (blocked) conflictSlots++
 
         draftSlotsToInsert.push({
@@ -234,7 +233,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // draft_open 자동 설정
   if (createdSlots > 0) {
     await supabaseAdmin
       .from('months')
