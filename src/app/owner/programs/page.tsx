@@ -1,6 +1,7 @@
 'use client'
 // src/app/owner/programs/page.tsx
 // ✅ 그룹수업 고정 스케줄 (fixed_schedules) 등록/수정 UI 추가
+// ✅ fix: 공통/코치지정 프로그램 요금 라벨 동적 변경
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -20,7 +21,6 @@ const PRESET_RATIOS = ['1:1', '2:1', '3:1', '4:1', '5:1', '6:1', '그룹']
 const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토']
 const fmt = (n: number) => (n || 0).toLocaleString()
 
-// 고정 스케줄 편집 컴포넌트
 function FixedScheduleEditor({
   schedules, onChange
 }: {
@@ -66,7 +66,6 @@ function FixedScheduleEditor({
   )
 }
 
-// 고정 스케줄 표시
 function FixedScheduleDisplay({ schedules }: { schedules: FixedSchedule[] | null }) {
   if (!schedules || schedules.length === 0) return null
   const sorted = [...schedules].sort((a, b) => a.day - b.day || a.time.localeCompare(b.time))
@@ -98,9 +97,9 @@ export default function ProgramsPage() {
     description: '', customRatio: '', coach_id: '',
     default_amount: 0, per_session_price: 0, sort_order: 0,
   })
-  const [useCustom,       setUseCustom]       = useState(false)
-  const [formSchedules,   setFormSchedules]   = useState<FixedSchedule[]>([])
-  const [editSchedules,   setEditSchedules]   = useState<FixedSchedule[]>([])
+  const [useCustom,     setUseCustom]     = useState(false)
+  const [formSchedules, setFormSchedules] = useState<FixedSchedule[]>([])
+  const [editSchedules, setEditSchedules] = useState<FixedSchedule[]>([])
 
   const load = async () => {
     setLoading(true)
@@ -120,7 +119,6 @@ export default function ProgramsPage() {
 
   useEffect(() => { load() }, [])
 
-  // 수정 모달 열 때 schedules 초기화
   const openEdit = (p: Program) => {
     setSelected(p)
     setEditSchedules(p.fixed_schedules ?? [])
@@ -146,7 +144,7 @@ export default function ProgramsPage() {
         default_amount:    form.default_amount,
         per_session_price: form.per_session_price,
         sort_order:        form.sort_order,
-        fixed_schedules:   formSchedules.length > 0 ? formSchedules : null, // ✅
+        fixed_schedules:   formSchedules.length > 0 ? formSchedules : null,
       }),
     })
     const data = await res.json()
@@ -171,7 +169,7 @@ export default function ProgramsPage() {
         default_amount:    selected.default_amount,
         per_session_price: selected.per_session_price,
         sort_order:        selected.sort_order,
-        fixed_schedules:   editSchedules.length > 0 ? editSchedules : null, // ✅
+        fixed_schedules:   editSchedules.length > 0 ? editSchedules : null,
       }),
     })
     setSaving(false)
@@ -203,6 +201,22 @@ export default function ProgramsPage() {
   }
 
   const coachName = (id: string | null) => id ? coaches.find(c => c.id === id)?.name ?? null : null
+  const isGroup   = (maxStudents: number) => maxStudents > 1
+
+  // ✅ 요금 라벨 동적 생성
+  const feeLabels = (coachId: string | null) => coachId
+    ? {
+        default:    `월정액 고정 (${config.session_threshold}회 이상, 원)`,
+        perSession: `회당 단가 (${config.session_threshold}회 미만, 원)`,
+        cardDefault: '월정액',
+        cardPerSession: '회당(미만)',
+      }
+    : {
+        default:    `8회 이상 회당 금액 (원)`,
+        perSession: `8회 미만 회당 금액 (원)`,
+        cardDefault: '8회↑ 회당',
+        cardPerSession: '8회↓ 회당',
+      }
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '0.625rem 0.875rem', borderRadius: '0.625rem',
@@ -213,9 +227,6 @@ export default function ProgramsPage() {
   const labelStyle: React.CSSProperties = {
     fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px',
   }
-
-  // 그룹수업 여부 판단
-  const isGroup = (maxStudents: number) => maxStudents > 1
 
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
@@ -280,8 +291,8 @@ export default function ProgramsPage() {
         <div style={{ background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', border: '1.5px solid #93c5fd', borderRadius: '1rem', padding: '1rem 1.25rem', marginBottom: '1.25rem' }}>
           <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1e40af', marginBottom: '4px' }}>📌 프로그램 구분 방식</div>
           <div style={{ fontSize: '0.8rem', color: '#1d4ed8', lineHeight: 1.7 }}>
-            • <strong>공통 프로그램</strong> — 모든 코치에게 표시 (코치 미지정)<br/>
-            • <strong>코치 전용 프로그램</strong> — 해당 코치를 선택할 때만 표시<br/>
+            • <strong>공통 프로그램</strong> — 모든 코치에게 표시 · 8회 미만/이상 각각 다른 회당 금액<br/>
+            • <strong>코치 전용 프로그램</strong> — 해당 코치를 선택할 때만 표시 · 8회 이상 월정액 고정<br/>
             • <strong>그룹수업 (최대인원 2명↑)</strong> — 고정 스케줄 등록 시 회원이 1클릭으로 신청 가능
           </div>
         </div>
@@ -313,49 +324,51 @@ export default function ProgramsPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.875rem' }}>
-            {filteredPrograms.map(p => (
-              <div key={p.id} onClick={() => openEdit(p)}
-                style={{ background: 'white', borderRadius: '1rem', border: `1.5px solid ${p.is_active ? '#e5e7eb' : '#f3f4f6'}`, padding: '1.25rem', cursor: 'pointer', opacity: p.is_active ? 1 : 0.55, transition: 'box-shadow .15s' }}
-                onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
-                onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                  <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: '#16A34A' }}>{p.ratio}</span>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: p.is_active ? '#dcfce7' : '#fee2e2', color: p.is_active ? '#15803d' : '#b91c1c' }}>
-                      {p.is_active ? '운영중' : '중단'}
-                    </span>
-                    {p.coach_id ? (
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>
-                        🎾 {coachName(p.coach_id) ?? '코치'}
+            {filteredPrograms.map(p => {
+              const labels = feeLabels(p.coach_id)
+              return (
+                <div key={p.id} onClick={() => openEdit(p)}
+                  style={{ background: 'white', borderRadius: '1rem', border: `1.5px solid ${p.is_active ? '#e5e7eb' : '#f3f4f6'}`, padding: '1.25rem', cursor: 'pointer', opacity: p.is_active ? 1 : 0.55, transition: 'box-shadow .15s' }}
+                  onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
+                  onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                    <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.5rem', fontWeight: 700, color: '#16A34A' }}>{p.ratio}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: p.is_active ? '#dcfce7' : '#fee2e2', color: p.is_active ? '#15803d' : '#b91c1c' }}>
+                        {p.is_active ? '운영중' : '중단'}
                       </span>
-                    ) : (
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#f3f4f6', color: '#6b7280' }}>공통</span>
+                      {p.coach_id ? (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>
+                          🎾 {coachName(p.coach_id) ?? '코치'}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#f3f4f6', color: '#6b7280' }}>공통</span>
+                      )}
+                      {isGroup(p.max_students) && (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#fef9c3', color: '#854d0e' }}>
+                          그룹 최대 {p.max_students}명
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827', marginBottom: '4px' }}>{p.name}</div>
+                  <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{p.unit_minutes}분</div>
+                  <FixedScheduleDisplay schedules={p.fixed_schedules} />
+                  {/* ✅ 카드에서 라벨 동적 표시 */}
+                  <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {p.default_amount > 0 && (
+                      <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700 }}>{labels.cardDefault}: {fmt(p.default_amount)}원</div>
                     )}
-                    {/* ✅ 그룹수업 배지 */}
-                    {isGroup(p.max_students) && (
-                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#fef9c3', color: '#854d0e' }}>
-                        그룹 최대 {p.max_students}명
-                      </span>
+                    {p.per_session_price > 0 && (
+                      <div style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700 }}>{labels.cardPerSession}: {fmt(p.per_session_price)}원</div>
                     )}
                   </div>
-                </div>
-                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827', marginBottom: '4px' }}>{p.name}</div>
-                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{p.unit_minutes}분</div>
-                {/* ✅ 고정 스케줄 표시 */}
-                <FixedScheduleDisplay schedules={p.fixed_schedules} />
-                <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  {p.default_amount > 0 && (
-                    <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700 }}>월정액: {fmt(p.default_amount)}원</div>
-                  )}
-                  {p.per_session_price > 0 && (
-                    <div style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700 }}>회당: {fmt(p.per_session_price)}원</div>
+                  {p.description && (
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>{p.description}</div>
                   )}
                 </div>
-                {p.description && (
-                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>{p.description}</div>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -418,7 +431,6 @@ export default function ProgramsPage() {
                 </div>
               </div>
 
-              {/* ✅ 그룹수업 고정 스케줄 */}
               {form.max_students > 1 && (
                 <div style={{ background: '#eff6ff', borderRadius: '0.75rem', padding: '0.875rem' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e40af', marginBottom: '0.5rem' }}>
@@ -428,16 +440,23 @@ export default function ProgramsPage() {
                 </div>
               )}
 
+              {/* ✅ 요금 설정 - 공통/코치지정 라벨 동적 변경 */}
               <div style={{ background: '#f0fdf4', borderRadius: '0.75rem', padding: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>💰 요금 설정</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>
+                  💰 요금 설정
+                  {form.coach_id
+                    ? <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: '6px' }}>— 코치 전용 (8회 이상 월정액 고정)</span>
+                    : <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: '6px' }}>— 공통 (8회 미만/이상 각각 다른 단가)</span>
+                  }
+                </div>
                 <div>
-                  <label style={labelStyle}>월정액 ({config.session_threshold}회 이상, 원)</label>
+                  <label style={labelStyle}>{feeLabels(form.coach_id || null).default}</label>
                   <input type="number" style={inputStyle} placeholder="0" min="0"
                     value={form.default_amount || ''}
                     onChange={e => setForm(f => ({ ...f, default_amount: Number(e.target.value) }))} />
                 </div>
                 <div>
-                  <label style={labelStyle}>회당 단가 ({config.session_threshold}회 미만 시, 원)</label>
+                  <label style={labelStyle}>{feeLabels(form.coach_id || null).perSession}</label>
                   <input type="number" style={inputStyle} placeholder="0" min="0"
                     value={form.per_session_price || ''}
                     onChange={e => setForm(f => ({ ...f, per_session_price: Number(e.target.value) }))} />
@@ -521,7 +540,6 @@ export default function ProgramsPage() {
                 </div>
               </div>
 
-              {/* ✅ 그룹수업 고정 스케줄 수정 */}
               {selected.max_students > 1 && (
                 <div style={{ background: '#eff6ff', borderRadius: '0.75rem', padding: '0.875rem' }}>
                   <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e40af', marginBottom: '0.5rem' }}>
@@ -531,15 +549,22 @@ export default function ProgramsPage() {
                 </div>
               )}
 
+              {/* ✅ 요금 설정 - 공통/코치지정 라벨 동적 변경 */}
               <div style={{ background: '#f0fdf4', borderRadius: '0.75rem', padding: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>💰 요금 설정</div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>
+                  💰 요금 설정
+                  {selected.coach_id
+                    ? <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: '6px' }}>— 코치 전용 (8회 이상 월정액 고정)</span>
+                    : <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: '6px' }}>— 공통 (8회 미만/이상 각각 다른 단가)</span>
+                  }
+                </div>
                 <div>
-                  <label style={labelStyle}>월정액 ({config.session_threshold}회 이상, 원)</label>
+                  <label style={labelStyle}>{feeLabels(selected.coach_id).default}</label>
                   <input type="number" style={inputStyle} min="0" value={selected.default_amount ?? 0}
                     onChange={e => setSelected(s => s ? { ...s, default_amount: Number(e.target.value) } : s)} />
                 </div>
                 <div>
-                  <label style={labelStyle}>회당 단가 ({config.session_threshold}회 미만 시, 원)</label>
+                  <label style={labelStyle}>{feeLabels(selected.coach_id).perSession}</label>
                   <input type="number" style={inputStyle} min="0" value={selected.per_session_price ?? 0}
                     onChange={e => setSelected(s => s ? { ...s, per_session_price: Number(e.target.value) } : s)} />
                 </div>

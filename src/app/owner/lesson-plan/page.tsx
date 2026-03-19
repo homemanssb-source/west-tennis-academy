@@ -574,14 +574,11 @@ export default function LessonPlanCreatePage() {
                   <span style={{ color: '#4b5563' }}>
                     기본금액
                     <span style={{ color: '#9ca3af', fontSize: '0.72rem', marginLeft: '4px' }}>
-                      {/* ✅ fix: 코치 지정 프로그램 설명 텍스트 */}
                       ({effectiveBillingCount >= config.session_threshold
-                        ? selectedProgram.coach_id
-                          ? '월정액 고정'
-                          : effectiveBillingCount === config.session_threshold
-                            ? '월정액'
-                            : `월정액 + ${effectiveBillingCount - config.session_threshold}회 초과`
-                        : `${selectedProgram.per_session_price.toLocaleString()}원 × ${effectiveBillingCount}회`})
+                            ? selectedProgram.coach_id
+                            ? '월정액 고정'
+                           : `${selectedProgram.default_amount.toLocaleString()}원 × ${effectiveBillingCount}회`
+                           : `${selectedProgram.per_session_price.toLocaleString()}원 × ${effectiveBillingCount}회`})
                     </span>
                   </span>
                   <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700 }}>{fmt(autoCalc.base_amount)}</span>

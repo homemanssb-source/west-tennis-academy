@@ -1,4 +1,10 @@
-// src/lib/calcAmount.ts
+﻿// src/lib/calcAmount.ts
+// ================================================================
+// WTA 레슨비 자동 계산 유틸리티
+// ================================================================
+// fix: 코치 지정 - 8회 이상 월정액 고정
+// fix: 공통 - 8회 미만 per_session_price, 8회 이상 default_amount 회당 단가
+
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export interface WtaConfig {
@@ -15,7 +21,7 @@ export interface CalcInput {
   sat_count:          number
   sun_count:          number
   discount_amount:    number
-  is_coach_program?:  boolean  // ✅ 추가: 코치 지정 프로그램 여부
+  is_coach_program?:  boolean
 }
 
 export interface CalcResult {
@@ -43,16 +49,16 @@ export function calcAmount(input: CalcInput): CalcResult {
 
   if (billing_count >= session_threshold) {
     if (is_coach_program) {
-      // ✅ 코치 지정: 8회 이상이면 무조건 월정액 고정
+      // 코치 지정: 8회 이상 무조건 월정액 고정
       base_amount  = default_amount
       pricing_mode = 'monthly'
     } else {
-      // ✅ 공통: 8회 이상이면 월정액 + 초과분
-      const over   = billing_count - session_threshold
-      base_amount  = default_amount + (over > 0 ? over * per_session_price : 0)
-      pricing_mode = over > 0 ? 'over' : 'monthly'
+      // 공통: 8회 이상은 default_amount 단가 × 횟수
+      base_amount  = default_amount * billing_count
+      pricing_mode = 'over'
     }
   } else {
+    // 8회 미만: per_session_price 단가 × 횟수
     base_amount  = per_session_price * billing_count
     pricing_mode = 'per_session'
   }
@@ -127,7 +133,7 @@ export async function recalcAndSavePlan(planId: string): Promise<CalcResult | nu
     sat_count,
     sun_count,
     discount_amount:   (plan as any).discount_amount ?? 0,
-    is_coach_program:  !!prog.coach_id,  // ✅ 추가
+    is_coach_program:  !!prog.coach_id,
   })
 
   await supabaseAdmin
