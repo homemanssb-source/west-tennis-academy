@@ -149,18 +149,33 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 대상 월 이미 scheduled된 슬롯 시간 목록 (중복 경고용) ─────────────
+  // ✅ 대상 월 plan_id만 필터 + UTC→KST 변환 후 비교
+  const { data: toMonthPlanIds } = await supabaseAdmin
+    .from('lesson_plans')
+    .select('id, coach_id')
+    .eq('month_id', to_month_id)
+
+  const toMonthPlanCoachMap = new Map(
+    (toMonthPlanIds ?? []).map((p: any) => [p.id, p.coach_id])
+  )
+
   const { data: scheduledSlots } = await supabaseAdmin
     .from('lesson_slots')
-    .select('scheduled_at, lesson_plan:lesson_plan_id(coach_id)')
+    .select('scheduled_at, lesson_plan_id')
+    .in('lesson_plan_id', (toMonthPlanIds ?? []).map((p: any) => p.id))
     .eq('status', 'scheduled')
 
-  // coach_id별 scheduled 시간 Set
+  // coach_id별 scheduled KST 시간 Set ("YYYY-MM-DDTHH:MM" 형식)
   const scheduledByCoach: Record<string, Set<string>> = {}
   for (const s of scheduledSlots ?? []) {
-    const cid = (s.lesson_plan as any)?.coach_id
+    const cid = toMonthPlanCoachMap.get(s.lesson_plan_id)
     if (!cid) continue
+    // ✅ DB에서 오는 UTC 시간을 KST로 변환
+    const utc = new Date(s.scheduled_at as string)
+    const kst = new Date(utc.getTime() + 9 * 60 * 60 * 1000)
+    const kstKey = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth()+1).padStart(2,'0')}-${String(kst.getUTCDate()).padStart(2,'0')}T${String(kst.getUTCHours()).padStart(2,'0')}:${String(kst.getUTCMinutes()).padStart(2,'0')}`
     if (!scheduledByCoach[cid]) scheduledByCoach[cid] = new Set()
-    scheduledByCoach[cid].add((s.scheduled_at as string).slice(0, 16))
+    scheduledByCoach[cid].add(kstKey)
   }
 
   let copiedPlans   = 0
