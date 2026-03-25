@@ -1,6 +1,7 @@
-﻿// src/app/api/lesson-slots/route.ts
+// src/app/api/lesson-slots/route.ts
 // ✅ fix: POST 핸들러 추가 (슬롯 추가 기능)
 // ✅ fix: family_member_name 주입 (lesson_plans.family_member_id 직접 조회)
+// ✅ fix: appSlots duration_minutes 하드코딩 제거 → 실제 값 사용 (30분 수업 다음 슬롯 차단 버그 수정)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
   if (coachId) {
     const { data: appData } = await supabaseAdmin
       .from('lesson_applications')
-      .select('id, requested_at, status, coach_id')
+      .select('id, requested_at, status, coach_id, duration_minutes')  // ✅ duration_minutes 추가
       .eq('coach_id', coachId)
       .gte('requested_at', startStr)
       .lte('requested_at', endStr)
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
       id: a.id,
       scheduled_at: a.requested_at,
       status: a.status,
-      duration_minutes: 60,
+      duration_minutes: a.duration_minutes ?? 60,  // ✅ 실제 값 사용 (기존 60 하드코딩 → 버그 수정)
       slot_type: null,
       lesson_plan: null,
       family_member_name: null,
