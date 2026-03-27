@@ -1,5 +1,6 @@
 // src/app/api/payment/route.ts
 // ✅ payments 테이블 join → toss_paid 필드 추가
+// ✅ family_member_id + family_member_name 추가 (자녀 표시)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
     .from('lesson_plans')
     .select(`
       id, payment_status, amount, lesson_type, total_count, completed_count, unit_minutes, created_at,
+      family_member_id,
       member:member_id ( id, name, phone ),
       coach:coach_id ( id, name ),
       month:month_id ( id, year, month )
@@ -45,10 +47,26 @@ export async function GET(req: NextRequest) {
     tossPaidSet = new Set((tossPayments ?? []).map((p: any) => p.lesson_plan_id))
   }
 
-  // ✅ toss_paid 필드 추가
+  // ✅ family_member_id 있는 플랜 → 자녀 이름 조회
+  const familyMemberIds = [...new Set(
+    plans.map((p: any) => p.family_member_id).filter(Boolean)
+  )]
+  const familyNameMap = new Map<string, string>()
+
+  if (familyMemberIds.length > 0) {
+    const { data: familyMembers } = await supabaseAdmin
+      .from('family_members')
+      .select('id, name')
+      .in('id', familyMemberIds)
+
+    ;(familyMembers ?? []).forEach((f: any) => familyNameMap.set(f.id, f.name))
+  }
+
+  // ✅ toss_paid + family_member_name 필드 추가
   const result = plans.map((p: any) => ({
     ...p,
-    toss_paid: tossPaidSet.has(p.id),  // 토스로 결제된 플랜 여부
+    toss_paid:          tossPaidSet.has(p.id),
+    family_member_name: p.family_member_id ? (familyNameMap.get(p.family_member_id) ?? null) : null,
   }))
 
   return NextResponse.json(result)

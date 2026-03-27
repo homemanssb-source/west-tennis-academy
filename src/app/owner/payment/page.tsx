@@ -7,10 +7,16 @@ interface Slot {
   id: string; scheduled_at: string; duration_minutes: number
   status: string; is_makeup: boolean
 }
+interface Receipt {
+  id: string; image_url: string; amount: number | null; memo: string | null; created_at: string
+  uploader?: { name: string }
+}
 interface LessonPlan {
   id: string; payment_status: 'unpaid' | 'paid'; amount: number
   lesson_type: string; total_count: number; completed_count: number
   unit_minutes: number; toss_paid: boolean
+  family_member_id: string | null
+  family_member_name: string | null
   member: { id: string; name: string; phone: string }
   coach:  { id: string; name: string }
   month:  { id: string; year: number; month: number }
@@ -28,6 +34,14 @@ const SLOT_STYLE: Record<string, { bg: string; border: string; color: string; la
   cancelled: { bg: '#f9fafb', border: '#d1d5db', color: '#6b7280', label: '취소' },
 }
 
+// ✅ 이름 표시 함수: 자녀 있으면 "(자녀)부모" 형태
+function displayName(plan: LessonPlan): string {
+  if (plan.family_member_name) {
+    return `(${plan.family_member_name})${plan.member?.name ?? ''}`
+  }
+  return plan.member?.name ?? '-'
+}
+
 export default function PaymentPage() {
   const [plans,    setPlans]    = useState<LessonPlan[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -36,6 +50,7 @@ export default function PaymentPage() {
   const [detailTab, setDetailTab] = useState<'slots'|'pay'>('slots')
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slots,    setSlots]    = useState<Slot[]>([])
+  const [receipts, setReceipts] = useState<Receipt[]>([])
   const [saving,   setSaving]   = useState(false)
   const [receipt,  setReceipt]  = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
@@ -93,9 +108,14 @@ export default function PaymentPage() {
     setPayLink(null); setLinkCopied(false)
     setSaving(false); setLinkLoading(false)
     setSlotsLoading(true)
-    const res = await fetch('/api/lesson-plans/' + plan.id)
-    const d   = await res.json()
+    setReceipts([])
+    // ✅ 슬롯 + 영수증 동시 로드
+    const [planRes] = await Promise.all([
+      fetch('/api/payment/' + plan.id),
+    ])
+    const d = await planRes.json()
     setSlots(d.slots ?? [])
+    setReceipts(Array.isArray(d.receipts) ? d.receipts : [])
     setSlotsLoading(false)
   }
 
@@ -168,6 +188,7 @@ export default function PaymentPage() {
   }
 
   const fmtDt = (dt: string) => { const d = new Date(dt); return (d.getMonth()+1) + '/' + d.getDate() + '(' + DAYS[d.getDay()] + ') ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') }
+  const fmtDate = (dt: string) => { const d = new Date(dt); return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}` }
   const filtered       = filter === 'all' ? plans : plans.filter(p => p.payment_status === filter)
   const fmt            = (n: number) => (n || 0).toLocaleString('ko-KR')
   const sortedSlots    = [...slots].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
@@ -178,6 +199,7 @@ export default function PaymentPage() {
   const paidCount      = plans.filter(p => p.payment_status === 'paid').length
   const unpaidTotal    = plans.filter(p => p.payment_status === 'unpaid').reduce((s, p) => s + (p.amount || 0), 0)
   const inputStyle = { width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white', boxSizing: 'border-box' as const, outline: 'none', color: '#111827' }
+
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', position: 'sticky', top: 0, zIndex: 40 }}>
@@ -227,7 +249,12 @@ export default function PaymentPage() {
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 700, color: '#111827' }}>{p.member?.name}</span>
+                        {/* ✅ 자녀 있으면 (자녀)부모 형태로 표시 */}
+                        <span style={{ fontWeight: 700, color: '#111827' }}>
+                          {p.family_member_name
+                            ? <><span style={{ color: '#1d4ed8' }}>({p.family_member_name})</span>{p.member?.name}</>
+                            : p.member?.name}
+                        </span>
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 7px', borderRadius: '9999px', background: p.payment_status === 'paid' ? '#dcfce7' : '#fee2e2', color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>{p.payment_status === 'paid' ? '납부완료' : '미납'}</span>
                         {p.toss_paid && <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>💳 토스결제</span>}
                       </div>
@@ -258,7 +285,13 @@ export default function PaymentPage() {
             <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }} />
             <div style={{ marginBottom: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
-                <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>{selected.member?.name} · {selected.month?.year}년 {selected.month?.month}월</span>
+                {/* ✅ 상세 모달 헤더도 자녀 표시 */}
+                <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>
+                  {selected.family_member_name
+                    ? `(${selected.family_member_name})${selected.member?.name}`
+                    : selected.member?.name
+                  } · {selected.month?.year}년 {selected.month?.month}월
+                </span>
                 {selected.toss_paid && <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>💳 토스결제</span>}
               </div>
               <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{selected.coach?.name} · {selected.lesson_type} · {selected.unit_minutes}분</div>
@@ -321,7 +354,11 @@ export default function PaymentPage() {
                 )}
 
                 <div style={{ background: '#f9fafb', borderRadius: '0.875rem', padding: '1rem', marginBottom: '1rem' }}>
-                  <div style={{ fontWeight: 700, color: '#111827', marginBottom: '4px' }}>{selected.member?.name}</div>
+                  <div style={{ fontWeight: 700, color: '#111827', marginBottom: '4px' }}>
+                    {selected.family_member_name
+                      ? <><span style={{ color: '#1d4ed8' }}>({selected.family_member_name})</span>{selected.member?.name}</>
+                      : selected.member?.name}
+                  </div>
                   <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{selected.month?.year}년 {selected.month?.month}월 · {selected.coach?.name} · {selected.lesson_type}</div>
                   <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: editAmount > 0 ? '#111827' : '#9ca3af', marginTop: '0.5rem' }}>
                     {editAmount > 0 ? fmt(editAmount) + '원' : '금액 미입력'}
@@ -355,8 +392,36 @@ export default function PaymentPage() {
                     style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid ' + (editAmount <= 0 ? '#fca5a5' : '#e5e7eb'), borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', boxSizing: 'border-box' as const, background: editAmount <= 0 ? '#fef2f2' : 'white' }} />
                 </div>
 
+                {/* ✅ 기존 영수증 목록 표시 */}
+                {receipts.length > 0 && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', marginBottom: '8px' }}>🧾 첨부된 영수증 ({receipts.length}건)</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {receipts.map(r => (
+                        <div key={r.id} style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.75rem', padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <a href={r.image_url} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                            <img src={r.image_url} alt="영수증" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '0.375rem', border: '1px solid #86efac', cursor: 'pointer' }} />
+                          </a>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#15803d' }}>
+                              {r.amount ? fmt(r.amount) + '원' : '금액 미기재'}
+                            </div>
+                            {r.memo && <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.memo}</div>}
+                            <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginTop: '2px' }}>
+                              {fmtDate(r.created_at)}{r.uploader?.name ? ` · ${r.uploader.name}` : ''}
+                            </div>
+                          </div>
+                          <a href={r.image_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700, textDecoration: 'none', flexShrink: 0 }}>크게보기</a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ marginBottom: '1.25rem' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>영수증 첨부 (현장 납부 시)</label>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '6px' }}>
+                    영수증 첨부 {selected.payment_status === 'paid' ? '(추가 첨부)' : '(현장 납부 시)'}
+                  </label>
                   <label style={{ display: 'block', border: '2px dashed #e5e7eb', borderRadius: '0.875rem', padding: '1rem', textAlign: 'center', cursor: 'pointer', background: receiptPreview ? '#f0fdf4' : '#fafafa' }}>
                     <input type="file" accept="image/*,application/pdf" onChange={e => { const f = e.target.files?.[0]; if (!f) return; setReceipt(f); const r = new FileReader(); r.onload = ev => setReceiptPreview(ev.target?.result as string); r.readAsDataURL(f) }} style={{ display: 'none' }} />
                     {receiptPreview ? <div><img src={receiptPreview} alt="영수증" style={{ maxHeight: '150px', maxWidth: '100%', borderRadius: '0.5rem', marginBottom: '6px' }} /><div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700 }}>✅ {receipt?.name}</div></div>
