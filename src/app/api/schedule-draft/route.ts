@@ -1,5 +1,6 @@
 // src/app/api/schedule-draft/route.ts
 // ✅ fix: family_member_name — lesson_plans.family_member_id 직접 join으로 조회
+// ✅ fix: confirm_all 타임아웃 — recalcAndSavePlan Promise.all 병렬처리 + try/catch 분리
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -40,7 +41,6 @@ export async function GET(req: NextRequest) {
   const validPlanIds = new Set((planIds ?? []).map((p: any) => p.id))
   const filtered = (data ?? []).filter((s: any) => validPlanIds.has(s.lesson_plan?.id))
 
-  // ✅ family_member_name 주입 (lesson_plans.family_member 직접 join)
   const enriched = filtered.map((s: any) => ({
     ...s,
     family_member_name: s.lesson_plan?.family_member?.name ?? null,
@@ -98,8 +98,11 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    await updatePlanTotalCount(slot.lesson_plan_id)
-    await recalcAndSavePlan(slot.lesson_plan_id)
+    // ✅ 병렬 처리
+    await Promise.all([
+      updatePlanTotalCount(slot.lesson_plan_id),
+      recalcAndSavePlan(slot.lesson_plan_id),
+    ])
 
     return NextResponse.json({ ok: true })
   }
@@ -128,6 +131,8 @@ export async function POST(req: NextRequest) {
     }
 
     const slotIds = draftSlots.map((s: any) => s.id)
+
+    // ✅ 슬롯 상태 업데이트
     const { error } = await supabaseAdmin
       .from('lesson_slots')
       .update({ status: 'scheduled' })
@@ -135,27 +140,40 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    const affectedPlanIds = [...new Set(draftSlots.map((s: any) => s.lesson_plan_id))]
-    for (const planId of affectedPlanIds) {
-      await updatePlanTotalCount(planId)
-      await recalcAndSavePlan(planId)
-    }
+    // ✅ 금액 재계산: 모든 플랜 병렬 처리 + 타임아웃 방어
+    const affectedPlanIds = [...new Set(draftSlots.map((s: any) => s.lesson_plan_id as string))]
 
-    const { data: plans } = await supabaseAdmin
-      .from('lesson_plans')
-      .select('member_id, month:month_id(year, month)')
-      .in('id', affectedPlanIds)
+    await Promise.all(
+      affectedPlanIds.map(async (planId) => {
+        try {
+          await updatePlanTotalCount(planId)
+          await recalcAndSavePlan(planId)
+        } catch (e) {
+          console.error('recalc failed for plan', planId, e)
+        }
+      })
+    )
 
-    if (plans && plans.length > 0) {
-      const month = (plans[0] as any).month
-      const notifs = [...new Set(plans.map((p: any) => p.member_id))].map((id: string) => ({
-        profile_id: id,
-        title: `✅ ${month?.year}년 ${month?.month}월 수업 확정`,
-        body: `다음달 수업 일정이 확정되었습니다. 일정을 확인하세요!`,
-        type: 'success',
-        link: '/member/schedule',
-      }))
-      await supabaseAdmin.from('notifications').insert(notifs)
+    // ✅ 알림: 병렬 처리
+    try {
+      const { data: plans } = await supabaseAdmin
+        .from('lesson_plans')
+        .select('member_id, month:month_id(year, month)')
+        .in('id', affectedPlanIds)
+
+      if (plans && plans.length > 0) {
+        const month = (plans[0] as any).month
+        const notifs = [...new Set(plans.map((p: any) => p.member_id as string))].map((id) => ({
+          profile_id: id,
+          title: `✅ ${month?.year}년 ${month?.month}월 수업 확정`,
+          body: `다음달 수업 일정이 확정되었습니다. 일정을 확인하세요!`,
+          type: 'success',
+          link: '/member/schedule',
+        }))
+        await supabaseAdmin.from('notifications').insert(notifs)
+      }
+    } catch (e) {
+      console.error('알림 발송 실패', e)
     }
 
     return NextResponse.json({ ok: true, confirmed: slotIds.length })
