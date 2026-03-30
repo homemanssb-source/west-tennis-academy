@@ -132,11 +132,13 @@ export async function POST(req: NextRequest) {
 
     const slotIds = draftSlots.map((s: any) => s.id)
 
-    // ✅ 슬롯 상태 업데이트
+    // ✅ lesson_plan_id 조건으로 직접 UPDATE (slotIds 배열이 수백~수천 개면 URL 초과 → 400)
     const { error } = await supabaseAdmin
       .from('lesson_slots')
       .update({ status: 'scheduled' })
-      .in('id', slotIds)
+      .in('lesson_plan_id', validIds)
+      .eq('status', 'draft')
+      .eq('has_conflict', false)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
