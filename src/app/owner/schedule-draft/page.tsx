@@ -1,8 +1,8 @@
 'use client'
 // src/app/owner/schedule-draft/page.tsx
-// ??fix: fmtSlot KST 蹂??(Supabase UTC 諛섑솚 ???
-// ??fix: family_member_name ?쒖떆 (媛議??좎껌 ???
-// ??add: registration_open ?좉? 踰꾪듉 異붽? (?뚯썝 ?좎껌 ?ㅽ뵂)
+// ✅ fix: fmtSlot KST 변환 (Supabase UTC 반환 대응)
+// ✅ fix: family_member_name 표시 (가족 신청 대응)
+// ✅ add: registration_open 토글 버튼 추가 (회원 신청 오픈)
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -48,7 +48,7 @@ interface Month {
   registration_open?: boolean
 }
 
-const DAY_KO = ['??,'??,'??,'??,'紐?,'湲?,'??]
+const DAY_KO = ['일','월','화','수','목','금','토']
 
 function fmtSlot(iso: string) {
   const d   = new Date(iso)
@@ -111,7 +111,7 @@ export default function ScheduleDraftPage() {
     if (!monthId) return
     const conflicts = drafts.filter(d => d.has_conflict)
     if (conflicts.length > 0) {
-      const ok = confirm(`異⑸룎 ${conflicts.length}嫄댁? ?쒖쇅?섍퀬 ?섎㉧吏 ${drafts.length - conflicts.length}嫄대쭔 ?뺤젙?좉퉴??`)
+      const ok = confirm(`충돌 ${conflicts.length}건은 제외하고 나머지 ${drafts.length - conflicts.length}건만 확정할까요?`)
       if (!ok) return
     }
     setSaving(true)
@@ -122,8 +122,8 @@ export default function ScheduleDraftPage() {
     })
     const data = await res.json()
     setSaving(false)
-    if (!res.ok) { setMsg('??' + data.error); return }
-    setMsg(`??${data.confirmed}嫄??뺤젙??)
+    if (!res.ok) { setMsg('❌ ' + data.error); return }
+    setMsg(`✅ ${data.confirmed}건 확정됨`)
     loadAll(monthId)
   }
 
@@ -139,7 +139,7 @@ export default function ScheduleDraftPage() {
   }
 
   const handleDeleteOne = async (slotId: string) => {
-    if (!confirm('??珥덉븞 ?щ’????젣?좉퉴??')) return
+    if (!confirm('이 초안 슬롯을 삭제할까요?')) return
     setSaving(true)
     await fetch('/api/schedule-draft', {
       method: 'POST',
@@ -153,7 +153,7 @@ export default function ScheduleDraftPage() {
   const handleDeleteAllConflict = async () => {
     if (!monthId) return
     const cnt = conflictDrafts.length
-    if (!confirm(`異⑸룎 ??ぉ ${cnt}嫄댁쓣 紐⑤몢 ??젣?좉퉴??`)) return
+    if (!confirm(`충돌 항목 ${cnt}건을 모두 삭제할까요?`)) return
     setSaving(true)
     const res = await fetch('/api/schedule-draft', {
       method: 'POST',
@@ -162,8 +162,8 @@ export default function ScheduleDraftPage() {
     })
     const data = await res.json()
     setSaving(false)
-    if (!res.ok) { setMsg('??' + data.error); return }
-    setMsg(`?뿊 異⑸룎 ${data.deleted}嫄???젣??)
+    if (!res.ok) { setMsg('❌ ' + data.error); return }
+    setMsg(`🗑 충돌 ${data.deleted}건 삭제됨`)
     loadAll(monthId)
   }
 
@@ -178,7 +178,7 @@ export default function ScheduleDraftPage() {
     loadAll(monthId)
   }
 
-  // 珥덉븞 誘몃━蹂닿린 ?좉? (湲곗〈 ?뚯썝??珥덉븞 ?뺤씤 + ?섏젙 ?붿껌??
+  // 초안 미리보기 토글 (기존 회원이 초안 확인 + 수정 요청용)
   const handleToggleDraftOpen = async () => {
     const selMonth = months.find(m => m.id === monthId)
     const newVal   = !selMonth?.draft_open
@@ -188,10 +188,10 @@ export default function ScheduleDraftPage() {
       body: JSON.stringify({ month_id: monthId, draft_open: newVal }),
     })
     setMonths(prev => prev.map(m => m.id === monthId ? { ...m, draft_open: newVal } : m))
-    setMsg(newVal ? '???뚯썝 誘몃━蹂닿린 ?ㅽ뵂?? : '?뵏 ?뚯썝 誘몃━蹂닿린 ?ロ옒')
+    setMsg(newVal ? '✅ 회원 미리보기 오픈됨' : '🔒 회원 미리보기 닫힘')
   }
 
-  // ?좎껌 ?ㅽ뵂 ?좉? (珥덉븞 ?뺤젙 ???뚯썝??吏곸젒 ?섏뾽 ?좎껌 媛??
+  // 신청 오픈 토글 (초안 확정 후 회원이 직접 수업 신청 가능)
   const handleToggleRegistrationOpen = async () => {
     const selMonth = months.find(m => m.id === monthId)
     const newVal   = !selMonth?.registration_open
@@ -201,7 +201,7 @@ export default function ScheduleDraftPage() {
       body: JSON.stringify({ month_id: monthId, registration_open: newVal }),
     })
     setMonths(prev => prev.map(m => m.id === monthId ? { ...m, registration_open: newVal } : m))
-    setMsg(newVal ? '?렱 ?뚯썝 ?섏뾽 ?좎껌 ?ㅽ뵂?? : '?뵏 ?뚯썝 ?섏뾽 ?좎껌 ?ロ옒')
+    setMsg(newVal ? '🎾 회원 수업 신청 오픈됨' : '🔒 회원 수업 신청 닫힘')
   }
 
   const okDrafts       = drafts.filter(d => !d.has_conflict)
@@ -211,23 +211,23 @@ export default function ScheduleDraftPage() {
 
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
-      {/* ?ㅻ뜑 */}
+      {/* 헤더 */}
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>??/Link>
+          <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
           <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827', flex: 1 }}>
-            ?섏뾽 珥덉븞 ?뺤젙
+            수업 초안 확정
           </h1>
           <select value={monthId} onChange={e => setMonthId(e.target.value)}
             style={{ padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif', background: 'white', color: '#374151' }}>
-            {months.map(m => <option key={m.id} value={m.id}>{m.year}??{m.month}??/option>)}
+            {months.map(m => <option key={m.id} value={m.id}>{m.year}년 {m.month}월</option>)}
           </select>
         </div>
       </div>
 
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem' }}>
 
-        {/* ?? STEP 1: 珥덉븞 誘몃━蹂닿린 ?좉? (湲곗〈 ?뚯썝 ?섏젙 ?붿껌?? ?? */}
+        {/* ── STEP 1: 초안 미리보기 토글 (기존 회원 수정 요청용) ── */}
         <div style={{
           background: selMonth?.draft_open ? '#f0fdf4' : '#eff6ff',
           border: `1.5px solid ${selMonth?.draft_open ? '#86efac' : '#bfdbfe'}`,
@@ -236,12 +236,12 @@ export default function ScheduleDraftPage() {
         }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', marginBottom: '2px', fontFamily: 'Noto Sans KR, sans-serif' }}>
-              STEP 1 ??珥덉븞 誘몃━蹂닿린
+              STEP 1 — 초안 미리보기
             </div>
             <div style={{ fontSize: '0.875rem', color: selMonth?.draft_open ? '#15803d' : '#1d4ed8', fontFamily: 'Noto Sans KR, sans-serif' }}>
               {selMonth?.draft_open
-                ? '???ㅽ뵂 以????뚯썝???ㅼ쓬???섏뾽 珥덉븞???뺤씤?섍퀬 ?섏젙 ?붿껌?????덉뒿?덈떎'
-                : '?뮕 ?ㅽ뵂?섎㈃ ?뚯썝??珥덉븞???뺤씤?섍퀬 ?섏젙 ?붿껌??蹂대궪 ???덉뒿?덈떎'
+                ? '✅ 오픈 중 — 회원이 다음달 수업 초안을 확인하고 수정 요청할 수 있습니다'
+                : '💡 오픈하면 회원이 초안을 확인하고 수정 요청을 보낼 수 있습니다'
               }
             </div>
           </div>
@@ -253,11 +253,11 @@ export default function ScheduleDraftPage() {
               fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
               fontFamily: 'Noto Sans KR, sans-serif', whiteSpace: 'nowrap',
             }}>
-            {selMonth?.draft_open ? '?뵏 誘몃━蹂닿린 ?リ린' : '?뵑 誘몃━蹂닿린 ?ㅽ뵂'}
+            {selMonth?.draft_open ? '🔒 미리보기 닫기' : '🔓 미리보기 오픈'}
           </button>
         </div>
 
-        {/* ?? STEP 2: ?좎껌 ?ㅽ뵂 ?좉? (珥덉븞 ?뺤젙 ???뚯썝 ?좎껌 ?덉슜) ?? */}
+        {/* ── STEP 2: 신청 오픈 토글 (초안 확정 후 회원 신청 허용) ── */}
         <div style={{
           background: selMonth?.registration_open ? '#f0fdf4' : '#fafafa',
           border: `1.5px solid ${selMonth?.registration_open ? '#4ade80' : '#e5e7eb'}`,
@@ -266,12 +266,12 @@ export default function ScheduleDraftPage() {
         }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', marginBottom: '2px', fontFamily: 'Noto Sans KR, sans-serif' }}>
-              STEP 2 ???뚯썝 ?섏뾽 ?좎껌 ?ㅽ뵂
+              STEP 2 — 회원 수업 신청 오픈
             </div>
             <div style={{ fontSize: '0.875rem', color: selMonth?.registration_open ? '#15803d' : '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>
               {selMonth?.registration_open
-                ? '?렱 ?좎껌 ?ㅽ뵂 以????뚯썝???섏뾽 ?좎껌 ?섏씠吏?먯꽌 吏곸젒 ?좎껌?????덉뒿?덈떎'
-                : '?뵏 ?ロ옒 ??珥덉븞 ?뺤젙 ?꾨즺 ???ㅽ뵂?섎㈃ ?뚯썝??吏곸젒 ?섏뾽???좎껌?⑸땲??
+                ? '🎾 신청 오픈 중 — 회원이 수업 신청 페이지에서 직접 신청할 수 있습니다'
+                : '🔒 닫힘 — 초안 확정 완료 후 오픈하면 회원이 직접 수업을 신청합니다'
               }
             </div>
           </div>
@@ -283,31 +283,32 @@ export default function ScheduleDraftPage() {
               fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
               fontFamily: 'Noto Sans KR, sans-serif', whiteSpace: 'nowrap',
             }}>
-            {selMonth?.registration_open ? '?뵏 ?좎껌 ?リ린' : '?렱 ?좎껌 ?ㅽ뵂'}
+            {selMonth?.registration_open ? '🔒 신청 닫기' : '🎾 신청 오픈'}
           </button>
         </div>
 
-        {/* ?뚯썝 ?섏젙 ?붿껌 諛곗? + ??*/}
+        {/* 회원 수정 요청 배지 + 탭 */}
         {requests.length > 0 && (
           <div style={{ marginBottom: '1rem' }}>
             <button onClick={() => setReqTab(v => !v)}
               style={{ width: '100%', padding: '0.75rem 1rem', background: pendingReqs.length > 0 ? '#fef9c3' : 'white', border: `1.5px solid ${pendingReqs.length > 0 ? '#fde68a' : '#e5e7eb'}`, borderRadius: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-              <span style={{ fontSize: '1rem' }}>?뱷</span>
-              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', flex: 1, textAlign: 'left' }}>?뚯썝 ?섏젙 ?붿껌</span>
+              <span style={{ fontSize: '1rem' }}>📝</span>
+              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', flex: 1, textAlign: 'left' }}>회원 수정 요청</span>
               {pendingReqs.length > 0 && (
                 <span style={{ background: '#f59e0b', color: 'white', fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px' }}>
-                  寃???꾩슂 {pendingReqs.length}嫄?                </span>
+                  검토 필요 {pendingReqs.length}건
+                </span>
               )}
-              <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>{reqTab ? '?? : '??}</span>
+              <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>{reqTab ? '▲' : '▼'}</span>
             </button>
             {reqTab && (
               <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {requests.map(r => {
                   const isPending   = ['pending_coach','pending_admin'].includes(r.status)
-                  const typeLabel   = r.request_type === 'exclude' ? '?슟 ?쒖쇅 ?붿껌' :
-                                      r.request_type === 'change'  ? '?봽 蹂寃??붿껌' : '??異붽? ?붿껌'
-                  const statusLabel = r.status === 'approved' ? '???뱀씤' :
-                                      r.status === 'rejected' ? '??嫄곗젅' : '??寃??以?
+                  const typeLabel   = r.request_type === 'exclude' ? '🚫 제외 요청' :
+                                      r.request_type === 'change'  ? '🔄 변경 요청' : '➕ 추가 요청'
+                  const statusLabel = r.status === 'approved' ? '✅ 승인' :
+                                      r.status === 'rejected' ? '❌ 거절' : '⏳ 검토 중'
                   return (
                     <div key={r.id} style={{ background: 'white', border: `1.5px solid ${isPending ? '#fde68a' : '#e5e7eb'}`, borderRadius: '0.875rem', padding: '0.875rem 1rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
@@ -316,15 +317,15 @@ export default function ScheduleDraftPage() {
                         <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, color: isPending ? '#854d0e' : r.status === 'approved' ? '#15803d' : '#b91c1c', fontFamily: 'Noto Sans KR, sans-serif' }}>{statusLabel}</span>
                       </div>
                       <div style={{ fontSize: '0.78rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif', marginBottom: isPending ? '0.625rem' : 0 }}>
-                        {r.requested_at ? fmtSlot(r.requested_at).full : ''} 쨌 {r.lesson_type}
-                        {r.admin_note && <span style={{ marginLeft: '0.5rem', color: '#9ca3af' }}>硫붾え: {r.admin_note}</span>}
+                        {r.requested_at ? fmtSlot(r.requested_at).full : ''} · {r.lesson_type}
+                        {r.admin_note && <span style={{ marginLeft: '0.5rem', color: '#9ca3af' }}>메모: {r.admin_note}</span>}
                       </div>
                       {isPending && (
                         <div style={{ display: 'flex', gap: '0.375rem' }}>
                           <button onClick={() => handleRequestAction(r.id, 'approve')} disabled={saving}
-                            style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: 'none', background: '#16A34A', color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>???뱀씤</button>
+                            style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: 'none', background: '#16A34A', color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>✅ 승인</button>
                           <button onClick={() => handleRequestAction(r.id, 'reject')} disabled={saving}
-                            style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>??嫄곗젅</button>
+                            style={{ flex: 1, padding: '0.375rem', borderRadius: '0.5rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>❌ 거절</button>
                         </div>
                       )}
                     </div>
@@ -335,19 +336,21 @@ export default function ScheduleDraftPage() {
           </div>
         )}
 
-        {/* ?붿빟 + ?쇨큵 ?뺤젙 踰꾪듉 */}
+        {/* 요약 + 일괄 확정 버튼 */}
         {!loading && drafts.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.75rem', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 700, color: '#15803d' }}>
-              ???뺤젙 媛??{okDrafts.length}嫄?            </div>
+              ✅ 확정 가능 {okDrafts.length}건
+            </div>
             {conflictDrafts.length > 0 && (
               <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.75rem', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 700, color: '#b91c1c' }}>
-                ?좑툘 異⑸룎 {conflictDrafts.length}嫄?              </div>
+                ⚠️ 충돌 {conflictDrafts.length}건
+              </div>
             )}
             <div style={{ marginLeft: 'auto' }}>
               <button onClick={handleConfirmAll} disabled={saving || okDrafts.length === 0}
                 style={{ padding: '0.625rem 1.25rem', background: okDrafts.length === 0 ? '#e5e7eb' : '#16A34A', color: okDrafts.length === 0 ? '#9ca3af' : 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: okDrafts.length === 0 ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                {saving ? '泥섎━ 以?..' : `??${okDrafts.length}嫄??쇨큵 ?뺤젙`}
+                {saving ? '처리 중...' : `✅ ${okDrafts.length}건 일괄 확정`}
               </button>
             </div>
           </div>
@@ -355,11 +358,11 @@ export default function ScheduleDraftPage() {
 
         {msg && (
           <div style={{
-            background: msg.startsWith('??) ? '#fef2f2' : '#f0fdf4',
-            border: `1.5px solid ${msg.startsWith('??) ? '#fecaca' : '#86efac'}`,
+            background: msg.startsWith('❌') ? '#fef2f2' : '#f0fdf4',
+            border: `1.5px solid ${msg.startsWith('❌') ? '#fecaca' : '#86efac'}`,
             borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '1rem',
             fontSize: '0.875rem',
-            color: msg.startsWith('??) ? '#b91c1c' : '#15803d',
+            color: msg.startsWith('❌') ? '#b91c1c' : '#15803d',
             fontWeight: 600, fontFamily: 'Noto Sans KR, sans-serif',
           }}>
             {msg}
@@ -367,12 +370,12 @@ export default function ScheduleDraftPage() {
         )}
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>遺덈윭?ㅻ뒗 以?..</div>
+          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>불러오는 중...</div>
         ) : drafts.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>?뱥</div>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</div>
             <p style={{ fontFamily: 'Noto Sans KR, sans-serif' }}>
-              {selMonth ? `${selMonth.year}??${selMonth.month}??` : ''}?뺤젙 ?湲?以묒씤 珥덉븞???놁뒿?덈떎
+              {selMonth ? `${selMonth.year}년 ${selMonth.month}월 ` : ''}확정 대기 중인 초안이 없습니다
             </p>
           </div>
         ) : (
@@ -380,16 +383,16 @@ export default function ScheduleDraftPage() {
             {conflictDrafts.length > 0 && (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', marginBottom: '0.25rem' }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b91c1c' }}>?좑툘 異⑸룎 ??ぉ ??媛쒕퀎 泥섎━ ?꾩슂</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b91c1c' }}>⚠️ 충돌 항목 — 개별 처리 필요</div>
                   <button onClick={handleDeleteAllConflict} disabled={saving}
                     style={{ marginLeft: 'auto', padding: '0.3rem 0.75rem', borderRadius: '0.5rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', whiteSpace: 'nowrap' }}>
-                    ?뿊 異⑸룎 ?꾩껜 ??젣
+                    🗑 충돌 전체 삭제
                   </button>
                 </div>
                 {conflictDrafts.map(s => (
                   <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving} />
                 ))}
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '0.75rem', marginBottom: '0.25rem' }}>???뺤긽 ??ぉ</div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '0.75rem', marginBottom: '0.25rem' }}>✅ 정상 항목</div>
               </>
             )}
             {okDrafts.map(s => (
@@ -422,27 +425,28 @@ function SlotCard({ slot, onConfirm, onDelete, saving }: {
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px', flexWrap: 'wrap' }}>
           {isConflict && (
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>?쒓컙異⑸룎</span>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>시간충돌</span>
           )}
           <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
             {displayName}
           </span>
           {childName && (
-            <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 6px', borderRadius: '9999px' }}>?먮?</span>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 6px', borderRadius: '9999px' }}>자녀</span>
           )}
-          <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{coachName} 肄붿튂</span>
+          <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{coachName} 코치</span>
         </div>
         <div style={{ fontSize: '0.8rem', color: isConflict ? '#b91c1c' : '#374151', fontWeight: isConflict ? 700 : 400, fontFamily: 'Noto Sans KR, sans-serif' }}>
-          ?뱟 {full} 쨌 {lessonType} 쨌 {slot.duration_minutes}遺?        </div>
+          📅 {full} · {lessonType} · {slot.duration_minutes}분
+        </div>
       </div>
       <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
         <button onClick={() => onConfirm(slot.id)} disabled={saving}
           style={{ padding: '0.375rem 0.75rem', background: isConflict ? '#fff7ed' : '#f0fdf4', border: `1.5px solid ${isConflict ? '#fed7aa' : '#86efac'}`, borderRadius: '0.5rem', color: isConflict ? '#c2410c' : '#15803d', fontWeight: 700, fontSize: '0.75rem', cursor: saving ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-          {isConflict ? '媛뺤젣 ?뺤젙' : '?뺤젙'}
+          {isConflict ? '강제 확정' : '확정'}
         </button>
         <button onClick={() => onDelete(slot.id)} disabled={saving}
           style={{ padding: '0.375rem 0.75rem', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.5rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: saving ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-          ??젣
+          삭제
         </button>
       </div>
     </div>
