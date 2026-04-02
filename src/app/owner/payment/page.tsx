@@ -1,4 +1,6 @@
 'use client'
+// src/app/owner/payment/page.tsx
+// ✅ [NEW] 이름 검색창 추가 (회원명 / 자녀명 / 코치명)
 
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
@@ -34,18 +36,13 @@ const SLOT_STYLE: Record<string, { bg: string; border: string; color: string; la
   cancelled: { bg: '#f9fafb', border: '#d1d5db', color: '#6b7280', label: '취소' },
 }
 
-// ✅ 이름 표시 함수: 자녀 있으면 "(자녀)부모" 형태
-function displayName(plan: LessonPlan): string {
-  if (plan.family_member_name) {
-    return `(${plan.family_member_name})${plan.member?.name ?? ''}`
-  }
-  return plan.member?.name ?? '-'
-}
 
 export default function PaymentPage() {
   const [plans,    setPlans]    = useState<LessonPlan[]>([])
   const [loading,  setLoading]  = useState(true)
   const [filter,   setFilter]   = useState<'all'|'unpaid'|'paid'>('all')
+  // ✅ 이름 검색 state 추가
+  const [nameSearch, setNameSearch] = useState('')
   const [selected, setSelected] = useState<LessonPlan | null>(null)
   const [detailTab, setDetailTab] = useState<'slots'|'pay'>('slots')
   const [slotsLoading, setSlotsLoading] = useState(false)
@@ -189,7 +186,20 @@ export default function PaymentPage() {
 
   const fmtDt = (dt: string) => { const d = new Date(dt); return (d.getMonth()+1) + '/' + d.getDate() + '(' + DAYS[d.getDay()] + ') ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') }
   const fmtDate = (dt: string) => { const d = new Date(dt); return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}` }
-  const filtered       = filter === 'all' ? plans : plans.filter(p => p.payment_status === filter)
+
+  // ✅ 납부 상태 필터 + 이름 검색 동시 적용
+  const filtered = plans
+    .filter(p => filter === 'all' || p.payment_status === filter)
+    .filter(p => {
+      if (!nameSearch) return true
+      const q = nameSearch
+      return (
+        (p.member?.name ?? '').includes(q) ||
+        (p.family_member_name ?? '').includes(q) ||
+        (p.coach?.name ?? '').includes(q)
+      )
+    })
+
   const fmt            = (n: number) => (n || 0).toLocaleString('ko-KR')
   const sortedSlots    = [...slots].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
   const actualTotal    = slots.filter(s => s.status !== 'cancelled').length
@@ -202,22 +212,55 @@ export default function PaymentPage() {
 
   return (
     <div style={{ background: '#f9fafb', minHeight: '100vh' }}>
+      {/* ── 헤더 ── */}
       <div style={{ background: 'white', borderBottom: '1.5px solid #f3f4f6', padding: '1rem 1.5rem', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Link href="/owner" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: '1.25rem' }}>←</Link>
           <h1 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#111827', flex: 1 }}>납부 관리</h1>
           <button onClick={() => { setShowExtra(true); setMemberSearch('') }} style={{ padding: '0.5rem 1rem', background: '#16A34A', color: 'white', border: 'none', borderRadius: '0.625rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'Noto Sans KR, sans-serif' }}>+ 추가수업</button>
         </div>
-        <div style={{ maxWidth: '900px', margin: '0.75rem auto 0', display: 'flex', gap: '0.5rem' }}>
+
+        {/* ✅ 필터 버튼 + 이름 검색창 */}
+        <div style={{ maxWidth: '900px', margin: '0.75rem auto 0', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           {(['all','unpaid','paid'] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ padding: '0.375rem 0.875rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', background: filter === f ? '#16A34A' : '#f3f4f6', color: filter === f ? 'white' : '#6b7280' }}>
+            <button key={f} onClick={() => setFilter(f)} style={{ padding: '0.375rem 0.875rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif', background: filter === f ? '#16A34A' : '#f3f4f6', color: filter === f ? 'white' : '#6b7280', flexShrink: 0 }}>
               {f === 'all' ? '전체' : f === 'unpaid' ? '미납' : '납부'}
             </button>
           ))}
+          {/* ✅ 이름 검색창 */}
+          <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <span style={{ position: 'absolute', left: '0.625rem', fontSize: '0.8rem', color: '#9ca3af', pointerEvents: 'none' }}>🔍</span>
+            <input
+              value={nameSearch}
+              onChange={e => setNameSearch(e.target.value)}
+              placeholder="이름 검색..."
+              style={{
+                width: '100%',
+                paddingLeft: '1.75rem',
+                paddingRight: nameSearch ? '1.75rem' : '0.625rem',
+                paddingTop: '0.375rem',
+                paddingBottom: '0.375rem',
+                border: '1.5px solid #e5e7eb',
+                borderRadius: '9999px',
+                fontSize: '0.75rem',
+                fontFamily: 'Noto Sans KR, sans-serif',
+                background: 'white',
+                color: '#111827',
+                outline: 'none',
+              }}
+            />
+            {nameSearch && (
+              <button
+                onClick={() => setNameSearch('')}
+                style={{ position: 'absolute', right: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '0.85rem', lineHeight: 1, padding: '2px' }}
+              >✕</button>
+            )}
+          </div>
         </div>
       </div>
 
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1rem 1.5rem 2rem' }}>
+        {/* 요약 카드 */}
         {!loading && plans.length > 0 && (
           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             {[
@@ -237,7 +280,9 @@ export default function PaymentPage() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>불러오는 중...</div>
         ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>데이터가 없습니다</div>
+          <div style={{ textAlign: 'center', padding: '4rem', color: '#9ca3af' }}>
+            {nameSearch ? `"${nameSearch}" 검색 결과가 없습니다` : '데이터가 없습니다'}
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
             {filtered.map(p => {
@@ -278,6 +323,7 @@ export default function PaymentPage() {
         )}
       </div>
 
+      {/* ── 상세 모달 ── */}
       {selected && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
           onClick={e => { if (e.target === e.currentTarget) { setSelected(null); setReceipt(null); setReceiptPreview(null); setPayLink(null) } }}>
@@ -450,6 +496,7 @@ export default function PaymentPage() {
         </div>
       )}
 
+      {/* ── 추가수업 등록 모달 ── */}
       {showExtra && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
           onClick={e => { if (e.target === e.currentTarget) { setShowExtra(false); setMemberSearch('') } }}>
