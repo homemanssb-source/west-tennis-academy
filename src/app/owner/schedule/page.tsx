@@ -10,10 +10,11 @@ interface Slot {
   status: string
   slot_type: string
   memo: string | null
+  family_member_name: string | null  // ✅ 추가
   lesson_plan: {
     id: string
     lesson_type: string
-    member: { id: string; name: string }
+    member: { id: string; name: string; phone?: string }
     coach:  { id: string; name: string }
   }
 }
@@ -113,17 +114,11 @@ export default function SchedulePage() {
     const res = await fetch('/api/makeup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        original_slot_id: makeupTarget.id,
-        makeup_datetime,
-      }),
+      body: JSON.stringify({ original_slot_id: makeupTarget.id, makeup_datetime }),
     })
     const d = await res.json()
     setMakingSaving(false)
-    if (d.error) {
-      alert(d.error)
-      return
-    }
+    if (d.error) { alert(d.error); return }
     setMakeupTarget(null)
     setMakeupDate('')
     setMakeupTime('')
@@ -135,6 +130,13 @@ export default function SchedulePage() {
   const fmtDate = (dt: string) => {
     const d = new Date(dt)
     return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+  }
+
+  // ✅ 표시 이름: 자녀 있으면 "자녀(부모)" 형태
+  const displayName = (s: Slot) => {
+    const memberName = s.lesson_plan?.member?.name ?? '-'
+    if (s.family_member_name) return `${s.family_member_name}(${memberName})`
+    return memberName
   }
 
   return (
@@ -205,7 +207,10 @@ export default function SchedulePage() {
                         {fmtTime(s.scheduled_at)}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>{s.lesson_plan?.member?.name}</div>
+                        {/* ✅ 자녀(부모) 형태로 표시 */}
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827' }}>
+                          {displayName(s)}
+                        </div>
                         <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>
                           {s.lesson_plan?.coach?.name} 코치 · {s.duration_minutes}분 · {s.lesson_plan?.lesson_type}
                         </div>
@@ -311,10 +316,10 @@ export default function SchedulePage() {
             <div style={{ width: '2.5rem', height: '0.25rem', background: '#d1d5db', borderRadius: '9999px', margin: '0 auto 1.25rem' }}></div>
             <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem' }}>수업 관리</h2>
             {[
-              { label: '회원',    value: selected.lesson_plan?.member?.name },
-              { label: '코치',    value: `${selected.lesson_plan?.coach?.name} 코치` },
-              { label: '시간',    value: `${fmtTime(selected.scheduled_at)} (${selected.duration_minutes}분)` },
-              { label: '레슨',    value: selected.lesson_plan?.lesson_type },
+              { label: '회원',     value: displayName(selected) },
+              { label: '코치',     value: `${selected.lesson_plan?.coach?.name} 코치` },
+              { label: '시간',     value: `${fmtTime(selected.scheduled_at)} (${selected.duration_minutes}분)` },
+              { label: '레슨',     value: selected.lesson_plan?.lesson_type },
               { label: '현재상태', value: STATUS_STYLE[selected.status]?.label ?? selected.status },
             ].map(row => (
               <div key={row.label} style={{ display: 'flex', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid #f9fafb' }}>
