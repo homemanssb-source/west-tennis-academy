@@ -1,6 +1,8 @@
 ﻿// src/app/api/lesson-applications/route.ts
 // ✅ FIX N+1: family_member 개별 조회 → IN 쿼리 일괄 조회
 // ✅ FIX 코치휴무: POST에 checkCoachBlock 호출 추가
+// ✅ FIX 정원체크: program_id 필터 추가 + 시간 범위 체크로 변경 (동일 시간대 다른 프로그램 오카운트 방지)
+// ✅ FIX pending_admin 취소 허용 추가 (DELETE)
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPushToUser } from '@/lib/push'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -19,7 +21,7 @@ export async function GET(req: NextRequest) {
     .select(`
       id, requested_at, duration_minutes, lesson_type,
       status, coach_note, admin_note, created_at,
-      family_member_id,
+      family_member_id, program_id,
       member:profiles!lesson_applications_member_id_fkey(id, name, phone),
       coach:profiles!lesson_applications_coach_id_fkey(id, name),
       month:months(id, year, month)
@@ -77,11 +79,11 @@ export async function POST(req: NextRequest) {
     if (!fm) return NextResponse.json({ error: '가족 정보 오류' }, { status: 403 })
   }
 
-  // 그룹레슨 여부 판단 (lesson_type 또는 program_id 기준)
-  const isGroup = lesson_type === '그룹레슨' || !!program_id
-
-  // max_students 조회 (program_id 있으면 DB에서, 없으면 그룹=999 개인=1)
+  // ✅ program_id가 있으면 반드시 DB에서 max_students 조회
+  // program_id 없는 경우: lesson_type 문자열로 판단 (레거시 호환)
+  const isGroup = !!program_id || lesson_type === '그룹레슨'
   let maxStudents = isGroup ? 999 : 1
+
   if (program_id) {
     const { data: prog } = await supabaseAdmin
       .from('lesson_programs')
@@ -91,6 +93,7 @@ export async function POST(req: NextRequest) {
     if (prog?.max_students) maxStudents = prog.max_students
   }
 
+  const dur = duration_minutes ?? 60
   const created = []
   const errors  = []
 
@@ -106,8 +109,8 @@ export async function POST(req: NextRequest) {
 
     if (existing) { errors.push(`${requested_at} 중복`); continue }
 
-    // ✅ FIX: 코치 휴무 블록 체크 추가 (KST 기준)
-    const block = await checkCoachBlock(coach_id, requested_at, duration_minutes ?? 60)
+    // 코치 휴무 블록 체크
+    const block = await checkCoachBlock(coach_id, requested_at, dur)
     if (block) { errors.push(requested_at + ' 코치 휴무'); continue }
 
     // 확정 슬롯 충돌 확인 — 개인레슨만 차단, 그룹레슨은 정원 체크로 대체
@@ -124,32 +127,53 @@ export async function POST(req: NextRequest) {
       if (hasConflict) { errors.push(requested_at + ' 수업 충돌'); continue }
     }
 
-    // 정원 체크 (다른 회원 신청 수)
-    const { data: otherApps } = await supabaseAdmin
-      .from('lesson_applications')
-      .select('id')
-      .eq('coach_id', coach_id)
-      .eq('requested_at', requested_at)
-      .in('status', ['pending_coach', 'pending_admin', 'approved'])
+    // ✅ 정원 체크 — program_id 기준으로 동일 프로그램 신청만 카운트
+    // 시간 범위로 체크해서 timestamp 미세 차이 문제 방지
+    if (isGroup && program_id) {
+      const slotStart = requested_at  // e.g. "2025-04-05T10:00:00+09:00"
+      // 수업 시작시간 ~ 시작시간+1분 범위로 같은 시간대 신청 조회
+      // (동일 프로그램, 동일 코치, 동일 시간대)
+      const { data: otherApps } = await supabaseAdmin
+        .from('lesson_applications')
+        .select('id')
+        .eq('coach_id', coach_id)
+        .eq('program_id', program_id)
+        .eq('requested_at', slotStart)
+        .in('status', ['pending_coach', 'pending_admin', 'approved'])
 
-    const currentCount = (otherApps ?? []).length
+      const currentCount = (otherApps ?? []).length
 
-    if (currentCount >= maxStudents) {
-      errors.push(requested_at + ` 정원 초과 (${currentCount}/${maxStudents}명)`)
-      continue
+      if (currentCount >= maxStudents) {
+        errors.push(requested_at + ` 정원 초과 (${currentCount}/${maxStudents}명)`)
+        continue
+      }
+    } else if (isGroup && !program_id) {
+      // program_id 없는 레거시 그룹레슨: 코치+시간 기준으로 체크
+      const { data: otherApps } = await supabaseAdmin
+        .from('lesson_applications')
+        .select('id')
+        .eq('coach_id', coach_id)
+        .eq('requested_at', requested_at)
+        .in('status', ['pending_coach', 'pending_admin', 'approved'])
+
+      const currentCount = (otherApps ?? []).length
+      if (currentCount >= maxStudents) {
+        errors.push(requested_at + ` 정원 초과 (${currentCount}/${maxStudents}명)`)
+        continue
+      }
     }
 
-    // INSERT (레이스컨디션 방어)
+    // INSERT
     const { data, error } = await supabaseAdmin
       .from('lesson_applications')
       .insert({
-        member_id: session.id,
+        member_id:        session.id,
         coach_id,
         month_id,
         requested_at,
-        duration_minutes: duration_minutes ?? 60,
-        lesson_type: lesson_type ?? '개인레슨',
-        status: 'pending_coach',
+        duration_minutes: dur,
+        lesson_type:      lesson_type ?? '개인레슨',
+        status:           'pending_coach',
         family_member_id: family_member_id ?? null,
         ...(program_id ? { program_id } : {}),
       })

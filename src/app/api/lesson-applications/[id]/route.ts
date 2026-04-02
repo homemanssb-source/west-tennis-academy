@@ -1,5 +1,7 @@
 ﻿// src/app/api/lesson-applications/[id]/route.ts
 // ✅ fix #11: RPC 실패 시 상태 롤백 + 에러 반환 (무시하지 않음)
+// ✅ fix: 회원 취소 허용 범위 → pending_coach + pending_admin (approved 전까지 취소 가능)
+// ✅ fix: 취소 시 코치에게 알림 발송
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
@@ -112,7 +114,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   return NextResponse.json(data)
 }
 
-// ✅ 회원 본인 신청 취소 (pending_coach 상태만)
+// ✅ 회원 본인 신청 취소
+// - pending_coach: 코치 확인 전 → 취소 가능
+// - pending_admin: 코치 확인 후 관리자 대기 → 취소 가능 (최종 확정 전이므로)
+// - approved: 최종 확정 후 → 취소 불가 (관리자에게 문의)
 export async function DELETE(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -125,13 +130,20 @@ export async function DELETE(
 
   const { data: app } = await supabaseAdmin
     .from('lesson_applications')
-    .select('member_id, status')
+    .select('member_id, status, coach_id, lesson_type, requested_at')
     .eq('id', id)
     .single()
 
   if (!app) return NextResponse.json({ error: '신청 내역 없음' }, { status: 404 })
   if (app.member_id !== session.id) return NextResponse.json({ error: '권한 없음' }, { status: 403 })
-  if (app.status !== 'pending_coach') return NextResponse.json({ error: '코치 확인 중인 신청만 취소 가능합니다' }, { status: 400 })
+
+  // ✅ pending_coach + pending_admin 모두 취소 허용 (approved는 불가)
+  if (!['pending_coach', 'pending_admin'].includes(app.status)) {
+    return NextResponse.json(
+      { error: '확정된 수업은 취소할 수 없습니다. 관리자에게 문의해주세요.' },
+      { status: 400 }
+    )
+  }
 
   const { error } = await supabaseAdmin
     .from('lesson_applications')
@@ -139,5 +151,17 @@ export async function DELETE(
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // ✅ 취소 시 코치에게 알림 (pending_admin 상태였다면 코치도 알아야 함)
+  if (app.coach_id) {
+    await supabaseAdmin.from('notifications').insert({
+      profile_id: app.coach_id,
+      title: '🚫 수업 신청 취소',
+      body: `회원이 수업 신청을 취소했습니다. (${app.lesson_type})`,
+      type: 'warning',
+      link: '/coach/applications',
+    })
+  }
+
   return NextResponse.json({ ok: true })
 }

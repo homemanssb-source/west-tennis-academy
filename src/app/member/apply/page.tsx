@@ -1,23 +1,28 @@
-'use client'
+﻿'use client'
 // src/app/member/apply/page.tsx
-// ✅ 그룹수업: 고정 스케줄 자동 표시 → 1클릭 신청
+// ✅ 그룹수업 fixed_schedules 있음: 고정 스케줄 1클릭 신청 (기존 유지)
+// ✅ 그룹수업 fixed_schedules 없음: 달력 선택 방식 (max_students 기준 정원 체크)
 // ✅ 개인수업: 기존 달력 선택 방식 유지
-// ✅ fix: draft_open → registration_open 으로 신청 가능 조건 변경
+// ✅ FIX: useEffect dependency에 busySlots, coachBlocks, mySlotKeys 추가
+// ✅ FIX: getSlotCount에서 mySlotKeys 제외 처리
+// ✅ FIX: 프로그램 변경 시 step(1) 리셋
+// ✅ FIX: pending_admin 상태도 취소 버튼 표시 안 함 (API가 pending_coach만 허용)
+// ✅ FIX: registration_open → registration_open 으로 신청 가능 조건 변경
 
 import { useEffect, useState } from 'react'
 import MemberBottomNav from '@/components/MemberBottomNav'
 
-interface Coach        { id: string; name: string }
-interface Month        { id: string; year: number; month: number; draft_open?: boolean; registration_open?: boolean }
+interface Coach         { id: string; name: string }
+interface Month         { id: string; year: number; month: number; draft_open?: boolean; registration_open?: boolean }
 interface FixedSchedule { day: number; time: string }
-interface Program      {
+interface Program       {
   id: string; name: string; unit_minutes: number
   coach_id: string | null; max_students: number
   fixed_schedules: FixedSchedule[] | null
 }
-interface FamilyMember { id: string; name: string }
-interface SlotInfo     { scheduled_at: string; status: string; slot_count?: number; duration_minutes?: number }
-interface BlockInfo    { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
+interface FamilyMember  { id: string; name: string }
+interface SlotInfo      { scheduled_at: string; status: string; slot_count?: number; duration_minutes?: number }
+interface BlockInfo     { block_date: string | null; block_start: string | null; block_end: string | null; repeat_weekly: boolean; day_of_week: number | null }
 interface MyApp {
   id: string; requested_at: string; duration_minutes: number
   lesson_type: string; status: string; coach_note: string | null; admin_note: string | null
@@ -34,7 +39,7 @@ const STATUS: Record<string, { label: string; color: string; bg: string }> = {
   rejected:      { label: '거절',         color: '#b91c1c', bg: '#fee2e2' },
 }
 
-// ── 개인수업용 날짜 생성 함수 ───────────────────────────────────────────
+// ── 날짜 생성 함수 (개인수업 + fixed_schedules 없는 그룹수업 공용) ──────────
 function generateDates(
   year: number, month: number, startDate: Date,
   weekdays: number[], timeStr: string,
@@ -56,9 +61,9 @@ function generateDates(
     date.setHours(h, m, 0, 0)
     const ymd = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
 
-    const [th, tm] = tStr.split(':').map(Number)
-    const reqS = th * 60 + tm
+    const reqS = h * 60 + m
     const reqE = reqS + duration
+
     const blocked = coachBlocks.some(b => {
       if (b.repeat_weekly) { if (b.day_of_week !== dow) return false }
       else { if (b.block_date !== ymd) return false }
@@ -116,7 +121,7 @@ export default function MemberApplyPage() {
   const [programId, setProgramId] = useState('')
   const [duration,  setDuration]  = useState(60)
 
-  // 개인수업용 상태
+  // 날짜 선택 상태 (개인수업 + 스케줄미등록 그룹수업 공용)
   const [weekOffset,     setWeekOffset]     = useState(0)
   const [busySlots,      setBusySlots]      = useState<SlotInfo[]>([])
   const [coachBlocks,    setCoachBlocks]    = useState<BlockInfo[]>([])
@@ -136,6 +141,10 @@ export default function MemberApplyPage() {
   const selectedProgram = programs.find(p => p.id === programId) ?? null
   const isGroupProgram  = (selectedProgram?.max_students ?? 1) > 1
   const fixedSchedules  = selectedProgram?.fixed_schedules ?? null
+  // fixed_schedules 없는 그룹수업 → 달력 선택 방식
+  const isFlexGroup     = isGroupProgram && (!fixedSchedules || fixedSchedules.length === 0)
+  // 달력 선택이 필요한 경우 (개인수업 or 스케줄미등록 그룹수업)
+  const useCalendarFlow = !isGroupProgram || isFlexGroup
 
   useEffect(() => {
     Promise.all([
@@ -147,7 +156,6 @@ export default function MemberApplyPage() {
       setCoaches(Array.isArray(c) ? c : [])
       const mList = Array.isArray(m) ? m : []
       setMonths(mList)
-      // ✅ registration_open=true 인 월을 기본 선택
       const avail = mList.find((x: Month) => x.registration_open)
       if (avail) setMonthId(avail.id)
       else if (mList.length > 0) setMonthId(mList[0].id)
@@ -202,9 +210,10 @@ export default function MemberApplyPage() {
       .then(r => r.json()).then(d => setCoachBlocks(Array.isArray(d) ? d : []))
   }, [coachId, monthId])
 
-  // 개인수업 - 일정 자동 생성
+  // ✅ FIX: busySlots, coachBlocks, mySlotKeys dependency 추가 → 데이터 로드 후 재계산
   useEffect(() => {
-    if (isGroupProgram || !selectedDate || !selectedMonth || !selectedTime) return
+    if (!useCalendarFlow || !selectedDate || !selectedMonth || !selectedTime) return
+    const maxSt = selectedProgram?.max_students ?? 1
     const baseDow = selectedDate.getDay()
     const allDows = Array.from(new Set([...repeatDays, baseDow]))
     const dtMap: Record<number, string> = { ...dayTimes }
@@ -214,16 +223,15 @@ export default function MemberApplyPage() {
     const { dates, skipped } = generateDates(
       selectedMonth.year, selectedMonth.month, selectedDate,
       validDows, selectedTime, dtMap,
-      busySlots, coachBlocks, 1, duration, mySlotKeys
+      busySlots, coachBlocks, maxSt, duration, mySlotKeys
     )
     setGeneratedDates(dates)
     setSkippedDates(skipped)
     setExcludedIdxs(new Set())
-  }, [repeatDays, dayTimes, selectedDate, selectedTime, isGroupProgram])
+  }, [repeatDays, dayTimes, selectedDate, selectedTime, useCalendarFlow, duration, busySlots, coachBlocks, mySlotKeys])
 
   const selectedCoach   = coaches.find(c => c.id === coachId)
   const selectedMonth   = months.find(m => m.id === monthId)
-  const selectedFamilyM = family.find(f => f.id === familyId)
 
   const today = new Date(); today.setHours(0,0,0,0)
   const baseMonday = (() => {
@@ -264,6 +272,7 @@ export default function MemberApplyPage() {
     const ymd = toKST(date).toISOString().split('T')[0]
     const [rh, rm] = tStr.split(':').map(Number)
     const reqS = rh*60+rm, reqE = reqS+duration
+    const maxSt = selectedProgram?.max_students ?? 1
     const matching = busySlots.filter(s => {
       if (s.status === 'cancelled') return false
       const sd = toKST(new Date(s.scheduled_at))
@@ -276,7 +285,27 @@ export default function MemberApplyPage() {
       return reqS < sE && reqE > sS
     })
     const count = matching.length > 0 ? Math.max(...matching.map((s: any) => s.slot_count ?? 1)) : 0
-    return count >= (selectedProgram?.max_students ?? 1)
+    return count >= maxSt
+  }
+
+  // ✅ FIX: mySlotKeys 제외 처리 추가 — 본인 슬롯이 카운트에 포함되지 않도록
+  const getSlotCount = (date: Date, tStr: string): number => {
+    const toKST = (d: Date) => new Date(d.getTime() + 9*60*60*1000)
+    const ymd = toKST(date).toISOString().split('T')[0]
+    const [rh, rm] = tStr.split(':').map(Number)
+    const reqS = rh*60+rm, reqE = reqS+duration
+    const matching = busySlots.filter(s => {
+      if (s.status === 'cancelled') return false
+      const sd = toKST(new Date(s.scheduled_at))
+      const sdIso = sd.toISOString()
+      const key16 = `${sdIso.split('T')[0]}T${sdIso.split('T')[1].slice(0,5)}`
+      if (mySlotKeys.has(key16)) return false  // ✅ 본인 슬롯 제외
+      if (sdIso.split('T')[0] !== ymd) return false
+      const sh = sd.getUTCHours(), sm = sd.getUTCMinutes()
+      const sS = sh*60+sm, sE = sS+(s.duration_minutes??duration)
+      return reqS < sE && reqE > sS
+    })
+    return matching.length > 0 ? Math.max(...matching.map((s: any) => s.slot_count ?? 1)) : 0
   }
 
   const isPending = (date: Date, tStr: string) => {
@@ -286,7 +315,7 @@ export default function MemberApplyPage() {
     return myApps.some(a => ['pending_coach','pending_admin'].includes(a.status) && a.requested_at?.startsWith(dt.slice(0,16)))
   }
 
-  // ── 그룹수업 신청 ─────────────────────────────────────────────────────
+  // ── 고정 스케줄 그룹수업 신청 ──────────────────────────────────────────
   const handleGroupSubmit = async () => {
     if (!fixedSchedules || fixedSchedules.length === 0) return alert('고정 스케줄이 없습니다')
     const m = selectedMonth
@@ -294,7 +323,6 @@ export default function MemberApplyPage() {
     setSaving(true)
 
     const todayKST = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().split('T')[0]
-
     const lastDay = new Date(m.year, m.month, 0).getDate()
     const slots: string[] = []
     const skippedBlocked: string[] = []
@@ -318,16 +346,11 @@ export default function MemberApplyPage() {
         const be = b.block_end   ? Number(b.block_end.split(':')[0])*60   + Number(b.block_end.split(':')[1])   : 24*60
         return reqS < be && reqE > bs
       })
-      if (isBlockedSlot) {
-        skippedBlocked.push(ymd)
-        continue
-      }
-
+      if (isBlockedSlot) { skippedBlocked.push(ymd); continue }
       slots.push(`${ymd}T${sched.time}:00+09:00`)
     }
 
     if (slots.length === 0) { setSaving(false); return alert('남은 수업 날짜가 없습니다') }
-
     if (skippedBlocked.length > 0) {
       const msg = `아래 날짜는 코치 휴무로 제외됩니다:\n${skippedBlocked.join(', ')}\n\n나머지 ${slots.length}회로 신청하시겠습니까?`
       if (!confirm(msg)) { setSaving(false); return }
@@ -353,8 +376,8 @@ export default function MemberApplyPage() {
     setTab('list'); setStep(1); loadMyApps()
   }
 
-  // ── 개인수업 신청 ─────────────────────────────────────────────────────
-  const handlePersonalSubmit = async () => {
+  // ── 달력 선택 방식 신청 (개인수업 + 스케줄미등록 그룹수업 공용) ──────────
+  const handleCalendarSubmit = async () => {
     if (!finalDates.length) return
     setSaving(true)
     const slots = finalDates.map(d => {
@@ -366,9 +389,11 @@ export default function MemberApplyPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        coach_id: coachId, month_id: monthId, slots,
+        coach_id:         coachId,
+        month_id:         monthId,
+        slots,
         duration_minutes: duration,
-        lesson_type: selectedProgram?.name ?? '개인레슨',
+        lesson_type:      selectedProgram?.name ?? (isFlexGroup ? '그룹레슨' : '개인레슨'),
         family_member_id: applicantType === 'family' ? familyId : null,
         ...(programId ? { program_id: programId } : {}),
       }),
@@ -380,6 +405,7 @@ export default function MemberApplyPage() {
     setTab('list'); setStep(1); loadMyApps()
   }
 
+  // ✅ FIX: pending_coach 상태만 취소 가능 (API와 일치)
   const handleCancel = async (appId: string) => {
     if (!confirm('수업 신청을 취소하시겠습니까?')) return
     setCancelling(appId)
@@ -401,7 +427,6 @@ export default function MemberApplyPage() {
     prevBtn: { flex: 1, padding: '0.875rem', borderRadius: '0.875rem', border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', cursor: 'pointer' as const, fontFamily: 'Noto Sans KR, sans-serif', fontWeight: 600, fontSize: '0.875rem' },
   }
 
-  // ✅ registration_open=false 인 월은 신청 불가 (draft_open 조건 제거)
   const step1Disabled = !coachId || !monthId || !programId
     || (applicantType === 'family' && !familyId)
     || !months.find(m => m.id === monthId)?.registration_open
@@ -460,7 +485,6 @@ export default function MemberApplyPage() {
                     <select value={monthId} onChange={e => setMonthId(e.target.value)} style={s.input}>
                       {months.map(m => (
                         <option key={m.id} value={m.id} disabled={!m.registration_open}>
-                          {/* ✅ registration_open=false → "일정 준비 중", true → 정상 표시 */}
                           {m.year}년 {m.month}월{!m.registration_open ? ' (일정 준비 중)' : ''}
                         </option>
                       ))}
@@ -483,11 +507,25 @@ export default function MemberApplyPage() {
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         {programs.map(p => {
-                          const isGroup = p.max_students > 1
+                          const isGroup    = p.max_students > 1
+                          const hasFixed   = isGroup && p.fixed_schedules && p.fixed_schedules.length > 0
+                          const isFlexG    = isGroup && (!p.fixed_schedules || p.fixed_schedules.length === 0)
                           const isSelected = programId === p.id
                           return (
                             <button key={p.id}
-                              onClick={() => { setProgramId(p.id); setDuration(p.unit_minutes || 60) }}
+                              onClick={() => {
+                                // ✅ FIX: 프로그램 변경 시 step 1로 리셋 + 날짜 상태 초기화
+                                setProgramId(p.id)
+                                setDuration(p.unit_minutes || 60)
+                                setSelectedDate(null)
+                                setSelectedTime('')
+                                setRepeatDays([])
+                                setDayTimes({})
+                                setGeneratedDates([])
+                                setSkippedDates([])
+                                setExcludedIdxs(new Set())
+                                setStep(1)
+                              }}
                               style={{
                                 padding: '0.75rem 1rem', borderRadius: '0.75rem', cursor: 'pointer', textAlign: 'left',
                                 border: `1.5px solid ${isSelected ? '#16A34A' : '#e5e7eb'}`,
@@ -503,17 +541,21 @@ export default function MemberApplyPage() {
                                   <span style={{ fontSize: '0.68rem', color: '#9ca3af', padding: '2px 7px' }}>{p.unit_minutes}분</span>
                                 </div>
                               </div>
-                              {isGroup && p.fixed_schedules && p.fixed_schedules.length > 0 && (
+                              {/* 고정 스케줄 있는 그룹 */}
+                              {hasFixed && (
                                 <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                  {[...p.fixed_schedules].sort((a,b)=>a.day-b.day).map((sch, i) => (
+                                  {[...p.fixed_schedules!].sort((a,b)=>a.day-b.day).map((sch, i) => (
                                     <span key={i} style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '9999px', background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>
                                       {DAYS_KO[sch.day]} {sch.time}
                                     </span>
                                   ))}
                                 </div>
                               )}
-                              {isGroup && (!p.fixed_schedules || p.fixed_schedules.length === 0) && (
-                                <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#9ca3af' }}>스케줄 미등록 (관리자 문의)</div>
+                              {/* 스케줄 미등록 그룹 */}
+                              {isFlexG && (
+                                <div style={{ marginTop: '4px', fontSize: '0.7rem', color: '#7c3aed', fontWeight: 600 }}>
+                                  📅 원하는 시간을 직접 선택하세요
+                                </div>
                               )}
                             </button>
                           )
@@ -524,7 +566,7 @@ export default function MemberApplyPage() {
                 </div>
               </div>
 
-              {/* 그룹수업: 바로 신청 가능 미리보기 */}
+              {/* 고정 스케줄 그룹수업 미리보기 */}
               {selectedProgram && isGroupProgram && fixedSchedules && fixedSchedules.length > 0 && (
                 <div style={{ background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '1rem', padding: '1.25rem' }}>
                   <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1e40af', marginBottom: '0.75rem' }}>
@@ -543,13 +585,25 @@ export default function MemberApplyPage() {
                 </div>
               )}
 
+              {/* 스케줄미등록 그룹수업 안내 */}
+              {selectedProgram && isFlexGroup && (
+                <div style={{ background: '#fdf4ff', border: '1.5px solid #e9d5ff', borderRadius: '1rem', padding: '1rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#7e22ce', marginBottom: '4px' }}>
+                    👥 {selectedProgram.name} — 최대 {selectedProgram.max_students}명 그룹수업
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#6b21a8', lineHeight: 1.6 }}>
+                    다음 단계에서 원하는 날짜와 시간을 직접 선택하세요.<br/>
+                    이미 다른 회원이 선택한 시간에도 정원 내에서 함께 신청 가능합니다.
+                  </div>
+                </div>
+              )}
+
               {coachId && !programId && programs.length > 0 && (
                 <div style={{ padding: '0.625rem', background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '0.75rem', fontSize: '0.8rem', color: '#92400e', textAlign: 'center', fontFamily: 'Noto Sans KR, sans-serif' }}>
                   위의 프로그램을 선택해주세요
                 </div>
               )}
 
-              {/* ✅ 신청 불가 안내 배너 */}
               {monthId && !months.find(m => m.id === monthId)?.registration_open && (
                 <div style={{ padding: '0.875rem 1rem', background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '0.875rem', fontSize: '0.85rem', color: '#92400e', textAlign: 'center', fontFamily: 'Noto Sans KR, sans-serif' }}>
                   🔒 해당 월은 아직 수업 신청 기간이 아닙니다.<br/>
@@ -557,27 +611,37 @@ export default function MemberApplyPage() {
                 </div>
               )}
 
+              {/* 다음 버튼 분기 */}
               {isGroupProgram && fixedSchedules && fixedSchedules.length > 0 ? (
+                // 고정 스케줄 그룹수업 → 바로 신청
                 <button onClick={handleGroupSubmit} disabled={step1Disabled || saving}
                   style={{ ...s.nextBtn(step1Disabled || saving), flex: 'none', width: '100%', fontSize: '1rem' }}>
                   {saving ? '신청 중...' : `🎾 ${selectedProgram?.name} 신청하기`}
                 </button>
               ) : (
-                <button onClick={() => setStep(2)}
-                  disabled={step1Disabled || (isGroupProgram && (!fixedSchedules || fixedSchedules.length === 0))}
-                  style={s.nextBtn(step1Disabled || (isGroupProgram && (!fixedSchedules || fixedSchedules.length === 0)))}>
-                  {isGroupProgram ? '⚠️ 스케줄 미등록 — 관리자 문의' : '다음 → 날짜 선택'}
+                // 개인수업 or 스케줄미등록 그룹수업 → 날짜 선택
+                <button onClick={() => setStep(2)} disabled={step1Disabled}
+                  style={s.nextBtn(step1Disabled)}>
+                  {isFlexGroup ? '👥 날짜·시간 선택하기' : '다음 → 날짜 선택'}
                 </button>
               )}
             </div>
           )}
 
-          {/* STEP 2: 날짜 선택 (개인수업 전용) */}
-          {step === 2 && !isGroupProgram && (
+          {/* STEP 2: 날짜 선택 (개인수업 + 스케줄미등록 그룹수업) */}
+          {step === 2 && useCalendarFlow && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ padding: '0.75rem 1rem', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '0.875rem', fontSize: '0.8rem', color: '#1d4ed8' }}>
-                <div style={{ fontWeight: 700, marginBottom: '4px' }}>📅 첫 수업 날짜와 시간을 선택하세요</div>
-                <div style={{ color: '#3b82f6', lineHeight: 1.5 }}>이 날짜를 기준으로 반복 수업 일정이 자동 생성됩니다</div>
+              <div style={{ padding: '0.75rem 1rem', background: isFlexGroup ? '#fdf4ff' : '#eff6ff', border: `1.5px solid ${isFlexGroup ? '#e9d5ff' : '#bfdbfe'}`, borderRadius: '0.875rem', fontSize: '0.8rem', color: isFlexGroup ? '#7e22ce' : '#1d4ed8' }}>
+                <div style={{ fontWeight: 700, marginBottom: '4px' }}>
+                  {isFlexGroup
+                    ? `👥 ${selectedProgram?.name} — 최대 ${selectedProgram?.max_students}명 그룹수업`
+                    : '📅 첫 수업 날짜와 시간을 선택하세요'}
+                </div>
+                <div style={{ lineHeight: 1.5 }}>
+                  {isFlexGroup
+                    ? '원하는 날짜와 시간을 선택하세요. 정원 내 남은 자리에만 신청 가능합니다.'
+                    : '이 날짜를 기준으로 반복 수업 일정이 자동 생성됩니다'}
+                </div>
               </div>
               <div style={s.card}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
@@ -587,9 +651,10 @@ export default function MemberApplyPage() {
                   </span>
                   <button onClick={() => setWeekOffset(w => w+1)} style={{ ...s.btn, padding: '0.375rem 0.75rem' }}>다음 →</button>
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.625rem', fontSize: '0.7rem', color: '#6b7280' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.625rem', fontSize: '0.68rem', color: '#6b7280', flexWrap: 'wrap' }}>
                   <span style={{ color: '#15803d' }}>○ 가능</span>
-                  <span style={{ color: '#b91c1c' }}>✕ 수업있음</span>
+                  {isFlexGroup && <span style={{ color: '#7c3aed' }}>n/정원 = 현재인원</span>}
+                  <span style={{ color: '#b91c1c' }}>✕ 정원초과</span>
                   <span style={{ color: '#854d0e' }}>… 신청대기</span>
                   <span style={{ color: '#7c3aed' }}>휴 코치휴무</span>
                 </div>
@@ -610,17 +675,29 @@ export default function MemberApplyPage() {
                         <tr key={tStr}>
                           <td style={{ fontSize: '0.6rem', color: '#9ca3af', padding: '2px 4px', textAlign: 'right', whiteSpace: 'nowrap' }}>{tStr}</td>
                           {weekDates.map(date => {
-                            const isPast  = date < today
-                            const busy    = isBusy(date, tStr)
-                            const blocked = isBlocked(date, tStr)
-                            const pending = isPending(date, tStr)
-                            const isSel   = selectedDate?.toDateString() === date.toDateString() && selectedTime === tStr
+                            const isPast    = date < today
+                            const busy      = isBusy(date, tStr)
+                            const blocked   = isBlocked(date, tStr)
+                            const pending   = isPending(date, tStr)
+                            const isSel     = selectedDate?.toDateString() === date.toDateString() && selectedTime === tStr
+                            const curCount  = isFlexGroup ? getSlotCount(date, tStr) : 0
+                            const maxSt     = selectedProgram?.max_students ?? 1
+                            const hasSpace  = isFlexGroup && curCount > 0 && curCount < maxSt
                             return (
                               <td key={date.toISOString()} style={{ padding: '1px 2px', textAlign: 'center' }}>
-                                <button disabled={isPast || busy || blocked || pending}
+                                <button
+                                  disabled={isPast || busy || blocked || pending}
                                   onClick={() => { setSelectedDate(new Date(date)); setSelectedTime(tStr) }}
-                                  style={{ width: '100%', padding: '3px 0', borderRadius: '4px', border: isSel ? '2px solid #16A34A' : 'none', fontSize: '0.65rem', cursor: (isPast||busy||blocked||pending)?'not-allowed':'pointer', background: isSel?'#16A34A':busy?'#fee2e2':blocked?'#f3f0ff':pending?'#fef9c3':isPast?'#f9fafb':'#f0fdf4', color: isSel?'white':busy?'#fca5a5':blocked?'#7c3aed':pending?'#854d0e':isPast?'#d1d5db':'#15803d' }}>
-                                  {isSel?'✓':busy?'✕':blocked?'휴':pending?'…':'○'}
+                                  style={{
+                                    width: '100%', padding: '3px 0', borderRadius: '4px',
+                                    border: isSel ? '2px solid #16A34A' : 'none',
+                                    fontSize: '0.6rem',
+                                    cursor: (isPast||busy||blocked||pending) ? 'not-allowed' : 'pointer',
+                                    background: isSel ? '#16A34A' : busy ? '#fee2e2' : blocked ? '#f3f0ff' : pending ? '#fef9c3' : hasSpace ? '#fdf4ff' : isPast ? '#f9fafb' : '#f0fdf4',
+                                    color:      isSel ? 'white'   : busy ? '#fca5a5' : blocked ? '#7c3aed' : pending ? '#854d0e' : hasSpace ? '#7e22ce' : isPast ? '#d1d5db' : '#15803d',
+                                    fontWeight: hasSpace ? 700 : 400,
+                                  }}>
+                                  {isSel ? '✓' : busy ? '✕' : blocked ? '휴' : pending ? '…' : hasSpace ? `${curCount}/${maxSt}` : '○'}
                                 </button>
                               </td>
                             )
@@ -638,16 +715,24 @@ export default function MemberApplyPage() {
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button onClick={() => setStep(1)} style={s.prevBtn}>← 이전</button>
-                <button onClick={() => setStep(3)} disabled={!selectedDate || !selectedTime} style={s.nextBtn(!selectedDate || !selectedTime)}>다음 → 반복 설정</button>
+                <button onClick={() => setStep(3)} disabled={!selectedDate || !selectedTime}
+                  style={s.nextBtn(!selectedDate || !selectedTime)}>
+                  다음 → 반복 설정
+                </button>
               </div>
             </div>
           )}
 
-          {/* STEP 3: 반복 설정 (개인수업 전용) */}
-          {step === 3 && !isGroupProgram && (
+          {/* STEP 3: 반복 설정 */}
+          {step === 3 && useCalendarFlow && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={s.card}>
                 <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem', color: '#111827' }}>반복 요일 설정</h2>
+                {isFlexGroup && (
+                  <div style={{ marginBottom: '0.75rem', padding: '0.625rem', background: '#fdf4ff', border: '1.5px solid #e9d5ff', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#7e22ce' }}>
+                    👥 그룹수업({selectedProgram?.max_students}명)은 같은 시간에 여러 회원이 함께 신청할 수 있습니다.
+                  </div>
+                )}
                 <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '0.875rem' }}>
                   기본 요일({selectedDate ? DAYS_KO[selectedDate.getDay()] : ''})에 추가로 반복할 요일 선택
                 </div>
@@ -714,23 +799,24 @@ export default function MemberApplyPage() {
             </div>
           )}
 
-          {/* STEP 4: 미리보기 (개인수업 전용) */}
-          {step === 4 && !isGroupProgram && (
+          {/* STEP 4: 미리보기 */}
+          {step === 4 && useCalendarFlow && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={s.card}>
                 <h2 style={{ fontFamily: 'Oswald, sans-serif', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#111827' }}>✅ 신청 미리보기</h2>
-                <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1rem' }}>
+                <div style={{ background: isFlexGroup ? '#fdf4ff' : '#f0fdf4', border: `1.5px solid ${isFlexGroup ? '#e9d5ff' : '#86efac'}`, borderRadius: '0.875rem', padding: '0.875rem', marginBottom: '1rem' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem', fontSize: '0.8rem' }}>
-                    {[
+                    {([
                       ['코치',    `${selectedCoach?.name} 코치`],
-                      ['종류',    selectedProgram?.name ?? '개인레슨'],
+                      ['종류',    selectedProgram?.name ?? (isFlexGroup ? '그룹레슨' : '개인레슨')],
                       ['시간',    `${duration}분`],
                       ['수업 월', `${selectedMonth?.year}년 ${selectedMonth?.month}월`],
                       ['총 횟수', `${finalDates.length}회`],
-                    ].map(([label, val]) => (
+                      ...(isFlexGroup ? [['정원', `최대 ${selectedProgram?.max_students}명`] as [string,string]] : []),
+                    ] as [string, string][]).map(([label, val]) => (
                       <div key={label}>
                         <span style={{ color: '#6b7280' }}>{label}</span><br/>
-                        <strong style={{ color: label==='총 횟수'?'#16A34A':'#111827', fontSize: label==='총 횟수'?'1.1rem':'0.875rem' }}>{val}</strong>
+                        <strong style={{ color: label==='총 횟수'?'#16A34A':label==='정원'?'#7e22ce':'#111827', fontSize: (label==='총 횟수'||label==='정원')?'1.1rem':'0.875rem' }}>{val}</strong>
                       </div>
                     ))}
                   </div>
@@ -750,8 +836,8 @@ export default function MemberApplyPage() {
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button onClick={() => setStep(3)} style={s.prevBtn}>← 수정</button>
-                <button onClick={handlePersonalSubmit} disabled={saving}
-                  style={{ flex: 2, padding: '0.875rem', borderRadius: '0.875rem', border: 'none', fontWeight: 700, fontSize: '1rem', fontFamily: 'Noto Sans KR, sans-serif', cursor: saving?'not-allowed':'pointer', background: saving?'#e5e7eb':'#16A34A', color: saving?'#9ca3af':'white' }}>
+                <button onClick={handleCalendarSubmit} disabled={saving || finalDates.length === 0}
+                  style={{ flex: 2, padding: '0.875rem', borderRadius: '0.875rem', border: 'none', fontWeight: 700, fontSize: '1rem', fontFamily: 'Noto Sans KR, sans-serif', cursor: (saving||finalDates.length===0)?'not-allowed':'pointer', background: (saving||finalDates.length===0)?'#e5e7eb':'#16A34A', color: (saving||finalDates.length===0)?'#9ca3af':'white' }}>
                   {saving ? '신청 중...' : `🎾 ${finalDates.length}회 신청하기`}
                 </button>
               </div>
@@ -762,53 +848,48 @@ export default function MemberApplyPage() {
 
       {/* 내 신청 목록 */}
       {tab === 'list' && (
-        <div style={{ padding: '1.25rem', paddingBottom: '6rem' }}>
+        <div style={{ padding: '1rem 1.25rem 6rem' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
           ) : myApps.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🎾</div>
-              <p style={{ fontSize: '0.875rem', fontFamily: 'Noto Sans KR, sans-serif' }}>신청 내역이 없습니다</p>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📋</div>
+              <p style={{ fontSize: '0.875rem' }}>신청 내역이 없습니다</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {myApps.map(app => {
                 const st = STATUS[app.status] ?? STATUS.pending_coach
+                // ✅ FIX: API가 pending_coach만 취소 허용 → pending_coach일 때만 버튼 표시
+                // ✅ pending_coach + pending_admin 모두 취소 가능 (approved 전까지)
+                const canCancel = ['pending_coach', 'pending_admin'].includes(app.status)
                 return (
-                  <div key={app.id} style={{ background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', padding: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                          {app.coach?.name} 코치{app.lesson_type && ` · ${app.lesson_type}`}
-                          {app.applicant_name && <span style={{ color: '#6b7280', fontWeight: 400 }}> ({app.applicant_name})</span>}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '2px' }}>
-                          {app.month?.year}년 {app.month?.month}월 · {app.duration_minutes}분
-                        </div>
+                  <div key={app.id} style={{ background: 'white', borderRadius: '1rem', border: '1.5px solid #f3f4f6', padding: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#111827' }}>
+                        {app.lesson_type}
+                        {app.applicant_name && <span style={{ fontWeight: 400, fontSize: '0.78rem', color: '#6b7280', marginLeft: '6px' }}>({app.applicant_name})</span>}
                       </div>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: '9999px', background: st.bg, color: st.color, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        {st.label}
-                      </span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: '9999px', background: st.bg, color: st.color }}>{st.label}</span>
                     </div>
-                    {(app.coach_note || app.admin_note) && (
-                      <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f9fafb', borderRadius: '0.625rem', fontSize: '0.75rem', color: '#6b7280' }}>
-                        {app.coach_note && <div>코치: {app.coach_note}</div>}
-                        {app.admin_note && <div>관리자: {app.admin_note}</div>}
+                    <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>
+                      {app.coach?.name} 코치 · {app.month?.year}년 {app.month?.month}월 · {app.duration_minutes}분
+                    </div>
+                    {app.coach_note && (
+                      <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#fef9c3', borderRadius: '0.5rem', fontSize: '0.75rem', color: '#854d0e' }}>
+                        코치 메모: {app.coach_note}
                       </div>
                     )}
-                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '0.5rem' }}>
-                      신청일: {new Date(app.requested_at).toLocaleDateString('ko-KR')}
-                    </div>
-                    {app.status === 'pending_coach' && (
+                    {app.admin_note && (
+                      <div style={{ marginTop: '0.375rem', padding: '0.5rem', background: '#eff6ff', borderRadius: '0.5rem', fontSize: '0.75rem', color: '#1d4ed8' }}>
+                        관리자 메모: {app.admin_note}
+                      </div>
+                    )}
+                    {canCancel && (
                       <button onClick={() => handleCancel(app.id)} disabled={cancelling === app.id}
-                        style={{ marginTop: '0.625rem', width: '100%', padding: '0.5rem', borderRadius: '0.625rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontSize: '0.78rem', fontWeight: 700, cursor: cancelling===app.id?'not-allowed':'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
-                        {cancelling === app.id ? '취소 중...' : '🗑 신청 취소'}
+                        style={{ marginTop: '0.75rem', width: '100%', padding: '0.5rem', borderRadius: '0.625rem', border: '1.5px solid #fecaca', background: 'white', color: '#b91c1c', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+                        {cancelling === app.id ? '취소 중...' : '신청 취소'}
                       </button>
-                    )}
-                    {app.status === 'pending_admin' && (
-                      <div style={{ marginTop: '0.5rem', padding: '0.4rem 0.75rem', background: '#eff6ff', borderRadius: '0.5rem', fontSize: '0.72rem', color: '#1d4ed8' }}>
-                        이미 코치 확인 완료. 관리자 최종 승인 대기중입니다.
-                      </div>
                     )}
                   </div>
                 )
@@ -818,7 +899,7 @@ export default function MemberApplyPage() {
         </div>
       )}
 
-      <MemberBottomNav />
+      <MemberBottomNav pendingAppCount={myApps.filter(a => ['pending_coach','pending_admin'].includes(a.status)).length} />
     </div>
   )
 }
