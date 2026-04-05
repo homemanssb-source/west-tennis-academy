@@ -8,13 +8,19 @@ export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: '로그인 필요' }, { status: 401 })
 
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('profiles')
     .select('id, name, phone, is_active, created_at')
     .eq('role', 'coach')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
 
+  // ✅ 회원에게는 숨김 코치 제외
+  if (session.role === 'member') {
+    query = query.eq('hide_from_member', false)
+  }
+
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
@@ -29,7 +35,6 @@ export async function POST(req: NextRequest) {
     const { name, phone } = await req.json()
     if (!name || !phone) return NextResponse.json({ error: '이름과 전화번호는 필수입니다' }, { status: 400 })
 
-    // ✅ FIX #1: 하드코딩 '123456' → 6자리 난수
     const tempPin = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
 
