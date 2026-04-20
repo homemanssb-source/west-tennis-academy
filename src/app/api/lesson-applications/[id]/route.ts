@@ -1,4 +1,4 @@
-﻿// src/app/api/lesson-applications/[id]/route.ts
+// src/app/api/lesson-applications/[id]/route.ts
 // ✅ fix #11: RPC 실패 시 상태 롤백 + 에러 반환 (무시하지 않음)
 // ✅ fix: 회원 취소 허용 범위 → pending_coach + pending_admin (approved 전까지 취소 가능)
 // ✅ fix: 취소 시 코치에게 알림 발송
@@ -22,6 +22,40 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   else if (action === 'admin_approve') newStatus = 'approved'
   else if (action === 'admin_reject') newStatus = 'rejected'
   else return NextResponse.json({ error: '잘못된 action' }, { status: 400 })
+
+  // ✅ B3 FIX: 현재 상태 조회 + 상태 전이 검증 + 멱등성 가드
+  const { data: current, error: curErr } = await supabaseAdmin
+    .from('lesson_applications')
+    .select('status, lesson_plan_id')
+    .eq('id', id)
+    .single()
+
+  if (curErr || !current) {
+    return NextResponse.json({ error: '신청 내역을 찾을 수 없습니다' }, { status: 404 })
+  }
+
+  // 상태 전이 그래프 — 허용된 전이만 통과
+  const ALLOWED: Record<string, string[]> = {
+    pending_coach: ['pending_admin', 'rejected'],           // 코치 승인/거절
+    pending_admin: ['approved', 'rejected', 'pending_coach'], // 관리자 승인/거절/코치 재확인
+    approved:      [],                                       // 확정 후 변경 불가
+    rejected:      [],                                       // 거절 후 재승인 불가 (필요 시 새 신청)
+  }
+  const allowedNext = ALLOWED[current.status] ?? []
+  if (!allowedNext.includes(newStatus)) {
+    return NextResponse.json(
+      { error: `현재 상태(${current.status})에서는 ${newStatus}로 변경할 수 없습니다` },
+      { status: 409 }
+    )
+  }
+
+  // 멱등성: admin_approve 인데 이미 lesson_plan 이 생성되어 있으면 재호출 차단
+  if (action === 'admin_approve' && current.lesson_plan_id) {
+    return NextResponse.json(
+      { error: '이미 확정 처리된 신청입니다' },
+      { status: 409 }
+    )
+  }
 
   const updateData: Record<string, unknown> = { status: newStatus }
   if (coach_note !== undefined) updateData.coach_note = coach_note

@@ -1,4 +1,4 @@
-﻿// src/app/api/lesson-applications/route.ts
+// src/app/api/lesson-applications/route.ts
 // ✅ FIX N+1: family_member 개별 조회 → IN 쿼리 일괄 조회
 // ✅ FIX 코치휴무: POST에 checkCoachBlock 호출 추가
 // ✅ FIX 정원체크: program_id 필터 추가 + 시간 범위 체크로 변경 (동일 시간대 다른 프로그램 오카운트 방지)
@@ -127,36 +127,40 @@ export async function POST(req: NextRequest) {
       if (hasConflict) { errors.push(requested_at + ' 수업 충돌'); continue }
     }
 
-    // ✅ 정원 체크 — program_id 기준으로 동일 프로그램 신청만 카운트
-    // 시간 범위로 체크해서 timestamp 미세 차이 문제 방지
-    if (isGroup && program_id) {
-      const slotStart = requested_at  // e.g. "2025-04-05T10:00:00+09:00"
-      // 수업 시작시간 ~ 시작시간+1분 범위로 같은 시간대 신청 조회
-      // (동일 프로그램, 동일 코치, 동일 시간대)
-      const { data: otherApps } = await supabaseAdmin
+    // ✅ 정원 체크 (B2 FIX):
+    //   - approved 상태는 lesson_slots.scheduled_at 기준(관리자가 시간 변경했을 수 있음)
+    //   - pending_* 상태는 lesson_applications.requested_at 기준
+    //   → 이렇게 해야 "슬롯 시간 이동 후 원래 시간으로 새 신청이 들어올 때 false-full" 방지
+    if (isGroup) {
+      // 1) pending 신청(아직 확정 전) — lesson_applications.requested_at
+      let pendingQ = supabaseAdmin
         .from('lesson_applications')
-        .select('id')
-        .eq('coach_id', coach_id)
-        .eq('program_id', program_id)
-        .eq('requested_at', slotStart)
-        .in('status', ['pending_coach', 'pending_admin', 'approved'])
-
-      const currentCount = (otherApps ?? []).length
-
-      if (currentCount >= maxStudents) {
-        errors.push(requested_at + ` 정원 초과 (${currentCount}/${maxStudents}명)`)
-        continue
-      }
-    } else if (isGroup && !program_id) {
-      // program_id 없는 레거시 그룹레슨: 코치+시간 기준으로 체크
-      const { data: otherApps } = await supabaseAdmin
-        .from('lesson_applications')
-        .select('id')
+        .select('id', { count: 'exact', head: true })
         .eq('coach_id', coach_id)
         .eq('requested_at', requested_at)
-        .in('status', ['pending_coach', 'pending_admin', 'approved'])
+        .in('status', ['pending_coach', 'pending_admin'])
+      if (program_id) pendingQ = pendingQ.eq('program_id', program_id)
+      const { count: pendingCount } = await pendingQ
 
-      const currentCount = (otherApps ?? []).length
+      // 2) 확정 수업(approved) — lesson_slots.scheduled_at (재스케줄 반영된 실제 시간)
+      let slotQ = supabaseAdmin
+        .from('lesson_slots')
+        .select('id, lesson_plan:lesson_plan_id!inner(coach_id, program_id)', {
+          count: 'exact',
+          head: false,
+        })
+        .eq('scheduled_at', requested_at)
+        .in('status', ['scheduled', 'completed'])
+      const { data: slotRows } = await slotQ
+      const approvedCount = (slotRows ?? []).filter((s: any) => {
+        const lp = s.lesson_plan as any
+        if (!lp || lp.coach_id !== coach_id) return false
+        if (program_id) return lp.program_id === program_id
+        return true // 레거시: program_id 없으면 코치만 매칭
+      }).length
+
+      const currentCount = (pendingCount ?? 0) + approvedCount
+
       if (currentCount >= maxStudents) {
         errors.push(requested_at + ` 정원 초과 (${currentCount}/${maxStudents}명)`)
         continue
