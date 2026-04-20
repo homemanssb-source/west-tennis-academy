@@ -1,4 +1,4 @@
-﻿// src/app/api/weekly-schedule/route.ts
+// src/app/api/weekly-schedule/route.ts
 // ✅ fix: family_member_name 주입 (lesson_plans.family_member_id 직접 조회)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'

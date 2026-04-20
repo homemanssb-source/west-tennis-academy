@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
+import { RL, checkRate } from '@/lib/ratelimit'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: '로그인 필요' }, { status: 401 })
+
+  const blocked = await checkRate(RL.pinChange, req, session.id)
+  if (blocked) return blocked
 
   const { current_pin, new_pin } = await req.json()
   if (!new_pin || new_pin.length !== 6) return NextResponse.json({ error: 'PIN은 6자리여야 합니다' }, { status: 400 })

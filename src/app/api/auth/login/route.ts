@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { makeSessionCookie, SESSION_COOKIE } from '@/lib/session'
 import { Role } from '@/lib/types'
+import { RL, checkRate } from '@/lib/ratelimit'
 
 const ROLE_HOME: Record<Role, string> = {
   owner:   '/owner',
@@ -14,13 +15,10 @@ const ROLE_HOME: Record<Role, string> = {
 
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await checkRate(RL.login, req)
+    if (blocked) return blocked
+
     const { phone, pin, role } = await req.json()
-
-    // ✅ FIX #16: 프로덕션에서 민감 정보(전화번호, PIN) 로그 제거
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('=== 로그인 시도 ===', { role, pinLen: pin?.length })
-    }
-
     const cleanPhone = phone.replace(/-/g, '')
 
     const { data: user, error } = await supabaseAdmin

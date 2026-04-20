@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 // src/app/owner/lesson-plan/page.tsx
 // ✅ fix: generateSchedules/saveEdit toISOString UTC 날짜 버그 수정
 // ✅ fix: fmtDt KST 기준으로 수정

@@ -1,4 +1,4 @@
-﻿// ✅ fix: family_member_name 주입 (lesson_plans.family_member_id 직접 조회)
+// ✅ fix: family_member_name 주입 (lesson_plans.family_member_id 직접 조회)
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { supabaseAdmin } from '@/lib/supabase-admin'

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 const ROLE_AUTH: Record<string, string> = {
   owner:   '/auth/owner',

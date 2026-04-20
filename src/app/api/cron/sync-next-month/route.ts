@@ -1,4 +1,4 @@
-﻿// src/app/api/cron/next-month-sync/route.ts
+// src/app/api/cron/next-month-sync/route.ts
 // 매월 25일 실행 — 다음달 레슨 플랜 + 슬롯 초안 자동 생성
 // ✅ [FIX] CRON_SECRET 인증 추가 (기존 GET()에서 누락)
 // ✅ [FIX] UTC/KST 날짜 버그 전면 수정

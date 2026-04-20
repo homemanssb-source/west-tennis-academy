@@ -1,4 +1,4 @@
-﻿import { supabaseAdmin } from '@/lib/supabase-admin'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import webpush from 'web-push'
 
 // ✅ 모듈 레벨에서 1회만 설정 (기존: sendPushToUser 호출마다 재설정)

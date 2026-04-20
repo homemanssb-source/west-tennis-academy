@@ -1,4 +1,4 @@
-﻿// src/app/api/coach/payment/route.ts
+// src/app/api/coach/payment/route.ts
 // ✅ fix: family_member join 추가 (자녀 이름 표시)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'

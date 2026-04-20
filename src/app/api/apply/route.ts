@@ -1,8 +1,12 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { RL, checkRate } from '@/lib/ratelimit'
 
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await checkRate(RL.apply, req)
+    if (blocked) return blocked
+
     const {
       name, phone, birth_date, address,
       emergency_contact, health_notes, desired_schedule,

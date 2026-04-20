@@ -1,4 +1,4 @@
-﻿import { redirect } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import Link from 'next/link'
 import LogoutButton from '@/components/LogoutButton'

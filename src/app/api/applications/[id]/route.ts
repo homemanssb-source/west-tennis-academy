@@ -96,7 +96,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       .update({ status: 'approved', reviewed_by: session.id, reviewed_at: new Date().toISOString() })
       .eq('id', id)
 
-    return NextResponse.json({ ok: true, temp_pin })
+    return NextResponse.json({ ok: true, temp_pin }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+      },
+    })
 
   } else if (action === 'reject') {
     const { error } = await supabaseAdmin

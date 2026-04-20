@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 // src/app/owner/weekly/page.tsx
 // ✅ fix: 그룹수업 슬롯 묶어서 표시 (겹침 해소)
 // ✅ fix: family_member_name 표시 (가족 신청 시 자녀 이름)

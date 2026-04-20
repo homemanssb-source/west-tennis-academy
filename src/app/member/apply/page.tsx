@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 // src/app/member/apply/page.tsx
 // ✅ 그룹수업 fixed_schedules 있음: 고정 스케줄 1클릭 신청 (기존 유지)
 // ✅ 그룹수업 fixed_schedules 없음: 달력 선택 방식 (max_students 기준 정원 체크)

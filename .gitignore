@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# wta snapshot/archive artifacts (do not commit)
+/wta-snapshot/
+wta_part*.txt
+wta_push_output.txt
+export-wta-snapshot.ps1

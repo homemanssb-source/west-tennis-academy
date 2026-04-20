@@ -49,7 +49,12 @@ export async function POST(req: NextRequest) {
       if (error.code === '23505') return NextResponse.json({ error: '이미 등록된 전화번호입니다' }, { status: 409 })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-    return NextResponse.json({ ...data, temp_pin: tempPin })
+    return NextResponse.json({ ...data, temp_pin: tempPin }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+      },
+    })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }

@@ -1,4 +1,4 @@
-﻿// src/app/api/lesson-plans/route.ts
+// src/app/api/lesson-plans/route.ts
 // ✅ fix: 단체수업 max_students 정원 체크 추가
 // ✅ fix: 충돌 에러 메시지 KST 기준으로 수정
 // ✅ fix: 코치 휴무 체크 KST 기준으로 수정

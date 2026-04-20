@@ -1,4 +1,4 @@
-﻿// lib/checkCoachBlock.ts
+// lib/checkCoachBlock.ts
 // ✅ FIX #13: repeat_weekly 서버 처리 공통 헬퍼
 // 사용처: api/lesson-applications/route.ts, api/makeup/route.ts, api/lesson-plans/route.ts
 // ✅ FIX UTC→KST: 날짜/요일/시간 모두 KST 기준으로 수정 (자정 전후 버그 해결)

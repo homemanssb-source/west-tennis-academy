@@ -64,7 +64,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const tempPin  = Math.floor(100000 + Math.random() * 900000).toString()
     const pin_hash = await bcrypt.hash(tempPin, 10)
     await supabaseAdmin.from('profiles').update({ pin_hash, pin_must_change: true }).eq('id', id)
-    return NextResponse.json({ temp_pin: tempPin })
+    return NextResponse.json({ temp_pin: tempPin }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+      },
+    })
   }
 
   if (body.action === 'toggle_active') {

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 // src/app/coach/payment/page.tsx
 // ✅ fix: 자녀 이름 표시 (부모(자녀) 형태)
 import { useEffect, useState } from 'react'
