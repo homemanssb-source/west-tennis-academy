@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import BusinessFooter from '@/components/BusinessFooter'
 
 export const metadata: Metadata = {
   title: '서부 테니스 아카데미',
@@ -31,7 +32,10 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-512.svg" />
         <link rel="icon" type="image/svg+xml" href="/icon-512.svg" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <BusinessFooter />
+      </body>
     </html>
   )
 }
