@@ -27,7 +27,138 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params
   const body = await req.json()
-  const { status, memo, scheduled_at, swap_to_member_id } = body
+  const { status, memo, scheduled_at, swap_to_member_id, add_member_id } = body
+
+  // ── 그룹에 회원 추가 경로 ──────────────────────────────────────
+  if (add_member_id) {
+    if (!['owner', 'admin'].includes(session.role)) {
+      return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+    }
+    // 1) 기준 슬롯 + plan 정보
+    const { data: baseSlot } = await supabaseAdmin
+      .from('lesson_slots')
+      .select(`
+        id, scheduled_at, duration_minutes,
+        lesson_plan:lesson_plan_id ( id, coach_id, month_id, lesson_type, unit_minutes, program_id )
+      `)
+      .eq('id', id)
+      .single()
+    if (!baseSlot) return NextResponse.json({ error: '슬롯 없음' }, { status: 404 })
+    const basePlan = baseSlot.lesson_plan as any
+    if (!basePlan) return NextResponse.json({ error: 'plan 정보 없음' }, { status: 400 })
+
+    // 2) 회원 유효성
+    const { data: newMember } = await supabaseAdmin
+      .from('profiles')
+      .select('id, name, role')
+      .eq('id', add_member_id)
+      .single()
+    if (!newMember || newMember.role !== 'member') {
+      return NextResponse.json({ error: '유효한 회원이 아닙니다' }, { status: 400 })
+    }
+
+    // 3) 같은 시간·코치·프로그램 슬롯 조회 (정원 체크용)
+    const { data: sibling } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('id, lesson_plan:lesson_plan_id!inner(id, coach_id, program_id, member_id)')
+      .eq('scheduled_at', baseSlot.scheduled_at)
+      .in('status', ['scheduled', 'completed'])
+    const matching = (sibling ?? []).filter((s: any) => {
+      const lp = s.lesson_plan as any
+      if (!lp || lp.coach_id !== basePlan.coach_id) return false
+      if (basePlan.program_id) return lp.program_id === basePlan.program_id
+      return true
+    })
+
+    // 4) 이미 그룹에 있는 회원인지
+    if (matching.some((s: any) => (s.lesson_plan as any)?.member_id === add_member_id)) {
+      return NextResponse.json({ error: '이미 이 시간에 등록된 회원입니다' }, { status: 409 })
+    }
+
+    // 5) 정원 체크 (program.max_students)
+    let maxStudents = 999
+    if (basePlan.program_id) {
+      const { data: prog } = await supabaseAdmin
+        .from('lesson_programs')
+        .select('max_students')
+        .eq('id', basePlan.program_id)
+        .single()
+      if (prog?.max_students) maxStudents = prog.max_students
+    } else {
+      // program_id 없으면 1:1 성격이므로 기본 1 명으로 간주하되 admin 판단으로 추가 허용
+      // → 여기선 admin 권한으로 모달이 열린 상태이므로 capacity=∞ 로 둠
+    }
+    if (matching.length >= maxStudents) {
+      return NextResponse.json(
+        { error: `정원 초과 (${matching.length}/${maxStudents}명)` },
+        { status: 409 },
+      )
+    }
+
+    // 6) 새 회원의 plan 조회 or 생성 (coach/month/family null)
+    let { data: newPlan } = await supabaseAdmin
+      .from('lesson_plans')
+      .select('id')
+      .eq('member_id', add_member_id)
+      .eq('coach_id', basePlan.coach_id)
+      .eq('month_id', basePlan.month_id)
+      .is('family_member_id', null)
+      .maybeSingle()
+    if (!newPlan) {
+      const { data: created, error: cErr } = await supabaseAdmin
+        .from('lesson_plans')
+        .insert({
+          member_id:        add_member_id,
+          coach_id:         basePlan.coach_id,
+          month_id:         basePlan.month_id,
+          lesson_type:      basePlan.lesson_type ?? '개인레슨',
+          unit_minutes:     basePlan.unit_minutes ?? baseSlot.duration_minutes,
+          total_count:      0,
+          completed_count:  0,
+          payment_status:   'unpaid',
+          amount:           0,
+          family_member_id: null,
+          ...(basePlan.program_id ? { program_id: basePlan.program_id } : {}),
+        })
+        .select('id')
+        .single()
+      if (cErr || !created) return NextResponse.json({ error: '새 plan 생성 실패' }, { status: 500 })
+      newPlan = created
+    }
+
+    // 7) 새 슬롯 INSERT (같은 시간)
+    const { error: insErr } = await supabaseAdmin
+      .from('lesson_slots')
+      .insert({
+        lesson_plan_id:   newPlan.id,
+        scheduled_at:     baseSlot.scheduled_at,
+        duration_minutes: baseSlot.duration_minutes,
+        status:           'scheduled',
+        slot_type:        'lesson',
+        is_makeup:        false,
+      })
+    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
+
+    // 8) 해당 plan total_count + amount 재계산
+    const { count } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('id', { count: 'exact', head: true })
+      .eq('lesson_plan_id', newPlan.id)
+      .in('status', ['scheduled', 'completed'])
+    await supabaseAdmin.from('lesson_plans').update({ total_count: count ?? 0 }).eq('id', newPlan.id)
+    await recalcAndSavePlan(newPlan.id)
+
+    // 9) 알림
+    await supabaseAdmin.from('notifications').insert({
+      profile_id: add_member_id,
+      title: '📅 수업 등록',
+      body: `${fmtKSTDatetime(baseSlot.scheduled_at)} 수업에 등록되었습니다.`,
+      type: 'info',
+      link: '/member/schedule',
+    })
+
+    return NextResponse.json({ ok: true, new_lesson_plan_id: newPlan.id })
+  }
 
   // ── 회원 변경(swap) 경로 ──────────────────────────────────────
   if (swap_to_member_id) {

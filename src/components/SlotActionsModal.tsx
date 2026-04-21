@@ -44,6 +44,9 @@ export default function SlotActionsModal({
   const [swapFor, setSwapFor] = useState<string | null>(null) // slot.id 를 선택한 상태
   const [swapTarget, setSwapTarget] = useState<string>('')
   const [memberFilter, setMemberFilter] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [addTarget, setAddTarget] = useState<string>('')
+  const [addFilter, setAddFilter] = useState('')
 
   useEffect(() => {
     fetch('/api/members')
@@ -94,6 +97,34 @@ export default function SlotActionsModal({
   const filteredMembers = memberFilter
     ? members.filter(m => m.name.includes(memberFilter) || (m.phone ?? '').includes(memberFilter))
     : members
+
+  // 이미 이 슬롯 그룹에 포함된 회원은 "회원 추가" 후보에서 제외
+  const currentMemberIds = new Set(slots.map(s => s.lesson_plan?.member?.id).filter(Boolean))
+  const addCandidates = (addFilter
+    ? members.filter(m => m.name.includes(addFilter) || (m.phone ?? '').includes(addFilter))
+    : members
+  ).filter(m => !currentMemberIds.has(m.id))
+
+  async function handleAdd() {
+    if (!addTarget) { setError('추가할 회원을 선택하세요'); return }
+    const newMember = members.find(m => m.id === addTarget)
+    if (!newMember) return
+    if (!confirm(`${newMember.name} 회원을 이 시간 수업에 추가합니다.\n(정원 초과 시 실패합니다)`)) return
+    setBusy(true); setError(null)
+    const res = await fetch(`/api/lesson-slots/${first.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ add_member_id: addTarget }),
+    })
+    setBusy(false)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setError(d.error ?? '회원 추가 실패')
+      return
+    }
+    setAddOpen(false); setAddTarget(''); setAddFilter('')
+    onDone()
+  }
 
   return (
     <div
@@ -208,7 +239,69 @@ export default function SlotActionsModal({
           })}
         </div>
 
-        <div style={{ marginTop: '0.875rem', fontSize: '0.7rem', color: '#9ca3af', textAlign: 'center' }}>
+        {/* 회원 추가 섹션 */}
+        <div style={{ marginTop: '0.875rem', paddingTop: '0.875rem', borderTop: '1px dashed #e5e7eb' }}>
+          {!addOpen ? (
+            <button
+              onClick={() => { setAddOpen(true); setError(null) }}
+              disabled={busy}
+              style={{
+                width: '100%', padding: '0.625rem',
+                border: '1.5px dashed #16A34A', borderRadius: 10, background: '#f0fdf4',
+                color: '#166534', fontSize: '0.85rem', fontWeight: 700,
+                cursor: busy ? 'not-allowed' : 'pointer',
+              }}
+            >+ 이 시간에 회원 추가</button>
+          ) : (
+            <div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.5rem' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#111827' }}>추가할 회원 선택</div>
+                <button onClick={() => { setAddOpen(false); setAddTarget(''); setAddFilter('') }}
+                  style={{ border:'none', background:'transparent', color:'#9ca3af', fontSize:'0.75rem', cursor:'pointer' }}>취소</button>
+              </div>
+              <input
+                autoFocus
+                value={addFilter}
+                onChange={e => setAddFilter(e.target.value)}
+                placeholder="이름 또는 전화번호 검색"
+                style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: 8, fontSize: '0.85rem', marginBottom: '0.5rem' }}
+              />
+              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #f3f4f6', borderRadius: 8 }}>
+                {addCandidates.slice(0, 50).map(m => (
+                  <label key={m.id} style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.625rem', borderBottom:'1px solid #f3f4f6', cursor:'pointer', background: addTarget === m.id ? '#f0fdf4' : 'white' }}>
+                    <input
+                      type="radio"
+                      name="add-target"
+                      checked={addTarget === m.id}
+                      onChange={() => setAddTarget(m.id)}
+                    />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>{m.name}</div>
+                      {m.phone && <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{m.phone}</div>}
+                    </div>
+                  </label>
+                ))}
+                {addCandidates.length === 0 && (
+                  <div style={{ padding:'0.75rem', textAlign:'center', color:'#9ca3af', fontSize:'0.8rem' }}>
+                    {addFilter ? '일치하는 회원 없음' : '추가 가능한 회원 없음'}
+                  </div>
+                )}
+              </div>
+              <button
+                disabled={busy || !addTarget}
+                onClick={handleAdd}
+                style={{
+                  marginTop: '0.5rem', width: '100%',
+                  padding: '0.625rem', borderRadius: 8, border: 'none',
+                  background: addTarget ? '#16A34A' : '#d1d5db', color: 'white',
+                  fontSize: '0.9rem', fontWeight: 700, cursor: addTarget && !busy ? 'pointer' : 'not-allowed',
+                }}
+              >{busy ? '처리 중...' : '추가 확정'}</button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: '0.75rem', fontSize: '0.7rem', color: '#9ca3af', textAlign: 'center' }}>
           작업 시 해당 월의 레슨비가 자동 재계산됩니다.
         </div>
       </div>
