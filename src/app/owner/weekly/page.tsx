@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import SlotActionsModal from '@/components/SlotActionsModal'
+import NewSlotModal from '@/components/NewSlotModal'
 
 interface Slot {
   id: string; scheduled_at: string; duration_minutes: number; status: string; is_makeup: boolean
@@ -86,6 +87,7 @@ export default function WeeklySchedulePage() {
   const [selCoach, setSelCoach] = useState<string>('all')
   const [isMobile, setIsMobile] = useState(false)
   const [openModalSlots, setOpenModalSlots] = useState<Slot[] | null>(null)
+  const [newModalOpen, setNewModalOpen] = useState(false)
   const now = new Date()
 
   const reload = () => {
@@ -315,6 +317,14 @@ export default function WeeklySchedulePage() {
             {coaches.map(c => <option key={c.id} value={c.id}>{c.name} 코치</option>)}
           </select>
         )}
+        <button
+          onClick={() => setNewModalOpen(true)}
+          style={{
+            padding: isMobile ? '0.3rem 0.625rem' : '0.4rem 0.875rem',
+            border:'none', borderRadius:'0.5rem', background:'#16A34A', color:'white',
+            fontWeight:700, fontSize:'0.75rem', cursor:'pointer', whiteSpace:'nowrap',
+          }}
+        >+ 신규</button>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'0.375rem' }}>
           <button onClick={() => changeWeek(-1)} style={{ padding: isMobile ? '0.25rem 0.5rem' : '0.375rem 0.75rem', border:'1.5px solid #e5e7eb', borderRadius:'0.5rem', background:'white', cursor:'pointer', fontSize:'0.75rem' }}>◀</button>
           <span style={{ fontSize: isMobile ? '0.75rem' : '0.875rem', fontWeight:700, color:'#111827', whiteSpace:'nowrap' }}>{weekLabel}</span>
@@ -390,6 +400,13 @@ export default function WeeklySchedulePage() {
           isMobile={isMobile}
           onClose={() => setOpenModalSlots(null)}
           onDone={() => { setOpenModalSlots(null); reload() }}
+        />
+      )}
+      {newModalOpen && (
+        <NewSlotModal
+          isMobile={isMobile}
+          onClose={() => setNewModalOpen(false)}
+          onDone={() => { setNewModalOpen(false); reload() }}
         />
       )}
     </div>
