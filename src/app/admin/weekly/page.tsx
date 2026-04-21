@@ -10,7 +10,8 @@ interface Slot {
 }
 
 const DAYS = ['월','화','수','목','금','토','일']
-const START_HOUR = 8, END_HOUR = 22, CELL_MIN = 10
+// ✅ #2: END_HOUR 22→24 로 확장
+const START_HOUR = 8, END_HOUR = 24, CELL_MIN = 10
 const STATUS_COLOR: Record<string,string> = { scheduled:'#16A34A', completed:'#1d4ed8', cancelled:'#b91c1c', makeup:'#7e22ce' }
 const STATUS_BG: Record<string,string> = { scheduled:'#f0fdf4', completed:'#eff6ff', cancelled:'#fef2f2', makeup:'#fdf4ff' }
 const COACH_COLORS = ['#16A34A','#2563eb','#d97706','#dc2626','#7c3aed','#0891b2','#be185d','#65a30d']
@@ -28,31 +29,27 @@ function slotToKSTDate(scheduled_at: string): string {
   return kst.toISOString().split('T')[0]
 }
 
+// ✅ #4: per-event width (실제 겹치는 이벤트들만 분할, 비겹침은 전폭)
 function layoutDay(groups: { key: string; startMin: number; endMin: number }[]) {
   const sorted = [...groups].sort((a, b) => a.startMin - b.startMin)
   const assigned = new Map<string, number>()
-  const clusterSize = new Map<string, number>()
-  let curCluster: string[] = []
-  let curClusterEnd = -1
-  let laneEnds: number[] = []
-  const closeCluster = () => {
-    if (curCluster.length === 0) return
-    const max = Math.max(...curCluster.map(k => assigned.get(k)!)) + 1
-    curCluster.forEach(k => clusterSize.set(k, max))
-    curCluster = []
-    laneEnds = []
-    curClusterEnd = -1
-  }
+  const laneEnds: number[] = []
   for (const g of sorted) {
-    if (g.startMin >= curClusterEnd) closeCluster()
     let lane = laneEnds.findIndex(e => e <= g.startMin)
     if (lane === -1) { lane = laneEnds.length; laneEnds.push(0) }
     laneEnds[lane] = g.endMin
     assigned.set(g.key, lane)
-    curCluster.push(g.key)
-    curClusterEnd = Math.max(curClusterEnd, g.endMin)
   }
-  closeCluster()
+  const clusterSize = new Map<string, number>()
+  for (const g of sorted) {
+    let maxLane = assigned.get(g.key)!
+    for (const o of sorted) {
+      if (o.startMin < g.endMin && o.endMin > g.startMin) {
+        maxLane = Math.max(maxLane, assigned.get(o.key)!)
+      }
+    }
+    clusterSize.set(g.key, maxLane + 1)
+  }
   return { assigned, clusterSize }
 }
 
@@ -164,7 +161,8 @@ export default function AdminWeeklyPage() {
                     if (g.startMin < 0 || g.startMin >= (END_HOUR-START_HOUR)*60) return null
                     const dur = slot.duration_minutes || 30
                     const top = (g.startMin/CELL_MIN)*CELL_H
-                    const height = Math.max((dur/CELL_MIN)*CELL_H, CELL_H*3)
+                    // ✅ #3: 최소 높이 3셀→2셀
+                    const height = Math.max((dur/CELL_MIN)*CELL_H, CELL_H*2)
                     const status = slot.is_makeup ? 'makeup' : slot.status
                     const coachId = slot.lesson_plan?.coach?.id
                     const color = viewMode==='byCoach' && coachId ? coachColorMap[coachId] : STATUS_COLOR[status] ?? STATUS_COLOR.scheduled
