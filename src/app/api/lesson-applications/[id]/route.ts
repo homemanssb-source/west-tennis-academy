@@ -36,10 +36,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
   // 상태 전이 그래프 — 허용된 전이만 통과
   const ALLOWED: Record<string, string[]> = {
-    pending_coach: ['pending_admin', 'rejected'],           // 코치 승인/거절
+    pending_coach: ['pending_admin', 'rejected', 'approved'], // 코치 승인/거절 + 오너 직접 확정(수정요청 1-step 결재)
     pending_admin: ['approved', 'rejected', 'pending_coach'], // 관리자 승인/거절/코치 재확인
-    approved:      [],                                       // 확정 후 변경 불가
-    rejected:      [],                                       // 거절 후 재승인 불가 (필요 시 새 신청)
+    approved:      [],                                        // 확정 후 변경 불가
+    rejected:      [],                                        // 거절 후 재승인 불가 (필요 시 새 신청)
   }
   const allowedNext = ALLOWED[current.status] ?? []
   if (!allowedNext.includes(newStatus)) {
@@ -75,11 +75,12 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   if (action === 'admin_approve') {
     const { error: rpcError } = await supabaseAdmin.rpc('approve_lesson_application', { app_id: id })
 
-    // ✅ fix #11: RPC 실패 시 상태를 pending_admin으로 롤백 후 에러 반환
+    // ✅ fix #11: RPC 실패 시 상태를 "변경 직전 값(current.status)"으로 롤백
+    // (기존엔 pending_admin으로 하드코딩되어 pending_coach → approved 케이스가 잘못 롤백됨)
     if (rpcError) {
       await supabaseAdmin
         .from('lesson_applications')
-        .update({ status: 'pending_admin' })
+        .update({ status: current.status })
         .eq('id', id)
       return NextResponse.json(
         { error: '수업 확정 처리에 실패했습니다. 잠시 후 다시 시도해주세요.' },

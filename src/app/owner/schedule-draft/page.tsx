@@ -169,11 +169,18 @@ export default function ScheduleDraftPage() {
 
   const handleRequestAction = async (reqId: string, action: 'approve' | 'reject') => {
     setSaving(true)
-    await fetch(`/api/lesson-applications/${reqId}`, {
+    // ✅ FIX: PATCH /api/lesson-applications/[id] 는 body.action 을 읽음 (status 아님)
+    const res = await fetch(`/api/lesson-applications/${reqId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: action === 'approve' ? 'approved' : 'rejected' }),
+      body: JSON.stringify({
+        action: action === 'approve' ? 'admin_approve' : 'admin_reject',
+      }),
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert(err.error ?? '요청 처리에 실패했습니다')
+    }
     setSaving(false)
     loadAll(monthId)
   }
