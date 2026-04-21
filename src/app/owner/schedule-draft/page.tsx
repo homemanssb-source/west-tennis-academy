@@ -79,27 +79,31 @@ export default function ScheduleDraftPage() {
   // ── 이름 검색 상태 ────────────────────────────────────────────────
   const [searchOpen,   setSearchOpen]   = useState(false)
   const [searchQ,      setSearchQ]      = useState('')
-  const [searchResults,setSearchResults] = useState<Array<{ id: string; name: string; role: string; phone?: string }>>([])
-  const [searchBusy,   setSearchBusy]   = useState(false)
+  // ✅ perf: 전체 회원/코치를 모달 최초 열 때 1회만 prefetch → 이후 타이핑은 클라이언트 필터 (즉시 반응)
+  const [allProfiles,  setAllProfiles]  = useState<Array<{ id: string; name: string; role: string; phone?: string }>>([])
+  const [profilesLoading, setProfilesLoading] = useState(false)
   const [selProfile,   setSelProfile]   = useState<{ id: string; name: string; role: string } | null>(null)
   const [personSlots,  setPersonSlots]  = useState<any[]>([])
   const [personLoading, setPersonLoading] = useState(false)
 
-  // 검색어 디바운스
+  // 검색 섹션 최초 열릴 때 전체 profiles prefetch (한번만)
   useEffect(() => {
-    if (!searchOpen) return
-    if (!searchQ.trim()) { setSearchResults([]); return }
-    setSearchBusy(true)
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch('/api/profiles/search?q=' + encodeURIComponent(searchQ.trim()))
-        const data = await res.json()
-        setSearchResults(Array.isArray(data) ? data : [])
-      } catch { setSearchResults([]) }
-      finally { setSearchBusy(false) }
-    }, 250)
-    return () => clearTimeout(t)
-  }, [searchQ, searchOpen])
+    if (!searchOpen || allProfiles.length > 0 || profilesLoading) return
+    setProfilesLoading(true)
+    fetch('/api/profiles/search?q=*')
+      .then(r => r.json())
+      .then(d => setAllProfiles(Array.isArray(d) ? d : []))
+      .finally(() => setProfilesLoading(false))
+  }, [searchOpen])
+
+  // 클라이언트 사이드 필터 — 타이핑 즉시 반응
+  const searchResults = (() => {
+    const q = searchQ.trim().toLowerCase()
+    if (!q) return []
+    return allProfiles
+      .filter(p => p.name.toLowerCase().includes(q) || (p.phone ?? '').includes(q))
+      .slice(0, 30)
+  })()
 
   const loadPerson = async (profile: { id: string; name: string; role: string }) => {
     if (!monthId) return
@@ -349,11 +353,14 @@ export default function ScheduleDraftPage() {
               />
 
               {/* 검색 결과 */}
-              {searchQ.trim() && (
+              {profilesLoading && (
+                <div style={{ marginTop: '0.5rem', padding: '0.5rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.75rem' }}>
+                  회원/코치 목록 준비 중…
+                </div>
+              )}
+              {searchQ.trim() && !profilesLoading && (
                 <div style={{ marginTop: '0.5rem', maxHeight: 220, overflowY: 'auto', border: '1px solid #f3f4f6', borderRadius: 8 }}>
-                  {searchBusy ? (
-                    <div style={{ padding: '0.75rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.8rem' }}>검색 중…</div>
-                  ) : searchResults.length === 0 ? (
+                  {searchResults.length === 0 ? (
                     <div style={{ padding: '0.75rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.8rem' }}>결과 없음</div>
                   ) : (
                     searchResults.map(p => (

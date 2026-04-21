@@ -13,16 +13,22 @@ export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get('q') ?? '').trim()
   if (!q) return NextResponse.json([])
 
-  const { data, error } = await supabaseAdmin
+  // ✅ perf: q='*' 는 "전체 반환 모드" — 프론트에서 한번 prefetch 후 클라이언트 필터
+  let query = supabaseAdmin
     .from('profiles')
     .select('id, name, phone, role, is_active')
     .in('role', ['member', 'coach'])
-    .ilike('name', `%${q}%`)
     .eq('is_active', true)
     .order('role', { ascending: true })
     .order('name', { ascending: true })
-    .limit(30)
 
+  if (q === '*') {
+    query = query.limit(2000)
+  } else {
+    query = query.ilike('name', `%${q}%`).limit(30)
+  }
+
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data ?? [])
 }

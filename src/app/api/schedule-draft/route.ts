@@ -16,12 +16,15 @@ export async function GET(req: NextRequest) {
   const monthId = req.nextUrl.searchParams.get('month_id')
   if (!monthId) return NextResponse.json({ error: 'month_id 필요' }, { status: 400 })
 
+  // ✅ perf: !inner join + month_id 로 서버 측에서 필터
+  //   기존: 전 DB 의 draft slot 다 fetch → JS 에서 월 필터 (대규모 DB 에서 수백 ms)
+  //   개선: lesson_plans.month_id 로 inner join 필터 → 해당 월 slot 만 조회
   const { data, error } = await supabaseAdmin
     .from('lesson_slots')
     .select(`
       id, scheduled_at, duration_minutes, status, has_conflict,
-      lesson_plan:lesson_plan_id (
-        id, lesson_type, unit_minutes, amount,
+      lesson_plan:lesson_plan_id!inner (
+        id, lesson_type, unit_minutes, amount, month_id,
         family_member_id,
         member:member_id ( id, name, phone ),
         coach:coach_id ( id, name ),
@@ -29,19 +32,12 @@ export async function GET(req: NextRequest) {
       )
     `)
     .eq('status', 'draft')
+    .eq('lesson_plan.month_id', monthId)
     .order('scheduled_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const { data: planIds } = await supabaseAdmin
-    .from('lesson_plans')
-    .select('id')
-    .eq('month_id', monthId)
-
-  const validPlanIds = new Set((planIds ?? []).map((p: any) => p.id))
-  const filtered = (data ?? []).filter((s: any) => validPlanIds.has(s.lesson_plan?.id))
-
-  const enriched = filtered.map((s: any) => ({
+  const enriched = (data ?? []).map((s: any) => ({
     ...s,
     family_member_name: s.lesson_plan?.family_member?.name ?? null,
   }))
