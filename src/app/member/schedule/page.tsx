@@ -119,7 +119,7 @@ export default function MemberSchedulePage() {
     }
 
     const msgs: Record<string, string> = {
-      exclude: `${fmtDt(slot.scheduled_at)} 수업을 제외 요청할까요?`,
+      exclude: `${fmtDt(slot.scheduled_at)} 수업을 제외할까요?\n(승인 절차 없이 바로 초안에서 빠집니다)`,
       change:  `${fmtDt(slot.scheduled_at)} 수업 날짜 변경을 요청할까요?\n${hope ? `희망 날짜: ${hope}` : ''}`,
     }
     if (!confirm(msgs[type])) return
@@ -143,7 +143,12 @@ export default function MemberSchedulePage() {
         setDraftMsg('❌ ' + (data.error ?? '요청 실패'))
         return
       }
-      setDraftMsg('✅ 요청이 접수되었습니다. 운영자 확인 후 반영됩니다.')
+      // exclude 는 즉시 삭제, change 는 승인 대기
+      if (type === 'exclude' && data.deleted) {
+        setDraftMsg('🗑 해당 수업이 초안에서 제외되었습니다.')
+      } else {
+        setDraftMsg('✅ 요청이 접수되었습니다. 운영자 확인 후 반영됩니다.')
+      }
       setChangeModalSlot(null)
       loadDraft(nextMonth.id)
     } catch {
@@ -316,7 +321,7 @@ export default function MemberSchedulePage() {
                             onClick={() => handleRequest('exclude', s)}
                             disabled={!!requesting}
                             style={{ flex: 1, padding: '0.4rem', borderRadius: '0.5rem', border: '1.5px solid #fecaca', background: '#fef2f2', color: '#b91c1c', fontWeight: 700, cursor: requesting ? 'not-allowed' : 'pointer', fontSize: '0.78rem', fontFamily: 'Noto Sans KR, sans-serif', opacity: requesting ? 0.6 : 1 }}>
-                            {isRequesting ? '처리 중...' : '🚫 제외 요청'}
+                            {isRequesting ? '처리 중...' : '🗑 제외'}
                           </button>
                           <button
                             onClick={() => handleRequest('change', s)}

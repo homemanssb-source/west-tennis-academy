@@ -2,9 +2,11 @@
 // ✅ fix #11: RPC 실패 시 상태 롤백 + 에러 반환 (무시하지 않음)
 // ✅ fix: 회원 취소 허용 범위 → pending_coach + pending_admin (approved 전까지 취소 가능)
 // ✅ fix: 취소 시 코치에게 알림 발송
+// ✅ NEW: request_type='exclude' 승인 시 RPC 대신 draft 슬롯 삭제
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
+import { recalcAndSavePlan } from '@/lib/calcAmount'
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -26,7 +28,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   // ✅ B3 FIX: 현재 상태 조회 + 상태 전이 검증 + 멱등성 가드
   const { data: current, error: curErr } = await supabaseAdmin
     .from('lesson_applications')
-    .select('status, lesson_plan_id')
+    .select('status, lesson_plan_id, request_type, draft_slot_id, member_id')
     .eq('id', id)
     .single()
 
@@ -73,19 +75,51 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   if (action === 'admin_approve') {
-    const { error: rpcError } = await supabaseAdmin.rpc('approve_lesson_application', { app_id: id })
+    // ✅ request_type='exclude' → RPC 호출 대신 draft 슬롯 삭제
+    if (current.request_type === 'exclude') {
+      const slotIdToDelete = current.draft_slot_id
+      if (slotIdToDelete) {
+        const { data: slot } = await supabaseAdmin
+          .from('lesson_slots')
+          .select('id, status, lesson_plan_id')
+          .eq('id', slotIdToDelete)
+          .single()
 
-    // ✅ fix #11: RPC 실패 시 상태를 "변경 직전 값(current.status)"으로 롤백
-    // (기존엔 pending_admin으로 하드코딩되어 pending_coach → approved 케이스가 잘못 롤백됨)
-    if (rpcError) {
-      await supabaseAdmin
-        .from('lesson_applications')
-        .update({ status: current.status })
-        .eq('id', id)
-      return NextResponse.json(
-        { error: '수업 확정 처리에 실패했습니다. 잠시 후 다시 시도해주세요.' },
-        { status: 500 }
-      )
+        if (slot && slot.status === 'draft') {
+          await supabaseAdmin
+            .from('lesson_applications')
+            .update({ original_slot_id: null })
+            .eq('original_slot_id', slotIdToDelete)
+
+          await supabaseAdmin.from('lesson_slots').delete().eq('id', slotIdToDelete)
+
+          const planId = slot.lesson_plan_id
+          if (planId) {
+            const { count } = await supabaseAdmin
+              .from('lesson_slots')
+              .select('id', { count: 'exact', head: true })
+              .eq('lesson_plan_id', planId)
+              .in('status', ['scheduled', 'completed', 'draft'])
+            await supabaseAdmin.from('lesson_plans').update({ total_count: count ?? 0 }).eq('id', planId)
+            await recalcAndSavePlan(planId)
+          }
+        }
+      }
+      // exclude 는 RPC 호출 생략하고 알림만 간단히 발송
+    } else {
+      const { error: rpcError } = await supabaseAdmin.rpc('approve_lesson_application', { app_id: id })
+
+      // ✅ fix #11: RPC 실패 시 상태를 "변경 직전 값(current.status)"으로 롤백
+      if (rpcError) {
+        await supabaseAdmin
+          .from('lesson_applications')
+          .update({ status: current.status })
+          .eq('id', id)
+        return NextResponse.json(
+          { error: '수업 확정 처리에 실패했습니다. 잠시 후 다시 시도해주세요.' },
+          { status: 500 }
+        )
+      }
     }
 
     if (coach_id && data.lesson_plan_id) {

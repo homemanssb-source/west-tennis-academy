@@ -2,10 +2,12 @@
 // ✅ [FIX] plan 조회 .single() → .maybeSingle() + 복수 플랜 대응
 // ✅ [FIX] 수정 요청 알림을 코치 + 운영자/admin 모두에게 발송
 // ✅ [FIX] 중복 요청 방지 쿼리 안정화
-// ✅ [NEW] 아이디어: 'change' 요청 시 희망 날짜(hope_date) 필드 수신
+// ✅ [NEW] 'change' 요청 시 희망 날짜(hope_date) 필드 수신
+// ✅ [NEW] request_type='exclude' 는 승인 대기 없이 즉시 삭제 (draft 슬롯만 해당)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
+import { recalcAndSavePlan } from '@/lib/calcAmount'
 
 // GET /api/member-draft?month_id=xxx
 export async function GET(req: NextRequest) {
@@ -117,6 +119,75 @@ export async function POST(req: NextRequest) {
     if (memberId !== session.id) {
       return NextResponse.json({ error: '본인 수업만 요청 가능합니다' }, { status: 403 })
     }
+  }
+
+  // ✅ request_type='exclude' → 승인 대기 없이 즉시 draft 삭제 (본인 초안 슬롯만)
+  if (request_type === 'exclude') {
+    if (!draft_slot_id) {
+      return NextResponse.json({ error: 'draft_slot_id 필요' }, { status: 400 })
+    }
+
+    const { data: slot } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('id, status, lesson_plan_id, scheduled_at, lesson_plan:lesson_plan_id(id, coach_id, member_id)')
+      .eq('id', draft_slot_id)
+      .single()
+
+    if (!slot) return NextResponse.json({ error: '슬롯 없음' }, { status: 404 })
+    if (slot.status !== 'draft') {
+      return NextResponse.json({ error: '확정된 수업은 취소 요청이 필요합니다 (관리자 문의)' }, { status: 400 })
+    }
+
+    // FK 참조 해제 + 삭제
+    await supabaseAdmin
+      .from('lesson_applications')
+      .update({ original_slot_id: null })
+      .eq('original_slot_id', draft_slot_id)
+
+    const { error: delErr } = await supabaseAdmin
+      .from('lesson_slots')
+      .delete()
+      .eq('id', draft_slot_id)
+
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+
+    const planId = slot.lesson_plan_id
+    if (planId) {
+      // total_count 재계산 + 금액 재계산
+      const { count } = await supabaseAdmin
+        .from('lesson_slots')
+        .select('id', { count: 'exact', head: true })
+        .eq('lesson_plan_id', planId)
+        .in('status', ['scheduled', 'completed', 'draft'])
+      await supabaseAdmin.from('lesson_plans').update({ total_count: count ?? 0 }).eq('id', planId)
+      await recalcAndSavePlan(planId)
+    }
+
+    // 코치 + owner/admin 정보성 알림
+    const coachId = (slot.lesson_plan as any)?.coach_id
+    const { data: admins } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .in('role', ['owner', 'admin'])
+      .eq('is_active', true)
+
+    const notifTargets = new Set<string>()
+    if (coachId) notifTargets.add(coachId)
+    for (const a of admins ?? []) notifTargets.add(a.id)
+
+    if (notifTargets.size > 0) {
+      await supabaseAdmin.from('notifications').insert(
+        Array.from(notifTargets).map(pid => ({
+          profile_id: pid,
+          title: '🗑 초안 수업 제외',
+          body: `${session.name}님이 다음달 초안 수업 1건을 제외하였습니다.`,
+          type: 'info',
+          link: '/owner/schedule-draft',
+        })),
+      )
+    }
+
+    return NextResponse.json({ ok: true, deleted: true })
   }
 
   // ✅ [FIX] 복수 플랜 대응: .single() → 첫 번째 플랜 사용 + draft_slot_id로 정확한 플랜 찾기
