@@ -433,7 +433,16 @@ export default function ScheduleDraftPage() {
                             }}>{st.label}</span>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {full} · {selProfile.role === 'coach' ? memberName : coachName + ' 코치'}
+                                {full} · {
+                                  selProfile.role === 'coach'
+                                    ? memberName  // 코치 선택 시: 수업 받는 사람(회원 or 자녀) 이름
+                                    : (
+                                      // 회원(부모) 선택 시: 자녀 구분 + 코치
+                                      s.family_member_name
+                                        ? `자녀 ${s.family_member_name} · ${coachName} 코치`
+                                        : `${coachName} 코치`
+                                    )
+                                }
                               </div>
                             </div>
                             <button
