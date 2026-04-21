@@ -74,6 +74,16 @@ export default function ScheduleDraftPage() {
   const [saving,   setSaving]   = useState(false)
   const [msg,      setMsg]      = useState('')
   const [reqTab,   setReqTab]   = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  const toggleSel = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const clearSel = () => setSelected(new Set())
 
   useEffect(() => {
     fetch('/api/months').then(r => r.json()).then((d: Month[]) => {
@@ -147,6 +157,23 @@ export default function ScheduleDraftPage() {
       body: JSON.stringify({ action: 'delete_one', slot_id: slotId }),
     })
     setSaving(false)
+    loadAll(monthId)
+  }
+
+  const handleDeleteMany = async () => {
+    if (selected.size === 0) return
+    if (!confirm(`선택한 초안 ${selected.size}건을 삭제할까요?\n해당 월 레슨비가 자동 재계산됩니다.`)) return
+    setSaving(true)
+    const res = await fetch('/api/schedule-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete_many', slot_ids: Array.from(selected) }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!res.ok) { setMsg('❌ ' + (data.error ?? '삭제 실패')); return }
+    setMsg(`🗑 ${data.deleted}건 삭제됨`)
+    clearSel()
     loadAll(monthId)
   }
 
@@ -387,6 +414,42 @@ export default function ScheduleDraftPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+            {/* 선택 툴바 — 선택 중일 때만 상단 고정 */}
+            {selected.size > 0 && (
+              <div style={{
+                position: 'sticky', top: '4rem', zIndex: 20,
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                padding: '0.625rem 0.875rem',
+                background: '#111827', color: 'white', borderRadius: '0.75rem',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              }}>
+                <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{selected.size}건 선택</span>
+                <button onClick={clearSel}
+                  style={{ padding: '0.25rem 0.625rem', borderRadius: '0.5rem', border: '1px solid #374151', background: 'transparent', color: '#d1d5db', fontSize: '0.75rem', cursor: 'pointer' }}>
+                  해제
+                </button>
+                <button onClick={handleDeleteMany} disabled={saving}
+                  style={{ marginLeft: 'auto', padding: '0.4rem 0.875rem', borderRadius: '0.5rem', border: 'none', background: '#dc2626', color: 'white', fontWeight: 700, fontSize: '0.8rem', cursor: saving ? 'not-allowed' : 'pointer' }}>
+                  🗑 선택 삭제
+                </button>
+              </div>
+            )}
+
+            {/* 전체 선택/해제 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: '#6b7280' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={drafts.length > 0 && selected.size === drafts.length}
+                  onChange={e => {
+                    if (e.target.checked) setSelected(new Set(drafts.map(d => d.id)))
+                    else clearSel()
+                  }}
+                />
+                <span>전체 선택 ({drafts.length})</span>
+              </label>
+            </div>
+
             {conflictDrafts.length > 0 && (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem', marginBottom: '0.25rem' }}>
@@ -397,13 +460,15 @@ export default function ScheduleDraftPage() {
                   </button>
                 </div>
                 {conflictDrafts.map(s => (
-                  <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving} />
+                  <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving}
+                    selected={selected.has(s.id)} onToggleSel={() => toggleSel(s.id)} />
                 ))}
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '0.75rem', marginBottom: '0.25rem' }}>✅ 정상 항목</div>
               </>
             )}
             {okDrafts.map(s => (
-              <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving} />
+              <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving}
+                selected={selected.has(s.id)} onToggleSel={() => toggleSel(s.id)} />
             ))}
           </div>
         )}
@@ -412,11 +477,13 @@ export default function ScheduleDraftPage() {
   )
 }
 
-function SlotCard({ slot, onConfirm, onDelete, saving }: {
+function SlotCard({ slot, onConfirm, onDelete, saving, selected, onToggleSel }: {
   slot: DraftSlot
   onConfirm: (id: string) => void
   onDelete:  (id: string) => void
   saving: boolean
+  selected: boolean
+  onToggleSel: () => void
 }) {
   const { full } = fmtSlot(slot.scheduled_at)
   const isConflict = slot.has_conflict
@@ -428,7 +495,15 @@ function SlotCard({ slot, onConfirm, onDelete, saving }: {
   const displayName = childName ? `${memberName}(${childName})` : memberName
 
   return (
-    <div style={{ background: 'white', border: `1.5px solid ${isConflict ? '#fecaca' : '#e5e7eb'}`, borderLeft: `4px solid ${isConflict ? '#b91c1c' : '#16A34A'}`, borderRadius: '0.875rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+    <div style={{
+      background: selected ? '#eff6ff' : 'white',
+      border: `1.5px solid ${selected ? '#60a5fa' : (isConflict ? '#fecaca' : '#e5e7eb')}`,
+      borderLeft: `4px solid ${isConflict ? '#b91c1c' : '#16A34A'}`,
+      borderRadius: '0.875rem', padding: '0.875rem 1rem',
+      display: 'flex', alignItems: 'center', gap: '0.875rem',
+    }}>
+      <input type="checkbox" checked={selected} onChange={onToggleSel}
+        style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }} />
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px', flexWrap: 'wrap' }}>
           {isConflict && (
