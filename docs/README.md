@@ -25,6 +25,7 @@ WTA(테니스 레슨 관리 앱)의 코드 구조와 연결 관계를 정리한 
 | 8 | [08-cross-role-flows.md](08-cross-role-flows.md) | 역할 간 E2E 플로우 |
 | 9 | [09-audit.md](09-audit.md) | 구조 감사 (일관성 · 문제 · 보안) |
 | 10 | [10-simulation.md](10-simulation.md) | 14개 시나리오 시뮬레이션 · 버그 리포트 |
+| 11 | [11-rpc-analysis.md](11-rpc-analysis.md) | `approve_lesson_application` RPC 감사 + 수정안 |
 
 ## 역할(Role) 개요
 
