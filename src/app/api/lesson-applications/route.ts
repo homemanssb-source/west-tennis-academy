@@ -98,14 +98,18 @@ export async function POST(req: NextRequest) {
   const errors  = []
 
   for (const requested_at of slots) {
-    // 본인 중복 확인
-    const { data: existing } = await supabaseAdmin
+    // ✅ #5: 본인 중복 확인 — family_member_id 까지 구분
+    //   부모 계정이 자신 + 자녀1 + 자녀2 를 동일 시간 그룹레슨에 동시 신청 가능하도록
+    //   (각 body 별로 별도 row. family_member_id null = 본인, value = 해당 자녀)
+    let existingQ = supabaseAdmin
       .from('lesson_applications')
       .select('id')
       .eq('member_id', session.id)
       .eq('requested_at', requested_at)
       .in('status', ['pending_coach', 'pending_admin', 'approved'])
-      .maybeSingle()
+    if (family_member_id) existingQ = existingQ.eq('family_member_id', family_member_id)
+    else existingQ = existingQ.is('family_member_id', null)
+    const { data: existing } = await existingQ.maybeSingle()
 
     if (existing) { errors.push(`${requested_at} 중복`); continue }
 
