@@ -27,7 +27,112 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params
   const body = await req.json()
-  const { status, memo, scheduled_at } = body
+  const { status, memo, scheduled_at, swap_to_member_id } = body
+
+  // ── 회원 변경(swap) 경로 ──────────────────────────────────────
+  if (swap_to_member_id) {
+    if (!['owner', 'admin'].includes(session.role)) {
+      return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+    }
+
+    // 1) 현재 슬롯 + 현재 plan 조회
+    const { data: curSlot } = await supabaseAdmin
+      .from('lesson_slots')
+      .select(`
+        id, scheduled_at, duration_minutes, status,
+        lesson_plan:lesson_plan_id ( id, coach_id, month_id, lesson_type, unit_minutes, family_member_id )
+      `)
+      .eq('id', id)
+      .single()
+
+    if (!curSlot) return NextResponse.json({ error: '슬롯 없음' }, { status: 404 })
+
+    const oldPlan = curSlot.lesson_plan as any
+    if (!oldPlan) return NextResponse.json({ error: 'plan 정보 없음' }, { status: 400 })
+
+    // 2) 이동 대상 회원 확인
+    const { data: newMember } = await supabaseAdmin
+      .from('profiles')
+      .select('id, name, role')
+      .eq('id', swap_to_member_id)
+      .single()
+    if (!newMember || newMember.role !== 'member') {
+      return NextResponse.json({ error: '유효한 회원이 아닙니다' }, { status: 400 })
+    }
+
+    // 3) 새 회원이 같은 시간에 이미 다른 슬롯 있으면 삭제 (#3 정책)
+    const { data: conflictSlots } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('id, lesson_plan:lesson_plan_id!inner(member_id)')
+      .eq('scheduled_at', curSlot.scheduled_at)
+      .in('status', ['scheduled', 'completed'])
+    const dupSlotIds = (conflictSlots ?? [])
+      .filter((s: any) => (s.lesson_plan as any)?.member_id === swap_to_member_id)
+      .map((s: any) => s.id)
+    if (dupSlotIds.length > 0) {
+      await supabaseAdmin.from('lesson_slots').delete().in('id', dupSlotIds)
+    }
+
+    // 4) 새 회원의 동일 coach/month/family(null) plan 조회 or 생성
+    let { data: newPlan } = await supabaseAdmin
+      .from('lesson_plans')
+      .select('id')
+      .eq('member_id', swap_to_member_id)
+      .eq('coach_id', oldPlan.coach_id)
+      .eq('month_id', oldPlan.month_id)
+      .is('family_member_id', null)
+      .maybeSingle()
+
+    if (!newPlan) {
+      const { data: created, error: cErr } = await supabaseAdmin
+        .from('lesson_plans')
+        .insert({
+          member_id:        swap_to_member_id,
+          coach_id:         oldPlan.coach_id,
+          month_id:         oldPlan.month_id,
+          lesson_type:      oldPlan.lesson_type ?? '개인레슨',
+          unit_minutes:     oldPlan.unit_minutes ?? curSlot.duration_minutes,
+          total_count:      0,
+          completed_count:  0,
+          payment_status:   'unpaid',
+          amount:           0,
+          family_member_id: null,
+        })
+        .select('id')
+        .single()
+      if (cErr || !created) return NextResponse.json({ error: '새 plan 생성 실패' }, { status: 500 })
+      newPlan = created
+    }
+
+    // 5) 슬롯을 새 plan 에 재연결
+    const { error: mvErr } = await supabaseAdmin
+      .from('lesson_slots')
+      .update({ lesson_plan_id: newPlan.id })
+      .eq('id', id)
+    if (mvErr) return NextResponse.json({ error: mvErr.message }, { status: 500 })
+
+    // 6) 양쪽 plan 의 total_count + 금액 재계산
+    for (const pid of [oldPlan.id, newPlan.id]) {
+      const { count } = await supabaseAdmin
+        .from('lesson_slots')
+        .select('id', { count: 'exact', head: true })
+        .eq('lesson_plan_id', pid)
+        .in('status', ['scheduled', 'completed'])
+      await supabaseAdmin.from('lesson_plans').update({ total_count: count ?? 0 }).eq('id', pid)
+      await recalcAndSavePlan(pid)
+    }
+
+    // 7) 알림 (새 회원에게)
+    await supabaseAdmin.from('notifications').insert({
+      profile_id: swap_to_member_id,
+      title: '📅 수업 일정 등록',
+      body: `${fmtKSTDatetime(curSlot.scheduled_at)} 수업이 등록되었습니다.`,
+      type: 'info',
+      link: '/member/schedule',
+    })
+
+    return NextResponse.json({ ok: true, new_lesson_plan_id: newPlan.id })
+  }
 
   // ── 날짜/시간 수정 경로 ──────────────────────────────────────
   if (scheduled_at !== undefined) {
@@ -126,17 +231,42 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params
 
+  // ✅ 삭제 전에 lesson_plan_id 확보 (후속 금액 재계산 용)
+  const { data: slotBefore } = await supabaseAdmin
+    .from('lesson_slots')
+    .select('lesson_plan_id')
+    .eq('id', id)
+    .single()
+
   // lesson_applications.original_slot_id 참조 해제
   await supabaseAdmin
     .from('lesson_applications')
     .update({ original_slot_id: null })
     .eq('original_slot_id', id)
 
+  // ✅ 해당 슬롯과 연결된 lesson_applications.lesson_plan_id 해제도 고려
+  //    (plan 이 비게 되는 경우 대비 — 가족 공용 plan 유지)
   const { error } = await supabaseAdmin
     .from('lesson_slots')
     .delete()
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // ✅ 금액/요일 할증/total_count 재계산
+  const planId = slotBefore?.lesson_plan_id
+  if (planId) {
+    const { count: remaining } = await supabaseAdmin
+      .from('lesson_slots')
+      .select('id', { count: 'exact', head: true })
+      .eq('lesson_plan_id', planId)
+      .in('status', ['scheduled', 'completed'])
+    await supabaseAdmin
+      .from('lesson_plans')
+      .update({ total_count: remaining ?? 0 })
+      .eq('id', planId)
+    await recalcAndSavePlan(planId)
+  }
+
   return NextResponse.json({ ok: true })
 }

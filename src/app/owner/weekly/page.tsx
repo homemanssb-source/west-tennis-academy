@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import SlotActionsModal from '@/components/SlotActionsModal'
 
 interface Slot {
   id: string; scheduled_at: string; duration_minutes: number; status: string; is_makeup: boolean
@@ -84,7 +85,18 @@ export default function WeeklySchedulePage() {
   const [viewMode, setViewMode] = useState<'all'|'byCoach'>('all')
   const [selCoach, setSelCoach] = useState<string>('all')
   const [isMobile, setIsMobile] = useState(false)
+  const [openModalSlots, setOpenModalSlots] = useState<Slot[] | null>(null)
   const now = new Date()
+
+  const reload = () => {
+    setLoading(true)
+    fetch('/api/weekly-schedule?week=' + toYMD(monday))
+      .then(r => r.json())
+      .then(d => {
+        setSlots(Array.isArray(d) ? d : (Array.isArray(d?.slots) ? d.slots : []))
+        setLoading(false)
+      })
+  }
 
   // 반응형 플래그 (768px 미만 = 폰)
   useEffect(() => {
@@ -229,7 +241,8 @@ export default function WeeklySchedulePage() {
                       const groupColor = coachId ? coachColorMap[coachId] ?? '#7c3aed' : '#7c3aed'
                       const groupBg    = groupColor + '18'
                       return (
-                        <div key={g.key} style={{ position:'absolute', top:top+1, left:`calc(${leftPct}% + 2px)`, width:`calc(${widthPct}% - 4px)`, height:height-2, background:groupBg, borderLeft:'3px solid '+groupColor, borderRadius:'0 4px 4px 0', padding:'2px 3px', zIndex:5, overflow:'hidden', boxShadow:'0 1px 2px rgba(0,0,0,0.06)' }}>
+                        <div key={g.key} onClick={() => setOpenModalSlots(g.slots)}
+                          style={{ position:'absolute', top:top+1, left:`calc(${leftPct}% + 2px)`, width:`calc(${widthPct}% - 4px)`, height:height-2, background:groupBg, borderLeft:'3px solid '+groupColor, borderRadius:'0 4px 4px 0', padding:'2px 3px', zIndex:5, overflow:'hidden', boxShadow:'0 1px 2px rgba(0,0,0,0.06)', cursor:'pointer' }}>
                           <div style={{ fontSize:'9px', fontWeight:700, color:groupColor, lineHeight:1.3 }}>
                             {String(kstH).padStart(2,'0')}:{String(kstMin).padStart(2,'0')}
                           </div>
@@ -254,7 +267,8 @@ export default function WeeklySchedulePage() {
                     const name = displayName(slot)
                     const sub  = subName(slot)
                     return (
-                      <div key={g.key} style={{ position:'absolute', top:top+1, left:`calc(${leftPct}% + 2px)`, width:`calc(${widthPct}% - 4px)`, height:height-2, background:bg, borderLeft:'3px solid '+color, borderRadius:'0 4px 4px 0', padding:'2px 3px', zIndex:5, overflow:'hidden', boxShadow:'0 1px 2px rgba(0,0,0,0.06)' }}>
+                      <div key={g.key} onClick={() => setOpenModalSlots(g.slots)}
+                        style={{ position:'absolute', top:top+1, left:`calc(${leftPct}% + 2px)`, width:`calc(${widthPct}% - 4px)`, height:height-2, background:bg, borderLeft:'3px solid '+color, borderRadius:'0 4px 4px 0', padding:'2px 3px', zIndex:5, overflow:'hidden', boxShadow:'0 1px 2px rgba(0,0,0,0.06)', cursor:'pointer' }}>
                         <div style={{ fontSize:'9px', fontWeight:700, color, lineHeight:1.3 }}>
                           {String(kstH).padStart(2,'0')}:{String(kstMin).padStart(2,'0')}
                         </div>
@@ -368,6 +382,15 @@ export default function WeeklySchedulePage() {
             </>
           )}
         </div>
+      )}
+
+      {openModalSlots && (
+        <SlotActionsModal
+          slots={openModalSlots as any}
+          isMobile={isMobile}
+          onClose={() => setOpenModalSlots(null)}
+          onDone={() => { setOpenModalSlots(null); reload() }}
+        />
       )}
     </div>
   )
