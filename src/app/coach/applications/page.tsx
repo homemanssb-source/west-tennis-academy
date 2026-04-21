@@ -50,15 +50,20 @@ export default function CoachApplicationsPage() {
     setSaving(false); setSelected(null); setNote(''); load()
   }
 
-  // ✅ fix: Race Condition 방지 — 순차처리
+  // ✅ perf: 배치 병렬 처리 (5건씩)
   const handleBulkAction = async (action: 'coach_approve' | 'coach_reject') => {
     setSaving(true)
-    for (const id of Array.from(checkedIds)) {
-      await fetch(`/api/lesson-applications/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, coach_note: bulkNote || null }),
-      })
+    const ids = Array.from(checkedIds)
+    const BATCH = 5
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const batch = ids.slice(i, i + BATCH)
+      await Promise.all(batch.map(id =>
+        fetch(`/api/lesson-applications/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, coach_note: bulkNote || null }),
+        })
+      ))
     }
     setSaving(false); setBulkModal(null); setBulkNote(''); load()
   }

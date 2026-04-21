@@ -85,15 +85,22 @@ export default function OwnerApplicationsPage() {
     load()
   }
 
-  // ✅ fix: Race Condition 방지 — Promise.all → 순차처리
+  // ✅ perf: Promise.all 병렬 처리 (1건당 ~100ms × N → ~100ms 로 단축)
+  //   - 과거 race 우려는 RPC 의 family 단위 advisory lock + 상태전이 그래프로 DB 레벨 해결됨
+  //   - 단 너무 많은 건을 한번에 쏘면 서버 부담 → 5건씩 배치 처리
   const handleBulkAction = async (action: 'admin_approve' | 'admin_reject') => {
     setSaving(true)
-    for (const id of Array.from(checkedIds)) {
-      await fetch(`/api/lesson-applications/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, admin_note: bulkNote || null }),
-      })
+    const ids = Array.from(checkedIds)
+    const BATCH = 5
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const batch = ids.slice(i, i + BATCH)
+      await Promise.all(batch.map(id =>
+        fetch(`/api/lesson-applications/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, admin_note: bulkNote || null }),
+        })
+      ))
     }
     setSaving(false)
     setBulkModal(null)

@@ -16,13 +16,14 @@ export default async function OwnerDashboard() {
     { count: unpaidCount },
     { count: programCount },
     { count: draftCount },
+  // ✅ perf: select('*') → select('id') — count 만 받으면 되는데 전 컬럼 fetch 하던 것을 최소화
   ] = await Promise.all([
-    supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'member').eq('is_active', true),
-    supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'coach').eq('is_active', true),
-    supabaseAdmin.from('member_applications').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-    supabaseAdmin.from('lesson_plans').select('*', { count: 'exact', head: true }).eq('payment_status', 'unpaid'),
-    supabaseAdmin.from('lesson_programs').select('*', { count: 'exact', head: true }).eq('is_active', true),
-    supabaseAdmin.from('lesson_slots').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
+    supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'member').eq('is_active', true),
+    supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'coach').eq('is_active', true),
+    supabaseAdmin.from('member_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    supabaseAdmin.from('lesson_plans').select('id', { count: 'exact', head: true }).eq('payment_status', 'unpaid'),
+    supabaseAdmin.from('lesson_programs').select('id', { count: 'exact', head: true }).eq('is_active', true),
+    supabaseAdmin.from('lesson_slots').select('id', { count: 'exact', head: true }).eq('status', 'draft'),
   ])
 
   const stats = [

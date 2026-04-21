@@ -19,17 +19,35 @@ export async function GET(req: NextRequest) {
     `).eq('month_id', monthId),
   ])
 
+  // ✅ perf: plans 를 coach_id 로 pre-index → O(n²) 제거
+  const plansByCoach = new Map<string, any[]>()
+  for (const p of plans ?? []) {
+    if (!plansByCoach.has(p.coach_id)) plansByCoach.set(p.coach_id, [])
+    plansByCoach.get(p.coach_id)!.push(p)
+  }
+
   const stats = (coaches ?? []).map((c: any) => {
-    const myPlans  = (plans ?? []).filter((p: any) => p.coach_id === c.id)
-    const allSlots = myPlans.flatMap((p: any) => p.slots ?? [])
-    const totalSlots     = allSlots.length
-    const completedSlots = allSlots.filter((s: any) => s.status === 'completed').length
-    const absentSlots    = allSlots.filter((s: any) => s.status === 'absent').length
-    const scheduledSlots = allSlots.filter((s: any) => s.status === 'scheduled').length
-    const totalMinutes   = allSlots.reduce((s: number, sl: any) => s + (sl.duration_minutes ?? 0), 0)
+    const myPlans = plansByCoach.get(c.id) ?? []
+    let totalSlots = 0, completedSlots = 0, absentSlots = 0, scheduledSlots = 0, totalMinutes = 0
+    const memberSet = new Set<string>()
+    for (const p of myPlans) {
+      memberSet.add(p.member_id)
+      for (const s of p.slots ?? []) {
+        totalSlots++
+        totalMinutes += s.duration_minutes ?? 0
+        if (s.status === 'completed') completedSlots++
+        else if (s.status === 'absent') absentSlots++
+        else if (s.status === 'scheduled') scheduledSlots++
+      }
+    }
     const attendanceRate = totalSlots > 0 ? Math.round(completedSlots / totalSlots * 100) : 0
-    const memberCount    = new Set(myPlans.map((p: any) => p.member_id)).size
-    return { id: c.id, name: c.name, totalSlots, completedSlots, absentSlots, scheduledSlots, attendanceRate, totalMinutes, memberCount, planCount: myPlans.length }
+    return {
+      id: c.id, name: c.name,
+      totalSlots, completedSlots, absentSlots, scheduledSlots,
+      attendanceRate, totalMinutes,
+      memberCount: memberSet.size,
+      planCount: myPlans.length,
+    }
   }).filter((c: any) => c.planCount > 0).sort((a: any, b: any) => b.totalSlots - a.totalSlots)
 
   return NextResponse.json(stats)

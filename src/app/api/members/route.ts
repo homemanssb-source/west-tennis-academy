@@ -9,11 +9,13 @@ export async function GET() {
   if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
+  // ✅ perf: LIMIT 1000 — 운영상 충분하고 페이지 초기 로드 속도 확보
   const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select('id, name, phone, role, is_active, coach_id, created_at, discount_amount, discount_memo') // ✅ 할인 컬럼 추가
+    .select('id, name, phone, role, is_active, coach_id, created_at, discount_amount, discount_memo')
     .eq('role', 'member')
     .order('created_at', { ascending: false })
+    .limit(1000)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
