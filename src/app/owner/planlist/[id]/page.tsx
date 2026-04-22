@@ -259,6 +259,7 @@ export default function LessonPlanDetailPage() {
                   border: `1.5px solid ${isEditing ? '#93c5fd' : st.border}`,
                   borderRadius: '0.875rem', padding: '0.75rem 1rem',
                   display: 'flex', alignItems: 'center', gap: '0.75rem',
+                  contain: 'layout paint', // ✅ perf: 카드 외부 repaint 연쇄 차단
                 }}>
                   <span style={{ fontSize: '0.75rem', color: '#9ca3af', minWidth: '20px', flexShrink: 0 }}>{i+1}</span>
                   {isEditing ? (

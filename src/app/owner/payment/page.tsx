@@ -2,7 +2,7 @@
 // src/app/owner/payment/page.tsx
 // ✅ [NEW] 이름 검색창 추가 (회원명 / 자녀명 / 코치명)
 
-import { useEffect, useState, useRef } from 'react'
+import { memo, useCallback, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 
 interface Slot {
@@ -27,6 +27,7 @@ interface Month  { id: string; year: number; month: number }
 interface Member { id: string; name: string; phone: string }
 interface Coach  { id: string; name: string }
 
+const fmt = (n: number) => (n || 0).toLocaleString('ko-KR')
 const DAYS = ['일','월','화','수','목','금','토']
 const SLOT_STYLE: Record<string, { bg: string; border: string; color: string; label: string }> = {
   scheduled: { bg: '#f0fdf4', border: '#86efac', color: '#15803d', label: '예정' },
@@ -200,7 +201,7 @@ export default function PaymentPage() {
       )
     })
 
-  const fmt            = (n: number) => (n || 0).toLocaleString('ko-KR')
+  // fmt 는 모듈 상단으로 이동됨
   const sortedSlots    = [...slots].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
   const actualTotal    = slots.filter(s => s.status !== 'cancelled').length
   const completedCount = slots.filter(s => s.status === 'completed').length
@@ -285,40 +286,9 @@ export default function PaymentPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-            {filtered.map(p => {
-              const pct2 = p.total_count > 0 ? Math.round(p.completed_count / p.total_count * 100) : 0
-              return (
-                <div key={p.id} onClick={() => openDetail(p)} style={{ background: 'white', border: '1.5px solid ' + (p.payment_status === 'paid' ? '#86efac' : '#fecaca'), borderRadius: '1rem', padding: '1rem 1.25rem', cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
-                  onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
-                        {/* ✅ 자녀 있으면 (자녀)부모 형태로 표시 */}
-                        <span style={{ fontWeight: 700, color: '#111827' }}>
-                          {p.family_member_name
-                            ? <><span style={{ color: '#1d4ed8' }}>({p.family_member_name})</span>{p.member?.name}</>
-                            : p.member?.name}
-                        </span>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 7px', borderRadius: '9999px', background: p.payment_status === 'paid' ? '#dcfce7' : '#fee2e2', color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>{p.payment_status === 'paid' ? '납부완료' : '미납'}</span>
-                        {p.toss_paid && <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: '9999px', background: '#eff6ff', color: '#1d4ed8' }}>💳 토스결제</span>}
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '6px' }}>{p.month?.year}년 {p.month?.month}월 · {p.coach?.name} · {p.lesson_type}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                        <div style={{ flex: 1, height: '5px', background: '#f3f4f6', borderRadius: '9999px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: pct2 + '%', background: '#3b82f6', borderRadius: '9999px' }} />
-                        </div>
-                        <span style={{ fontSize: '0.75rem', color: '#6b7280', flexShrink: 0 }}>{p.completed_count}/{p.total_count}회</span>
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '1.1rem', color: p.payment_status === 'paid' ? '#15803d' : '#b91c1c' }}>{fmt(p.amount)}원</div>
-                      <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '2px' }}>클릭 →</div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            {filtered.map(p => (
+              <PaymentCard key={p.id} plan={p} onClick={openDetail} />
+            ))}
           </div>
         )}
       </div>
@@ -542,3 +512,60 @@ export default function PaymentPage() {
     </div>
   )
 }
+
+
+// ─ PaymentCard: memo + CSS contain 으로 대형 리스트 repaint 비용 최소화 ──
+const PC_CARD_BASE: React.CSSProperties = {
+  background: "white", borderRadius: "1rem", padding: "1rem 1.25rem", cursor: "pointer",
+  contain: "layout paint",
+}
+const PC_ROW: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: "1rem" }
+const PC_FLEX1: React.CSSProperties = { flex: 1 }
+const PC_NAMEROW: React.CSSProperties = { display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "4px", flexWrap: "wrap" }
+const PC_NAME: React.CSSProperties = { fontWeight: 700, color: "#111827" }
+const PC_FAMILY: React.CSSProperties = { color: "#1d4ed8" }
+const PC_BADGE_PAID: React.CSSProperties = { fontSize: "0.7rem", fontWeight: 700, padding: "2px 7px", borderRadius: "9999px", background: "#dcfce7", color: "#15803d" }
+const PC_BADGE_UNPAID: React.CSSProperties = { fontSize: "0.7rem", fontWeight: 700, padding: "2px 7px", borderRadius: "9999px", background: "#fee2e2", color: "#b91c1c" }
+const PC_BADGE_TOSS: React.CSSProperties = { fontSize: "0.65rem", fontWeight: 700, padding: "2px 7px", borderRadius: "9999px", background: "#eff6ff", color: "#1d4ed8" }
+const PC_META: React.CSSProperties = { fontSize: "0.8rem", color: "#6b7280", marginBottom: "6px" }
+const PC_PROG_WRAP: React.CSSProperties = { display: "flex", alignItems: "center", gap: "0.625rem" }
+const PC_PROG_TRACK: React.CSSProperties = { flex: 1, height: "5px", background: "#f3f4f6", borderRadius: "9999px", overflow: "hidden" }
+const PC_PROG_COUNT: React.CSSProperties = { fontSize: "0.75rem", color: "#6b7280", flexShrink: 0 }
+const PC_RIGHT: React.CSSProperties = { textAlign: "right", flexShrink: 0 }
+const PC_AMT_PAID: React.CSSProperties = { fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: "1.1rem", color: "#15803d" }
+const PC_AMT_UNPAID: React.CSSProperties = { fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: "1.1rem", color: "#b91c1c" }
+const PC_HINT: React.CSSProperties = { fontSize: "0.7rem", color: "#9ca3af", marginTop: "2px" }
+
+const PaymentCard = memo(function PaymentCard({ plan: p, onClick }: { plan: any; onClick: (p: any) => void }) {
+  const pct = p.total_count > 0 ? Math.round(p.completed_count / p.total_count * 100) : 0
+  const paid = p.payment_status === "paid"
+  return (
+    <div onClick={() => onClick(p)}
+      style={{ ...PC_CARD_BASE, border: "1.5px solid " + (paid ? "#86efac" : "#fecaca") }}>
+      <div style={PC_ROW}>
+        <div style={PC_FLEX1}>
+          <div style={PC_NAMEROW}>
+            <span style={PC_NAME}>
+              {p.family_member_name
+                ? <><span style={PC_FAMILY}>({p.family_member_name})</span>{p.member?.name}</>
+                : p.member?.name}
+            </span>
+            <span style={paid ? PC_BADGE_PAID : PC_BADGE_UNPAID}>{paid ? "납부완료" : "미납"}</span>
+            {p.toss_paid && <span style={PC_BADGE_TOSS}>💳 토스결제</span>}
+          </div>
+          <div style={PC_META}>{p.month?.year}년 {p.month?.month}월 · {p.coach?.name} · {p.lesson_type}</div>
+          <div style={PC_PROG_WRAP}>
+            <div style={PC_PROG_TRACK}>
+              <div style={{ height: "100%", width: pct + "%", background: "#3b82f6", borderRadius: "9999px" }} />
+            </div>
+            <span style={PC_PROG_COUNT}>{p.completed_count}/{p.total_count}회</span>
+          </div>
+        </div>
+        <div style={PC_RIGHT}>
+          <div style={paid ? PC_AMT_PAID : PC_AMT_UNPAID}>{fmt(p.amount)}원</div>
+          <div style={PC_HINT}>클릭 →</div>
+        </div>
+      </div>
+    </div>
+  )
+})

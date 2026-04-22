@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 
 interface App {
@@ -56,13 +56,13 @@ export default function OwnerApplicationsPage() {
     fetch('/api/coaches').then(r => r.json()).then(d => setCoaches(Array.isArray(d) ? d : []))
   }, [])
 
-  const openModal = (a: App) => {
+  const openModal = useCallback((a: App) => {
     setSelected(a)
     setAdminNote('')
     setEditDate('')
     setEditTime('')
     setEditCoach(a.coach?.id ?? '')
-  }
+  }, [])
 
   const handleAction = async (action: 'admin_approve' | 'admin_reject') => {
     if (!selected) return
@@ -108,13 +108,13 @@ export default function OwnerApplicationsPage() {
     load()
   }
 
-  const toggleCheck = (id: string) => {
+  const toggleCheck = useCallback((id: string) => {
     setCheckedIds(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
-  }
+  }, [])
 
   const fmtDt = (dt: string) => {
     const d = new Date(dt)
@@ -200,50 +200,16 @@ export default function OwnerApplicationsPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-            {filtered.map(a => {
-              const st = STATUS[a.status] ?? STATUS.pending_coach
-              const isPending = a.status === 'pending_admin'
-              return (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }}>
-                  {filter === 'pending_admin' && isPending && (
-                    <div style={{ paddingTop: '1.1rem' }}>
-                      <input type="checkbox" checked={checkedIds.has(a.id)} onChange={() => toggleCheck(a.id)}
-                        style={{ width: '16px', height: '16px', accentColor: '#1d4ed8', cursor: 'pointer' }} />
-                    </div>
-                  )}
-                  <div style={{ flex: 1, background: 'white', border: `1.5px solid ${st.border}`, borderRadius: '1rem', padding: '1rem 1.25rem',
-                    cursor: isPending ? 'pointer' : 'default', transition: 'box-shadow .15s' }}
-                    onClick={() => isPending ? openModal(a) : null}
-                    onMouseEnter={e => isPending && (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.08)')}
-                    onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 700, color: '#111827' }}>{displayName(a)}</span>
-                          <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{a.member?.phone}</span>
-                          <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: st.bg, color: st.color }}>
-                            {st.label}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#374151' }}>{fmtDt(a.requested_at)}</div>
-                        <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
-                          {a.coach?.name} 코치 · {a.duration_minutes}분 · {a.lesson_type} · {a.month?.year}년 {a.month?.month}월
-                        </div>
-                        {a.coach_note && (
-                          <div style={{ marginTop: '6px', fontSize: '0.75rem', background: '#fef9c3', color: '#854d0e', padding: '4px 8px', borderRadius: '0.5rem' }}>
-                            코치 메모: {a.coach_note}
-                          </div>
-                        )}
-                      </div>
-                      {isPending && (
-                        <span style={{ fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700, flexShrink: 0 }}>클릭 →</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            {filtered.map(a => (
+              <ApplicationCard
+                key={a.id}
+                app={a}
+                showCheckbox={filter === 'pending_admin' && a.status === 'pending_admin'}
+                checked={checkedIds.has(a.id)}
+                onToggleCheck={toggleCheck}
+                onClick={openModal}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -335,3 +301,70 @@ export default function OwnerApplicationsPage() {
     </div>
   )
 }
+// ─ ApplicationCard: memo + CSS contain ───────────────────────────────
+const AC_WRAPPER: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: '0.625rem' }
+const AC_CHK_WRAP: React.CSSProperties = { paddingTop: '1.1rem' }
+const AC_CHK: React.CSSProperties = { width: '16px', height: '16px', accentColor: '#1d4ed8', cursor: 'pointer' }
+const AC_CARD_BASE: React.CSSProperties = {
+  flex: 1, background: 'white', borderRadius: '1rem', padding: '1rem 1.25rem',
+  contain: 'layout paint',
+}
+const AC_INNER: React.CSSProperties = { display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }
+const AC_FLEX1: React.CSSProperties = { flex: 1 }
+const AC_HEADROW: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px', flexWrap: 'wrap' }
+const AC_NAME: React.CSSProperties = { fontWeight: 700, color: '#111827' }
+const AC_PHONE: React.CSSProperties = { fontSize: '0.75rem', color: '#9ca3af' }
+const AC_TIME: React.CSSProperties = { fontSize: '0.875rem', fontWeight: 600, color: '#374151' }
+const AC_META: React.CSSProperties = { fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }
+const AC_NOTE: React.CSSProperties = { marginTop: '6px', fontSize: '0.75rem', background: '#fef9c3', color: '#854d0e', padding: '4px 8px', borderRadius: '0.5rem' }
+const AC_CLICK_HINT: React.CSSProperties = { fontSize: '0.75rem', color: '#1d4ed8', fontWeight: 700, flexShrink: 0 }
+
+function fmtDtLocal(dt: string) {
+  const d = new Date(dt)
+  return `${d.getMonth()+1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+}
+
+const ApplicationCard = memo(function ApplicationCard({
+  app: a, showCheckbox, checked, onToggleCheck, onClick,
+}: {
+  app: App
+  showCheckbox: boolean
+  checked: boolean
+  onToggleCheck: (id: string) => void
+  onClick: (a: App) => void
+}) {
+  const st = STATUS[a.status] ?? STATUS.pending_coach
+  const isPending = a.status === 'pending_admin'
+  const displayName = a.applicant_name ? `${a.member?.name} (${a.applicant_name})` : a.member?.name
+  return (
+    <div style={AC_WRAPPER}>
+      {showCheckbox && (
+        <div style={AC_CHK_WRAP}>
+          <input type="checkbox" checked={checked} onChange={() => onToggleCheck(a.id)} style={AC_CHK} />
+        </div>
+      )}
+      <div
+        style={{ ...AC_CARD_BASE, border: `1.5px solid ${st.border}`, cursor: isPending ? 'pointer' : 'default' }}
+        onClick={() => isPending && onClick(a)}
+      >
+        <div style={AC_INNER}>
+          <div style={AC_FLEX1}>
+            <div style={AC_HEADROW}>
+              <span style={AC_NAME}>{displayName}</span>
+              <span style={AC_PHONE}>{a.member?.phone}</span>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', background: st.bg, color: st.color }}>
+                {st.label}
+              </span>
+            </div>
+            <div style={AC_TIME}>{fmtDtLocal(a.requested_at)}</div>
+            <div style={AC_META}>
+              {a.coach?.name} 코치 · {a.duration_minutes}분 · {a.lesson_type} · {a.month?.year}년 {a.month?.month}월
+            </div>
+            {a.coach_note && <div style={AC_NOTE}>코치 메모: {a.coach_note}</div>}
+          </div>
+          {isPending && <span style={AC_CLICK_HINT}>클릭 →</span>}
+        </div>
+      </div>
+    </div>
+  )
+})
