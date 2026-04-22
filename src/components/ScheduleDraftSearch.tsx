@@ -1,13 +1,17 @@
 'use client'
 // 수업초안확정 페이지의 "이름 검색 → 일정 조회 → 슬롯 삭제" 섹션
-// ✅ 독립 컴포넌트로 분리: 부모의 초안 리스트가 타이핑마다 재렌더되지 않도록 격리
-//   - 자체 state 만 관리 (searchQ, allProfiles, selProfile, personSlots ...)
-//   - monthId 만 props 로 받음
-//   - onSlotChanged 콜백으로 삭제 시 부모 리로드 트리거
-import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
+//
+// 렌더 격리 구조:
+//   ScheduleDraftSearchInner   — 전체 섹션 (prefetch, 선택된 profile, 슬롯 리스트)
+//   └─ SearchInputBox          — 입력창 전용, 타이핑 시 여기만 재렌더됨
+//      (내부 local state → 부모로는 debounce 후 finalized value 만 전달)
+//
+// 이렇게 하면 타이핑마다 결과 리스트 · 선택된 사람 섹션이 재렌더되지 않아
+// 입력 lag 가 완전히 제거됨.
+
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface Profile { id: string; name: string; phone?: string; role: string }
-// 검색 성능을 위해 미리 소문자 필드를 만들어두는 확장 타입
 interface IndexedProfile extends Profile { _nameLC: string; _phone: string }
 interface Month   { id: string; year: number; month: number }
 
@@ -19,11 +23,52 @@ interface Props {
   fmtSlot: (iso: string) => { full: string }
 }
 
+// ─── 모듈 레벨 스타일 상수 (매 render 마다 object 재할당 방지) ────────────
+const styIn: React.CSSProperties = {
+  width:'100%', padding:'0.625rem 0.875rem',
+  border:'1.5px solid #e5e7eb', borderRadius:'0.625rem',
+  fontSize:'0.9rem', fontFamily:'Noto Sans KR, sans-serif',
+}
+const styListBox: React.CSSProperties = { marginTop:'0.5rem', maxHeight:220, overflowY:'auto', border:'1px solid #f3f4f6', borderRadius:8 }
+const styEmpty:   React.CSSProperties = { padding:'0.75rem', textAlign:'center', color:'#9ca3af', fontSize:'0.8rem' }
+
+const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }> = {
+  draft:     { label: '초안',   color: '#92400e', bg: '#fef3c7' },
+  scheduled: { label: '예정',   color: '#15803d', bg: '#dcfce7' },
+  completed: { label: '완료',   color: '#1d4ed8', bg: '#dbeafe' },
+  absent:    { label: '결석',   color: '#b91c1c', bg: '#fee2e2' },
+  cancelled: { label: '취소',   color: '#6b7280', bg: '#f3f4f6' },
+  makeup:    { label: '보강',   color: '#7e22ce', bg: '#f3e8ff' },
+}
+
+// ─── 입력창만 다루는 소형 컴포넌트 ────────────────────────────────────────
+// 내부 state 로 매 keystroke 즉시 paint, 부모에는 디바운스된 값만 전달
+function SearchInputBox({ onCommit }: { onCommit: (val: string) => void }) {
+  const [val, setVal] = useState('')
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = e.target.value
+    setVal(next)  // 즉시 paint
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => onCommit(next), 60)  // 60ms 후 필터 발동
+  }
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
+
+  return (
+    <input
+      value={val}
+      onChange={handleChange}
+      placeholder="이름 또는 이름 일부 (예: 양은, 신승)"
+      style={styIn}
+    />
+  )
+}
+
 function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fmtSlot }: Props) {
   const [searchOpen,      setSearchOpen]      = useState(false)
-  const [searchQ,         setSearchQ]         = useState('')
-  // ✅ perf: 타이핑은 즉시 반영, 필터는 deferred 로 뒤로 밀어서 paint 우선
-  const searchQ_deferred = useDeferredValue(searchQ)
+  const [committedQ,      setCommittedQ]      = useState('')  // 필터용 (디바운스 후 커밋된 값)
   const [allProfiles,     setAllProfiles]     = useState<IndexedProfile[]>([])
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [selProfile,      setSelProfile]      = useState<Profile | null>(null)
@@ -32,7 +77,7 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
   const [localBusy,       setLocalBusy]       = useState(false)
   const [localMsg,        setLocalMsg]        = useState('')
 
-  // 최초 열릴 때 전체 회원/코치 prefetch — 즉시 소문자 인덱스 부여
+  // 최초 열릴 때 전체 회원/코치 prefetch + 소문자 인덱스
   useEffect(() => {
     if (!searchOpen || allProfiles.length > 0 || profilesLoading) return
     setProfilesLoading(true)
@@ -50,10 +95,9 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
       .finally(() => setProfilesLoading(false))
   }, [searchOpen, allProfiles.length, profilesLoading])
 
-  // ✅ deferred 값 + useMemo 로 필터 최적화
-  //   searchQ(동기) 변경 시 input 은 즉시 paint, 이후 필터는 비동기로 재계산
+  // 필터 — committedQ 변할 때만 재계산 (max 12)
   const searchResults = useMemo(() => {
-    const raw = searchQ_deferred.trim()
+    const raw = committedQ.trim()
     if (!raw) return []
     const q = raw.toLowerCase()
     const qDigits = raw.replace(/[-\s]/g, '')
@@ -61,13 +105,13 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
     for (const p of allProfiles) {
       if (p._nameLC.includes(q) || (qDigits && p._phone.includes(qDigits))) {
         out.push(p)
-        if (out.length >= 30) break
+        if (out.length >= 12) break
       }
     }
     return out
-  }, [searchQ_deferred, allProfiles])
+  }, [committedQ, allProfiles])
 
-  async function loadPerson(profile: Profile) {
+  const loadPerson = useCallback(async (profile: Profile) => {
     if (!monthId) return
     setSelProfile(profile)
     setPersonLoading(true)
@@ -78,9 +122,9 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
     } finally {
       setPersonLoading(false)
     }
-  }
+  }, [monthId])
 
-  async function handleDeleteSlot(slotId: string) {
+  const handleDeleteSlot = useCallback(async (slotId: string) => {
     if (!confirm('이 슬롯을 삭제할까요?\n해당 월 레슨비가 자동 재계산됩니다.')) return
     setLocalBusy(true); setLocalMsg('')
     const res = await fetch(`/api/lesson-slots/${slotId}`, { method: 'DELETE' })
@@ -93,16 +137,7 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
     setLocalMsg('🗑 슬롯 삭제됨')
     if (selProfile) loadPerson(selProfile)
     onSlotChanged()
-  }
-
-  const statusLabel: Record<string, { label: string; color: string; bg: string }> = {
-    draft:     { label: '초안',   color: '#92400e', bg: '#fef3c7' },
-    scheduled: { label: '예정',   color: '#15803d', bg: '#dcfce7' },
-    completed: { label: '완료',   color: '#1d4ed8', bg: '#dbeafe' },
-    absent:    { label: '결석',   color: '#b91c1c', bg: '#fee2e2' },
-    cancelled: { label: '취소',   color: '#6b7280', bg: '#f3f4f6' },
-    makeup:    { label: '보강',   color: '#7e22ce', bg: '#f3e8ff' },
-  }
+  }, [selProfile, loadPerson, onSlotChanged])
 
   return (
     <div style={{
@@ -126,17 +161,8 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
 
       {searchOpen && (
         <div style={{ borderTop:'1px solid #f3f4f6', padding:'1rem' }}>
-          <input
-            autoFocus
-            value={searchQ}
-            onChange={e => setSearchQ(e.target.value)}
-            placeholder="이름 또는 이름 일부 (예: 양은, 신승)"
-            style={{
-              width:'100%', padding:'0.625rem 0.875rem',
-              border:'1.5px solid #e5e7eb', borderRadius:'0.625rem',
-              fontSize:'0.9rem', fontFamily:'Noto Sans KR, sans-serif',
-            }}
-          />
+          {/* ✅ 입력창 전담 컴포넌트 — 타이핑이 결과 리스트에 전파되지 않음 */}
+          <SearchInputBox onCommit={setCommittedQ} />
 
           {profilesLoading && (
             <div style={{ marginTop:'0.5rem', padding:'0.5rem', textAlign:'center', color:'#9ca3af', fontSize:'0.75rem' }}>
@@ -151,10 +177,10 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
               borderRadius:8, fontSize:'0.75rem' }}>{localMsg}</div>
           )}
 
-          {searchQ.trim() && !profilesLoading && (
-            <div style={{ marginTop:'0.5rem', maxHeight:220, overflowY:'auto', border:'1px solid #f3f4f6', borderRadius:8 }}>
+          {committedQ.trim() && !profilesLoading && (
+            <div style={styListBox}>
               {searchResults.length === 0 ? (
-                <div style={{ padding:'0.75rem', textAlign:'center', color:'#9ca3af', fontSize:'0.8rem' }}>결과 없음</div>
+                <div style={styEmpty}>결과 없음</div>
               ) : (
                 searchResults.map(p => (
                   <button
@@ -209,7 +235,7 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
                     const { full } = fmtSlot(s.scheduled_at)
                     const memberName = s.family_member_name ?? s.lesson_plan?.member?.name ?? '-'
                     const coachName  = s.lesson_plan?.coach?.name ?? '-'
-                    const st = statusLabel[s.status] ?? { label: s.status, color:'#374151', bg:'#f3f4f6' }
+                    const st = STATUS_LABEL[s.status] ?? { label: s.status, color:'#374151', bg:'#f3f4f6' }
                     return (
                       <div key={s.id} style={{
                         background:'white', border:'1px solid #e5e7eb', borderRadius:8,
@@ -259,5 +285,4 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
   )
 }
 
-// monthId/selMonth/saving 만 바뀔 때 재렌더. 내부 state 타이핑은 부모에 전파 안 됨
 export default memo(ScheduleDraftSearchInner)
