@@ -1,18 +1,14 @@
 'use client'
 // 수업초안확정 페이지의 "이름 검색 → 일정 조회 → 슬롯 삭제" 섹션
 //
-// 렌더 격리 구조:
-//   ScheduleDraftSearchInner   — 전체 섹션 (prefetch, 선택된 profile, 슬롯 리스트)
-//   └─ SearchInputBox          — 입력창 전용, 타이핑 시 여기만 재렌더됨
-//      (내부 local state → 부모로는 debounce 후 finalized value 만 전달)
-//
-// 이렇게 하면 타이핑마다 결과 리스트 · 선택된 사람 섹션이 재렌더되지 않아
-// 입력 lag 가 완전히 제거됨.
-
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+// 전략: 서버 사이드 debounced 검색 + 세션 캐시
+//   - 초기 prefetch 없음 (콜드 스타트 시 10초+ 벽 회피)
+//   - 200ms debounce 로 매 키스트로크 부담 최소
+//   - 같은 q 는 Map 에 캐시 → 재타이핑 시 0ms
+//   - 입력창은 SearchInputBox 로 분리 → 결과 리스트에 전파 안 됨
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 
 interface Profile { id: string; name: string; phone?: string; role: string }
-interface IndexedProfile extends Profile { _nameLC: string; _phone: string }
 interface Month   { id: string; year: number; month: number }
 
 interface Props {
@@ -23,7 +19,6 @@ interface Props {
   fmtSlot: (iso: string) => { full: string }
 }
 
-// ─── 모듈 레벨 스타일 상수 (매 render 마다 object 재할당 방지) ────────────
 const styIn: React.CSSProperties = {
   width:'100%', padding:'0.625rem 0.875rem',
   border:'1.5px solid #e5e7eb', borderRadius:'0.625rem',
@@ -41,9 +36,7 @@ const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }>
   makeup:    { label: '보강',   color: '#7e22ce', bg: '#f3e8ff' },
 }
 
-// ─── 입력창만 다루는 소형 컴포넌트 ────────────────────────────────────────
-// 내부 state 로 매 keystroke 즉시 paint, 부모에는 디바운스된 값만 전달
-function SearchInputBox({ onCommit }: { onCommit: (val: string) => void }) {
+function SearchInputBox({ onQueryChange }: { onQueryChange: (val: string) => void }) {
   const [val, setVal] = useState('')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -51,7 +44,7 @@ function SearchInputBox({ onCommit }: { onCommit: (val: string) => void }) {
     const next = e.target.value
     setVal(next)  // 즉시 paint
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => onCommit(next), 60)  // 60ms 후 필터 발동
+    timerRef.current = setTimeout(() => onQueryChange(next.trim()), 200)
   }
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
@@ -67,49 +60,44 @@ function SearchInputBox({ onCommit }: { onCommit: (val: string) => void }) {
 }
 
 function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fmtSlot }: Props) {
-  const [searchOpen,      setSearchOpen]      = useState(false)
-  const [committedQ,      setCommittedQ]      = useState('')  // 필터용 (디바운스 후 커밋된 값)
-  const [allProfiles,     setAllProfiles]     = useState<IndexedProfile[]>([])
-  const [profilesLoading, setProfilesLoading] = useState(false)
-  const [selProfile,      setSelProfile]      = useState<Profile | null>(null)
-  const [personSlots,     setPersonSlots]     = useState<any[]>([])
-  const [personLoading,   setPersonLoading]   = useState(false)
-  const [localBusy,       setLocalBusy]       = useState(false)
-  const [localMsg,        setLocalMsg]        = useState('')
+  const [searchOpen,     setSearchOpen]     = useState(false)
+  const [query,          setQuery]          = useState('')      // debounced 커밋된 값
+  const [results,        setResults]        = useState<Profile[]>([])
+  const [searching,      setSearching]      = useState(false)
+  const [selProfile,     setSelProfile]     = useState<Profile | null>(null)
+  const [personSlots,    setPersonSlots]    = useState<any[]>([])
+  const [personLoading,  setPersonLoading]  = useState(false)
+  const [localBusy,      setLocalBusy]      = useState(false)
+  const [localMsg,       setLocalMsg]       = useState('')
 
-  // 최초 열릴 때 전체 회원/코치 prefetch + 소문자 인덱스
+  // 세션 캐시 — 같은 q 재검색 시 즉시 반환
+  const cacheRef = useRef<Map<string, Profile[]>>(new Map())
+  const abortRef = useRef<AbortController | null>(null)
+
+  // query 가 바뀌면 서버 검색 실행 (cache hit 시 즉시)
   useEffect(() => {
-    if (!searchOpen || allProfiles.length > 0 || profilesLoading) return
-    setProfilesLoading(true)
-    fetch('/api/profiles/search?q=*')
-      .then(r => r.json())
-      .then(d => {
-        const list = Array.isArray(d) ? d : []
-        const indexed: IndexedProfile[] = list.map((p: Profile) => ({
-          ...p,
-          _nameLC: (p.name ?? '').toLowerCase(),
-          _phone:  (p.phone ?? '').replace(/[-\s]/g, ''),
-        }))
-        setAllProfiles(indexed)
-      })
-      .finally(() => setProfilesLoading(false))
-  }, [searchOpen, allProfiles.length, profilesLoading])
+    if (!query) { setResults([]); setSearching(false); return }
 
-  // 필터 — committedQ 변할 때만 재계산 (max 12)
-  const searchResults = useMemo(() => {
-    const raw = committedQ.trim()
-    if (!raw) return []
-    const q = raw.toLowerCase()
-    const qDigits = raw.replace(/[-\s]/g, '')
-    const out: IndexedProfile[] = []
-    for (const p of allProfiles) {
-      if (p._nameLC.includes(q) || (qDigits && p._phone.includes(qDigits))) {
-        out.push(p)
-        if (out.length >= 12) break
-      }
-    }
-    return out
-  }, [committedQ, allProfiles])
+    const cached = cacheRef.current.get(query)
+    if (cached) { setResults(cached); setSearching(false); return }
+
+    if (abortRef.current) abortRef.current.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
+
+    setSearching(true)
+    fetch(`/api/profiles/search?q=${encodeURIComponent(query)}`, { signal: ac.signal })
+      .then(r => r.json())
+      .then((d: Profile[]) => {
+        const list = Array.isArray(d) ? d : []
+        cacheRef.current.set(query, list)
+        setResults(list)
+      })
+      .catch(() => { /* aborted or network err */ })
+      .finally(() => { if (!ac.signal.aborted) setSearching(false) })
+
+    return () => ac.abort()
+  }, [query])
 
   const loadPerson = useCallback(async (profile: Profile) => {
     if (!monthId) return
@@ -161,14 +149,7 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
 
       {searchOpen && (
         <div style={{ borderTop:'1px solid #f3f4f6', padding:'1rem' }}>
-          {/* ✅ 입력창 전담 컴포넌트 — 타이핑이 결과 리스트에 전파되지 않음 */}
-          <SearchInputBox onCommit={setCommittedQ} />
-
-          {profilesLoading && (
-            <div style={{ marginTop:'0.5rem', padding:'0.5rem', textAlign:'center', color:'#9ca3af', fontSize:'0.75rem' }}>
-              회원/코치 목록 준비 중…
-            </div>
-          )}
+          <SearchInputBox onQueryChange={setQuery} />
 
           {localMsg && (
             <div style={{ marginTop:'0.5rem', padding:'0.45rem 0.625rem',
@@ -177,12 +158,14 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
               borderRadius:8, fontSize:'0.75rem' }}>{localMsg}</div>
           )}
 
-          {committedQ.trim() && !profilesLoading && (
+          {query && (
             <div style={styListBox}>
-              {searchResults.length === 0 ? (
+              {searching ? (
+                <div style={styEmpty}>검색 중…</div>
+              ) : results.length === 0 ? (
                 <div style={styEmpty}>결과 없음</div>
               ) : (
-                searchResults.map(p => (
+                results.slice(0, 12).map(p => (
                   <button
                     key={p.id}
                     onClick={() => loadPerson(p)}
