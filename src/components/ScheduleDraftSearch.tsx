@@ -4,9 +4,11 @@
 //   - 자체 state 만 관리 (searchQ, allProfiles, selProfile, personSlots ...)
 //   - monthId 만 props 로 받음
 //   - onSlotChanged 콜백으로 삭제 시 부모 리로드 트리거
-import { memo, useEffect, useState } from 'react'
+import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 interface Profile { id: string; name: string; phone?: string; role: string }
+// 검색 성능을 위해 미리 소문자 필드를 만들어두는 확장 타입
+interface IndexedProfile extends Profile { _nameLC: string; _phone: string }
 interface Month   { id: string; year: number; month: number }
 
 interface Props {
@@ -20,7 +22,9 @@ interface Props {
 function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fmtSlot }: Props) {
   const [searchOpen,      setSearchOpen]      = useState(false)
   const [searchQ,         setSearchQ]         = useState('')
-  const [allProfiles,     setAllProfiles]     = useState<Profile[]>([])
+  // ✅ perf: 타이핑은 즉시 반영, 필터는 deferred 로 뒤로 밀어서 paint 우선
+  const searchQ_deferred = useDeferredValue(searchQ)
+  const [allProfiles,     setAllProfiles]     = useState<IndexedProfile[]>([])
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [selProfile,      setSelProfile]      = useState<Profile | null>(null)
   const [personSlots,     setPersonSlots]     = useState<any[]>([])
@@ -28,26 +32,40 @@ function ScheduleDraftSearchInner({ monthId, selMonth, saving, onSlotChanged, fm
   const [localBusy,       setLocalBusy]       = useState(false)
   const [localMsg,        setLocalMsg]        = useState('')
 
-  // 최초 열릴 때 전체 회원/코치 prefetch
+  // 최초 열릴 때 전체 회원/코치 prefetch — 즉시 소문자 인덱스 부여
   useEffect(() => {
     if (!searchOpen || allProfiles.length > 0 || profilesLoading) return
     setProfilesLoading(true)
     fetch('/api/profiles/search?q=*')
       .then(r => r.json())
-      .then(d => setAllProfiles(Array.isArray(d) ? d : []))
+      .then(d => {
+        const list = Array.isArray(d) ? d : []
+        const indexed: IndexedProfile[] = list.map((p: Profile) => ({
+          ...p,
+          _nameLC: (p.name ?? '').toLowerCase(),
+          _phone:  (p.phone ?? '').replace(/[-\s]/g, ''),
+        }))
+        setAllProfiles(indexed)
+      })
       .finally(() => setProfilesLoading(false))
   }, [searchOpen, allProfiles.length, profilesLoading])
 
-  // 클라이언트 사이드 필터
-  const searchResults = (() => {
-    const q = searchQ.trim().toLowerCase()
-    if (!q) return []
-    return allProfiles
-      .filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        (p.phone ?? '').includes(q))
-      .slice(0, 30)
-  })()
+  // ✅ deferred 값 + useMemo 로 필터 최적화
+  //   searchQ(동기) 변경 시 input 은 즉시 paint, 이후 필터는 비동기로 재계산
+  const searchResults = useMemo(() => {
+    const raw = searchQ_deferred.trim()
+    if (!raw) return []
+    const q = raw.toLowerCase()
+    const qDigits = raw.replace(/[-\s]/g, '')
+    const out: IndexedProfile[] = []
+    for (const p of allProfiles) {
+      if (p._nameLC.includes(q) || (qDigits && p._phone.includes(qDigits))) {
+        out.push(p)
+        if (out.length >= 30) break
+      }
+    }
+    return out
+  }, [searchQ_deferred, allProfiles])
 
   async function loadPerson(profile: Profile) {
     if (!monthId) return
