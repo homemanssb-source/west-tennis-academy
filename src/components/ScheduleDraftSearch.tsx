@@ -36,23 +36,38 @@ const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }>
   makeup:    { label: '보강',   color: '#7e22ce', bg: '#f3e8ff' },
 }
 
+// ✅ 한글 IME 호환: uncontrolled input — 브라우저 네이티브 IME 가 직접 paint.
+//   React re-render 가 조합(composition) 중에 끼어들지 않아 타이핑 지연 없음.
 function SearchInputBox({ onQueryChange }: { onQueryChange: (val: string) => void }) {
-  const [val, setVal] = useState('')
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timerRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const composingRef = useRef(false)
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const next = e.target.value
-    setVal(next)  // 즉시 paint
+  const commit = (val: string) => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => onQueryChange(next.trim()), 200)
+    timerRef.current = setTimeout(() => onQueryChange(val.trim()), 200)
+  }
+
+  const handleInput = (e: React.FormEvent<HTMLInputElement>) => {
+    // 한글 조합 중에는 스킵 — compositionend 에서 한번만 커밋
+    if (composingRef.current) return
+    commit((e.currentTarget as HTMLInputElement).value)
+  }
+
+  const handleCompositionStart = () => { composingRef.current = true }
+  const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
+    composingRef.current = false
+    commit((e.currentTarget as HTMLInputElement).value)
   }
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
 
   return (
     <input
-      value={val}
-      onChange={handleChange}
+      // ✅ uncontrolled (defaultValue) — React 가 매 keystroke re-render 하지 않음
+      defaultValue=""
+      onInput={handleInput}
+      onCompositionStart={handleCompositionStart}
+      onCompositionEnd={handleCompositionEnd}
       placeholder="이름 또는 이름 일부 (예: 양은, 신승)"
       style={styIn}
     />
