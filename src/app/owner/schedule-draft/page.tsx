@@ -4,7 +4,7 @@
 // ✅ fix: family_member_name 표시 (가족 신청 대응)
 // ✅ add: registration_open 토글 버튼 추가 (회원 신청 오픈)
 
-import { useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import ScheduleDraftSearch from '@/components/ScheduleDraftSearch'
 
@@ -77,14 +77,15 @@ export default function ScheduleDraftPage() {
   const [reqTab,   setReqTab]   = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  const toggleSel = (id: string) => {
+  // ✅ useCallback — memo 된 SlotCard 의 prop reference 안정화
+  const toggleSel = useCallback((id: string) => {
     setSelected(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
-  }
-  const clearSel = () => setSelected(new Set())
+  }, [])
+  const clearSel = useCallback(() => setSelected(new Set()), [])
 
   useEffect(() => {
     fetch('/api/months').then(r => r.json()).then((d: Month[]) => {
@@ -138,7 +139,8 @@ export default function ScheduleDraftPage() {
     loadAll(monthId)
   }
 
-  const handleConfirmOne = async (slotId: string) => {
+  // ✅ memo 된 SlotCard 의 prop 안정화
+  const handleConfirmOne = useCallback(async (slotId: string) => {
     setSaving(true)
     await fetch('/api/schedule-draft', {
       method: 'POST',
@@ -147,9 +149,9 @@ export default function ScheduleDraftPage() {
     })
     setSaving(false)
     loadAll(monthId)
-  }
+  }, [monthId])
 
-  const handleDeleteOne = async (slotId: string) => {
+  const handleDeleteOne = useCallback(async (slotId: string) => {
     if (!confirm('이 초안 슬롯을 삭제할까요?')) return
     setSaving(true)
     await fetch('/api/schedule-draft', {
@@ -159,7 +161,7 @@ export default function ScheduleDraftPage() {
     })
     setSaving(false)
     loadAll(monthId)
-  }
+  }, [monthId])
 
   const handleDeleteMany = async () => {
     if (selected.size === 0) return
@@ -471,14 +473,14 @@ export default function ScheduleDraftPage() {
                 </div>
                 {conflictDrafts.map(s => (
                   <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving}
-                    selected={selected.has(s.id)} onToggleSel={() => toggleSel(s.id)} />
+                    selected={selected.has(s.id)} onToggleSel={toggleSel} />
                 ))}
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginTop: '0.75rem', marginBottom: '0.25rem' }}>✅ 정상 항목</div>
               </>
             )}
             {okDrafts.map(s => (
               <SlotCard key={s.id} slot={s} onConfirm={handleConfirmOne} onDelete={handleDeleteOne} saving={saving}
-                selected={selected.has(s.id)} onToggleSel={() => toggleSel(s.id)} />
+                selected={selected.has(s.id)} onToggleSel={toggleSel} />
             ))}
           </div>
         )}
@@ -487,13 +489,34 @@ export default function ScheduleDraftPage() {
   )
 }
 
-function SlotCard({ slot, onConfirm, onDelete, saving, selected, onToggleSel }: {
+// ─ SlotCard 스타일 상수 (매 render object 재할당 제거) ───────────────────
+const SC_CHECKBOX: React.CSSProperties = { width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }
+const SC_FLEX1:    React.CSSProperties = { flex: 1 }
+const SC_NAMEROW:  React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px', flexWrap: 'wrap' }
+const SC_BADGE_CONFLICT: React.CSSProperties = { fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }
+const SC_NAME:     React.CSSProperties = { fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }
+const SC_BADGE_FAMILY: React.CSSProperties = { fontSize: '0.68rem', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 6px', borderRadius: '9999px' }
+const SC_COACH:    React.CSSProperties = { fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }
+const SC_META_NORMAL: React.CSSProperties = { fontSize: '0.8rem', color: '#374151', fontWeight: 400, fontFamily: 'Noto Sans KR, sans-serif' }
+const SC_META_CONFLICT: React.CSSProperties = { fontSize: '0.8rem', color: '#b91c1c', fontWeight: 700, fontFamily: 'Noto Sans KR, sans-serif' }
+const SC_BTNROW:   React.CSSProperties = { display: 'flex', gap: '0.375rem', flexShrink: 0 }
+const SC_BTN_CONFIRM_NORMAL:  React.CSSProperties = { padding: '0.375rem 0.75rem', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '0.5rem', color: '#15803d', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }
+const SC_BTN_CONFIRM_CONFLICT:React.CSSProperties = { padding: '0.375rem 0.75rem', background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: '0.5rem', color: '#c2410c', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }
+const SC_BTN_DELETE: React.CSSProperties = { padding: '0.375rem 0.75rem', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.5rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }
+// ✅ CSS containment — 카드 내부 변경이 페이지 전체 repaint 트리거하지 않도록
+const SC_CARD_BASE: React.CSSProperties = {
+  borderRadius: '0.875rem', padding: '0.875rem 1rem',
+  display: 'flex', alignItems: 'center', gap: '0.875rem',
+  contain: 'layout paint', // ← 브라우저가 카드 밖 영향 무시
+}
+
+const SlotCard = memo(function SlotCard({ slot, onConfirm, onDelete, saving, selected, onToggleSel }: {
   slot: DraftSlot
   onConfirm: (id: string) => void
   onDelete:  (id: string) => void
   saving: boolean
   selected: boolean
-  onToggleSel: () => void
+  onToggleSel: (id: string) => void  // ✅ id 받는 형태로 변경 — 부모의 inline arrow 제거 가능
 }) {
   const { full } = fmtSlot(slot.scheduled_at)
   const isConflict = slot.has_conflict
@@ -506,41 +529,32 @@ function SlotCard({ slot, onConfirm, onDelete, saving, selected, onToggleSel }: 
 
   return (
     <div style={{
+      ...SC_CARD_BASE,
       background: selected ? '#eff6ff' : 'white',
       border: `1.5px solid ${selected ? '#60a5fa' : (isConflict ? '#fecaca' : '#e5e7eb')}`,
       borderLeft: `4px solid ${isConflict ? '#b91c1c' : '#16A34A'}`,
-      borderRadius: '0.875rem', padding: '0.875rem 1rem',
-      display: 'flex', alignItems: 'center', gap: '0.875rem',
     }}>
-      <input type="checkbox" checked={selected} onChange={onToggleSel}
-        style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }} />
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2px', flexWrap: 'wrap' }}>
-          {isConflict && (
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '9999px' }}>시간충돌</span>
-          )}
-          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', fontFamily: 'Noto Sans KR, sans-serif' }}>
-            {displayName}
-          </span>
-          {childName && (
-            <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '1px 6px', borderRadius: '9999px' }}>자녀</span>
-          )}
-          <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'Noto Sans KR, sans-serif' }}>{coachName} 코치</span>
+      <input type="checkbox" checked={selected} onChange={() => onToggleSel(slot.id)} style={SC_CHECKBOX} />
+      <div style={SC_FLEX1}>
+        <div style={SC_NAMEROW}>
+          {isConflict && <span style={SC_BADGE_CONFLICT}>시간충돌</span>}
+          <span style={SC_NAME}>{displayName}</span>
+          {childName && <span style={SC_BADGE_FAMILY}>자녀</span>}
+          <span style={SC_COACH}>{coachName} 코치</span>
         </div>
-        <div style={{ fontSize: '0.8rem', color: isConflict ? '#b91c1c' : '#374151', fontWeight: isConflict ? 700 : 400, fontFamily: 'Noto Sans KR, sans-serif' }}>
+        <div style={isConflict ? SC_META_CONFLICT : SC_META_NORMAL}>
           📅 {full} · {lessonType} · {slot.duration_minutes}분
         </div>
       </div>
-      <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
+      <div style={SC_BTNROW}>
         <button onClick={() => onConfirm(slot.id)} disabled={saving}
-          style={{ padding: '0.375rem 0.75rem', background: isConflict ? '#fff7ed' : '#f0fdf4', border: `1.5px solid ${isConflict ? '#fed7aa' : '#86efac'}`, borderRadius: '0.5rem', color: isConflict ? '#c2410c' : '#15803d', fontWeight: 700, fontSize: '0.75rem', cursor: saving ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+          style={isConflict ? SC_BTN_CONFIRM_CONFLICT : SC_BTN_CONFIRM_NORMAL}>
           {isConflict ? '강제 확정' : '확정'}
         </button>
-        <button onClick={() => onDelete(slot.id)} disabled={saving}
-          style={{ padding: '0.375rem 0.75rem', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '0.5rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.75rem', cursor: saving ? 'default' : 'pointer', fontFamily: 'Noto Sans KR, sans-serif' }}>
+        <button onClick={() => onDelete(slot.id)} disabled={saving} style={SC_BTN_DELETE}>
           삭제
         </button>
       </div>
     </div>
   )
-}
+})
