@@ -16,31 +16,46 @@ export async function GET(req: NextRequest) {
   const monthId = req.nextUrl.searchParams.get('month_id')
   if (!monthId) return NextResponse.json({ error: 'month_id 필요' }, { status: 400 })
 
-  // ✅ perf: !inner join + month_id 로 서버 측에서 필터
-  //   기존: 전 DB 의 draft slot 다 fetch → JS 에서 월 필터 (대규모 DB 에서 수백 ms)
-  //   개선: lesson_plans.month_id 로 inner join 필터 → 해당 월 slot 만 조회
-  const { data, error } = await supabaseAdmin
-    .from('lesson_slots')
+  // ✅ perf: 단일 대형 JOIN → 2단계 작은 쿼리 + 병렬 batch
+  //   이전 JOIN 4단은 PostgREST 가 JSON 조립하느라 2초+ 소요됨
+  //   아래는 plan 목록만 먼저 받고 slots 를 IN 으로 병렬 조회 → DB 부담 분산
+
+  // Step 1: 해당 월 plan 전부 + 필요한 참조 정보
+  const { data: plans, error: planErr } = await supabaseAdmin
+    .from('lesson_plans')
     .select(`
-      id, scheduled_at, duration_minutes, status, has_conflict,
-      lesson_plan:lesson_plan_id!inner (
-        id, lesson_type, unit_minutes, amount, month_id,
-        family_member_id,
-        member:member_id ( id, name, phone ),
-        coach:coach_id ( id, name ),
-        family_member:family_member_id ( id, name )
-      )
+      id, lesson_type, family_member_id,
+      member:member_id ( id, name ),
+      coach:coach_id ( id, name ),
+      family_member:family_member_id ( id, name )
     `)
+    .eq('month_id', monthId)
+
+  if (planErr) return NextResponse.json({ error: planErr.message }, { status: 500 })
+  if (!plans || plans.length === 0) return NextResponse.json([])
+
+  const planMap = new Map<string, any>(plans.map((p: any) => [p.id, p]))
+  const planIds = plans.map((p: any) => p.id)
+
+  // Step 2: draft slots
+  const { data: slots, error: slotErr } = await supabaseAdmin
+    .from('lesson_slots')
+    .select('id, scheduled_at, duration_minutes, status, has_conflict, lesson_plan_id')
+    .in('lesson_plan_id', planIds)
     .eq('status', 'draft')
-    .eq('lesson_plan.month_id', monthId)
     .order('scheduled_at', { ascending: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (slotErr) return NextResponse.json({ error: slotErr.message }, { status: 500 })
 
-  const enriched = (data ?? []).map((s: any) => ({
-    ...s,
-    family_member_name: s.lesson_plan?.family_member?.name ?? null,
-  }))
+  // Step 3: merge (lesson_plan 필드를 JOIN 과 동일한 shape 로)
+  const enriched = (slots ?? []).map((s: any) => {
+    const plan = planMap.get(s.lesson_plan_id)
+    return {
+      ...s,
+      lesson_plan: plan,
+      family_member_name: plan?.family_member?.name ?? null,
+    }
+  })
 
   return NextResponse.json(enriched)
 }
