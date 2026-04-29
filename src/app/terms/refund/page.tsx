@@ -225,14 +225,16 @@ export default function RefundPolicyPage() {
                 jwta0514@naver.com
               </a>
             </li>
-            <li>전화: [PLACEHOLDER_전화번호]</li>
+            <li>
+              전화: <a href="tel:01029390079" style={inlineLink}>010-2939-0079</a>
+            </li>
           </ul>
         </section>
 
         <p style={note}>
           본 정책은 「소비자분쟁해결기준」(공정거래위원회 고시)을 근거로 작성되었으며,
           <br />
-          [PLACEHOLDER_시행일]부터 시행됩니다.
+          2026년 4월 22일부터 시행됩니다.
         </p>
       </main>
     </div>

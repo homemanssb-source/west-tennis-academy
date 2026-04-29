@@ -231,7 +231,7 @@ export default function TermsPage() {
         <section style={article}>
           <h2 style={articleTitle}>제12조 (부칙)</h2>
           <p style={articleBody}>
-            본 약관은 <b>[PLACEHOLDER_시행일]</b>부터 시행됩니다.
+            본 약관은 <b>2026년 4월 22일</b>부터 시행됩니다.
           </p>
         </section>
 

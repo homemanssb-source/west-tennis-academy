@@ -304,7 +304,9 @@ export default function PrivacyPolicyPage() {
               <b>이메일</b>:{' '}
               <a href="mailto:jwta0514@naver.com" style={inlineLink}>jwta0514@naver.com</a>
             </li>
-            <li><b>전화</b>: [PLACEHOLDER_전화번호]</li>
+            <li>
+              <b>전화</b>: <a href="tel:01029390079" style={inlineLink}>010-2939-0079</a>
+            </li>
           </ul>
         </section>
 
@@ -340,7 +342,7 @@ export default function PrivacyPolicyPage() {
         <p style={note}>
           본 방침은 「개인정보 보호법」 및 관련 법령을 근거로 작성되었으며,
           <br />
-          [PLACEHOLDER_시행일]부터 시행됩니다.
+          2026년 4월 22일부터 시행됩니다.
         </p>
       </main>
     </div>
