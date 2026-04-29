@@ -25,7 +25,7 @@ export default async function RootPage() {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '2rem',
+      padding: '2.5rem 2rem 3rem',
       position: 'relative',
       overflow: 'hidden',
     }}>
@@ -83,7 +83,7 @@ export default async function RootPage() {
 
         <div style={{
           display: 'flex', alignItems: 'center', gap: '0.625rem',
-          marginBottom: '2rem',
+          marginBottom: '1.25rem',
         }}>
           <span style={{ fontSize: '1.75rem' }}>🎾</span>
           <div style={{
@@ -91,6 +91,33 @@ export default async function RootPage() {
             background: '#16A34A', flexShrink: 0,
           }} />
           <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+        </div>
+
+        {/* ── 학원 간단 소개 ── */}
+        <div style={{
+          marginBottom: '1.75rem',
+          padding: '0.875rem 1rem',
+          background: 'white',
+          border: '1px solid #f3f4f6',
+          borderRadius: '0.875rem',
+          fontFamily: '"Noto Sans KR", sans-serif',
+        }}>
+          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>
+            제주 서부 테니스 아카데미
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#6b7280', lineHeight: 1.6 }}>
+            회원 전용 레슨 관리 서비스
+            <br />
+            제주특별자치도 제주시 한경면 청수리
+          </div>
+          <div style={{
+            marginTop: '0.625rem',
+            paddingTop: '0.625rem',
+            borderTop: '1px dashed #e5e7eb',
+            fontSize: '0.7rem', color: '#9ca3af',
+          }}>
+            ⓘ 본 서비스는 학원 회원 전용 시스템입니다.
+          </div>
         </div>
 
         <div style={{
@@ -178,6 +205,25 @@ export default async function RootPage() {
                 }}>{s.label}</div>
               </Link>
             ))}
+          </div>
+
+          {/* ── 약관 링크 (토스 심사 대비) ── */}
+          <div style={{
+            marginTop: '1.25rem',
+            paddingTop: '0.875rem',
+            borderTop: '1px solid #f3f4f6',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '0.625rem',
+            fontSize: '0.7rem',
+            color: '#9ca3af',
+            fontFamily: '"Noto Sans KR", sans-serif',
+          }}>
+            <Link href="/terms"         style={{ color: '#6b7280', textDecoration: 'none' }}>이용약관</Link>
+            <span style={{ color: '#d1d5db' }}>|</span>
+            <Link href="/terms/refund"  style={{ color: '#6b7280', textDecoration: 'none' }}>환불정책</Link>
+            <span style={{ color: '#d1d5db' }}>|</span>
+            <Link href="/terms/privacy" style={{ color: '#6b7280', textDecoration: 'none' }}>개인정보처리방침</Link>
           </div>
         </div>
       </div>
