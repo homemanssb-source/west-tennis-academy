@@ -9,10 +9,10 @@
 
 const COMPANY = {
   name:           '제주서부테니스 주식회사',
-  ceo:            '[PLACEHOLDER_대표자명]',
-  bizNumber:      '[PLACEHOLDER_사업자번호]',
-  address:        '[PLACEHOLDER_주소]',
-  phone:          '[PLACEHOLDER_전화번호]',
+  ceo:            '좌미경',                                  // 사업자등록증 기재
+  bizNumber:      '182-86-02740',                            // 사업자등록증 기재
+  address:        '제주특별자치도 제주시 한경면 청수리 311',  // 사업자등록증 기재
+  phone:          '010-2939-0079',                           // 대표 연락처
   email:          'jwta0514@naver.com',
   privacyOfficer: '신승배',
 }

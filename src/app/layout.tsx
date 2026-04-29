@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import BusinessFooter from '@/components/BusinessFooter'
+import SiteFooter from '@/components/SiteFooter'
 
 export const metadata: Metadata = {
   title: '서부 테니스 아카데미',
@@ -34,7 +34,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
-        <BusinessFooter />
+        <SiteFooter />
       </body>
     </html>
   )
