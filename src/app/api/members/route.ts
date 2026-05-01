@@ -4,11 +4,13 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/session'
 import bcrypt from 'bcryptjs'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session || !['owner', 'admin'].includes(session.role)) {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
+  const withFamily = req.nextUrl.searchParams.get('with_family') === '1'
+
   // ✅ perf: LIMIT 1000 — 운영상 충분하고 페이지 초기 로드 속도 확보
   const { data, error } = await supabaseAdmin
     .from('profiles')
@@ -18,7 +20,25 @@ export async function GET() {
     .limit(1000)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  if (!withFamily || !data?.length) return NextResponse.json(data ?? [])
+
+  // ✅ 자녀(family_members) 첨부 — 운영자 페이지에서 자녀 이름 검색 지원
+  const memberIds = data.map(m => m.id)
+  const { data: families } = await supabaseAdmin
+    .from('family_members')
+    .select('id, name, account_id')
+    .in('account_id', memberIds)
+    .eq('is_active', true)
+
+  const childMap: Record<string, { id: string; name: string }[]> = {}
+  for (const f of families ?? []) {
+    if (!childMap[f.account_id]) childMap[f.account_id] = []
+    childMap[f.account_id].push({ id: f.id, name: f.name })
+  }
+
+  const enriched = data.map(m => ({ ...m, children: childMap[m.id] ?? [] }))
+  return NextResponse.json(enriched)
 }
 
 export async function POST(req: NextRequest) {

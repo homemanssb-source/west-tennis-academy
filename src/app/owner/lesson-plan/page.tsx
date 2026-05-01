@@ -12,8 +12,13 @@ import Link from 'next/link'
 
 interface Coach   { id: string; name: string }
 interface Month   { id: string; year: number; month: number }
-interface Member  { id: string; name: string; phone: string; discount_amount: number; discount_memo: string | null }
+interface Member  { id: string; name: string; phone: string; discount_amount: number; discount_memo: string | null; children?: { id: string; name: string }[] }
 interface FamilyMember { id: string; name: string }
+interface SearchEntry {
+  member: Member
+  childId?: string   // 자녀로 매칭된 항목이면 자녀 id
+  childName?: string // 자녀로 매칭된 항목이면 자녀 이름
+}
 interface Program {
   id: string; name: string; unit_minutes: number
   default_amount: number; per_session_price: number
@@ -83,6 +88,7 @@ export default function LessonPlanCreatePage() {
 
   const [familyMembers,   setFamilyMembers]   = useState<FamilyMember[]>([])
   const [familyMemberId,  setFamilyMemberId]  = useState<string>('')
+  const pendingChildIdRef = useRef<string | null>(null)  // ✅ 자녀 검색→선택 시 useEffect 의 reset 이후 적용용
 
   const [memberId,       setMemberId]       = useState('')
   const [memberSearch,   setMemberSearch]   = useState('')
@@ -115,7 +121,7 @@ export default function LessonPlanCreatePage() {
     Promise.all([
       fetch('/api/coaches').then(r => r.json()),
       fetch('/api/months').then(r => r.json()),
-      fetch('/api/members').then(r => r.json()),
+      fetch('/api/members?with_family=1').then(r => r.json()),
       fetch('/api/programs').then(r => r.json()),
       fetch('/api/config').then(r => r.json()),
     ]).then(([c, m, mem, p, cfg]) => {
@@ -149,7 +155,10 @@ export default function LessonPlanCreatePage() {
     setMemberDiscount(m?.discount_amount ?? 0)
     setDiscountMemo(m?.discount_memo ?? null)
     setManualAmount(null)
-    setFamilyMemberId('')
+    // ✅ 자녀 직접 검색→선택 시: pendingChildIdRef 가 세팅되어 있으면 그 값을 반영
+    const pending = pendingChildIdRef.current
+    setFamilyMemberId(pending ?? '')
+    pendingChildIdRef.current = null
     setFamilyMembers([])
     if (memberId) {
       fetch(`/api/family/by-account?account_id=${memberId}`)
@@ -166,9 +175,20 @@ export default function LessonPlanCreatePage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const filteredMembers = memberSearch
-    ? members.filter(m => m.name.includes(memberSearch) || m.phone.includes(memberSearch))
-    : members
+  // ✅ 자녀 이름 검색 지원 — 자녀로 매칭되면 별도 SearchEntry 로 표시
+  const searchEntries: SearchEntry[] = (() => {
+    const q = memberSearch.trim()
+    if (!q) return members.map(m => ({ member: m }))
+    const out: SearchEntry[] = []
+    for (const m of members) {
+      const parentMatch = m.name.includes(q) || m.phone.includes(q)
+      if (parentMatch) out.push({ member: m })
+      for (const c of m.children ?? []) {
+        if (c.name.includes(q)) out.push({ member: m, childId: c.id, childName: c.name })
+      }
+    }
+    return out
+  })()
 
   const selectedProgram = programs.find(p => p.id === programId) ?? null
 
@@ -340,18 +360,38 @@ export default function LessonPlanCreatePage() {
                   onFocus={() => setShowMemberDrop(true)}
                 />
                 {memberId && <span style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#16A34A', fontSize: '1rem' }}>✓</span>}
-                {showMemberDrop && filteredMembers.length > 0 && (
+                {showMemberDrop && searchEntries.length > 0 && (
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', zIndex: 50, maxHeight: '200px', overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                    {filteredMembers.map(m => (
-                      <div key={m.id} onClick={() => { setMemberId(m.id); setMemberSearch(m.name); setShowMemberDrop(false) }}
-                        style={{ padding: '0.625rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6', fontFamily: 'Noto Sans KR, sans-serif' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
-                        <span style={{ fontWeight: 600 }}>{m.name}</span>
-                        <span style={{ color: '#9ca3af', marginLeft: '0.5rem', fontSize: '0.8rem' }}>{m.phone}</span>
-                        {(m.discount_amount ?? 0) > 0 && <span style={{ color: '#7e22ce', marginLeft: '0.5rem', fontSize: '0.75rem', fontWeight: 700 }}>할인 {m.discount_amount.toLocaleString()}원</span>}
-                      </div>
-                    ))}
+                    {searchEntries.map((entry, idx) => {
+                      const m = entry.member
+                      const isChild = !!entry.childId
+                      return (
+                        <div key={`${m.id}-${entry.childId ?? 'self'}-${idx}`}
+                          onClick={() => {
+                            // ✅ 자녀 매칭이면 pendingChildIdRef 에 미리 세팅 → useEffect 가 그대로 반영
+                            pendingChildIdRef.current = isChild ? entry.childId! : null
+                            setMemberId(m.id)
+                            setMemberSearch(isChild ? `${entry.childName} (${m.name})` : m.name)
+                            setShowMemberDrop(false)
+                          }}
+                          style={{ padding: '0.625rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6', fontFamily: 'Noto Sans KR, sans-serif', background: isChild ? '#fdf4ff' : 'white' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = isChild ? '#fae8ff' : '#f9fafb')}
+                          onMouseLeave={e => (e.currentTarget.style.background = isChild ? '#fdf4ff' : 'white')}>
+                          {isChild ? (
+                            <>
+                              <span style={{ fontWeight: 700, color: '#7e22ce' }}>{entry.childName}</span>
+                              <span style={{ color: '#9ca3af', marginLeft: '0.5rem', fontSize: '0.75rem' }}>(자녀 · 부모: {m.name})</span>
+                            </>
+                          ) : (
+                            <>
+                              <span style={{ fontWeight: 600 }}>{m.name}</span>
+                              <span style={{ color: '#9ca3af', marginLeft: '0.5rem', fontSize: '0.8rem' }}>{m.phone}</span>
+                              {(m.discount_amount ?? 0) > 0 && <span style={{ color: '#7e22ce', marginLeft: '0.5rem', fontSize: '0.75rem', fontWeight: 700 }}>할인 {m.discount_amount.toLocaleString()}원</span>}
+                            </>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>

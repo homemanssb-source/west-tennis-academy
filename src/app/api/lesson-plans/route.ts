@@ -72,9 +72,10 @@ export async function POST(req: NextRequest) {
     const datetimes = schedules.map((s: { datetime: string }) => s.datetime)
 
     if (maxStudents <= 1) {
+      // 1:1 — 같은 코치/시간 중복 차단 (단, 같은 program_id 그룹수업이면 OK 로 분기 외)
       const { data: conflicts } = await supabaseAdmin
         .from('lesson_slots')
-        .select('scheduled_at, lesson_plans!inner(coach_id)')
+        .select('scheduled_at, lesson_plans!inner(coach_id, program_id)')
         .in('scheduled_at', datetimes)
         .eq('lesson_plans.coach_id', coach_id)
         .neq('status', 'cancelled')
@@ -87,6 +88,7 @@ export async function POST(req: NextRequest) {
         )
       }
     } else {
+      // ✅ 그룹 — 같은 시간·코치·**같은 program** 슬롯만 카운트 (서로 다른 프로그램은 별개 정원)
       const overCapacity: string[] = []
       for (const datetime of datetimes) {
         const { data: existing } = await supabaseAdmin
@@ -96,7 +98,11 @@ export async function POST(req: NextRequest) {
           .eq('lesson_plans.coach_id', coach_id)
           .neq('status', 'cancelled')
 
-        const currentCount = (existing ?? []).length
+        // program_id 가 있으면 같은 program 슬롯만 / 없으면 (레거시) 코치 기준 전부 카운트
+        const matching = program_id
+          ? (existing ?? []).filter((s: any) => (s.lesson_plans as any)?.program_id === program_id)
+          : (existing ?? [])
+        const currentCount = matching.length
         if (currentCount >= maxStudents) {
           overCapacity.push(`${fmtKST(datetime)} (${currentCount}/${maxStudents}명 정원 초과)`)
         }

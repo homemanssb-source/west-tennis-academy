@@ -8,7 +8,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '권한 없음' }, { status: 403 })
   }
 
-  const { member_id, coach_id, month_id, lesson_type, unit_minutes, scheduled_at, amount } = await req.json()
+  const {
+    member_id, coach_id, month_id, lesson_type, unit_minutes, scheduled_at, amount,
+    program_id, family_member_id,
+  } = await req.json()
 
   if (!member_id || !coach_id || !month_id || !scheduled_at) {
     return NextResponse.json({ error: '필수 항목 누락' }, { status: 400 })
@@ -22,20 +25,35 @@ export async function POST(req: NextRequest) {
     return `${kst.getUTCMonth() + 1}/${kst.getUTCDate()}(${days[kst.getUTCDay()]}) ${String(kst.getUTCHours()).padStart(2, '0')}:${String(kst.getUTCMinutes()).padStart(2, '0')}`
   }
 
-  // ── 중복 시간대 체크 ──────────────────────────────────────
-  // ✅ scheduled_at이 +09:00 형식이므로 DB와 정확히 비교됨
-  const { data: conflicts } = await supabaseAdmin
+  // ── 정원/중복 시간대 체크 ─────────────────────────────────
+  // program_id 가 있으면 program 의 max_students 까지 그룹 등록 허용
+  let maxStudents = 1
+  if (program_id) {
+    const { data: prog } = await supabaseAdmin
+      .from('lesson_programs')
+      .select('max_students')
+      .eq('id', program_id)
+      .single()
+    if (prog?.max_students) maxStudents = prog.max_students
+  }
+
+  const { data: existing } = await supabaseAdmin
     .from('lesson_slots')
-    .select('scheduled_at, lesson_plans!inner(coach_id)')
+    .select('id, lesson_plans!inner(coach_id, program_id)')
     .eq('scheduled_at', scheduled_at)
     .eq('lesson_plans.coach_id', coach_id)
     .neq('status', 'cancelled')
 
-  if (conflicts && conflicts.length > 0) {
-    return NextResponse.json(
-      { error: `${fmtKST(scheduled_at)} 시간대에 이미 같은 코치의 수업이 있습니다` },
-      { status: 409 }
-    )
+  // 같은 program 의 슬롯만 정원 카운트 / program_id 없으면 코치 기준
+  const matching = program_id
+    ? (existing ?? []).filter((s: any) => (s.lesson_plans as any)?.program_id === program_id)
+    : (existing ?? [])
+
+  if (matching.length >= maxStudents) {
+    const reason = maxStudents === 1
+      ? `${fmtKST(scheduled_at)} 시간대에 이미 같은 코치의 수업이 있습니다`
+      : `${fmtKST(scheduled_at)} 정원 초과 (${matching.length}/${maxStudents}명)`
+    return NextResponse.json({ error: reason }, { status: 409 })
   }
 
   // ── 코치 휴무 체크 ────────────────────────────────────────
@@ -87,6 +105,8 @@ export async function POST(req: NextRequest) {
       completed_count: 0,
       payment_status: 'unpaid',
       amount: amount || 0,
+      ...(program_id       ? { program_id }       : {}),
+      ...(family_member_id ? { family_member_id } : {}),
     })
     .select()
     .single()

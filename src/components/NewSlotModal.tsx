@@ -8,8 +8,9 @@
 import { useEffect, useState } from 'react'
 
 interface Coach { id: string; name: string }
-interface Member { id: string; name: string; phone?: string }
+interface Member { id: string; name: string; phone?: string; children?: { id: string; name: string }[] }
 interface FamilyMember { id: string; name: string }
+interface SearchEntry { member: Member; childId?: string; childName?: string }
 interface Month { id: string; year: number; month: number }
 interface Program {
   id: string
@@ -56,7 +57,7 @@ export default function NewSlotModal({
   useEffect(() => {
     Promise.all([
       fetch('/api/coaches').then(r => r.json()),
-      fetch('/api/members').then(r => r.json()),
+      fetch('/api/members?with_family=1').then(r => r.json()),
       fetch('/api/months').then(r => r.json()),
       fetch('/api/programs').then(r => r.json()),
     ]).then(([c, m, mo, p]) => {
@@ -97,12 +98,23 @@ export default function NewSlotModal({
     if (selectedProgram?.unit_minutes) setDuration(selectedProgram.unit_minutes)
   }, [programId, selectedProgram?.unit_minutes])
 
-  const filteredMembers = memberQ.trim()
-    ? members.filter(m =>
-        m.name.toLowerCase().includes(memberQ.toLowerCase()) ||
-        (m.phone ?? '').includes(memberQ.trim())
-      ).slice(0, 30)
-    : members.slice(0, 30)
+  // ✅ 자녀 이름 검색 지원 — 부모/자녀 모두 매칭 → SearchEntry 로 표시
+  const searchEntries: SearchEntry[] = (() => {
+    const q = memberQ.trim()
+    if (!q) return members.slice(0, 30).map(m => ({ member: m }))
+    const out: SearchEntry[] = []
+    const lower = q.toLowerCase()
+    for (const m of members) {
+      if (out.length >= 30) break
+      const parentMatch = m.name.toLowerCase().includes(lower) || (m.phone ?? '').includes(q)
+      if (parentMatch) out.push({ member: m })
+      for (const c of m.children ?? []) {
+        if (out.length >= 30) break
+        if (c.name.toLowerCase().includes(lower)) out.push({ member: m, childId: c.id, childName: c.name })
+      }
+    }
+    return out
+  })()
 
   const selectedMember = members.find(m => m.id === memberId)
 
@@ -209,16 +221,34 @@ export default function NewSlotModal({
                 style={{ width:'100%', padding:'0.5rem 0.625rem', border:'1.5px solid #e5e7eb', borderRadius:8, fontSize:'0.85rem', marginBottom:'0.25rem' }}
               />
               <div style={{ maxHeight:160, overflowY:'auto', border:'1px solid #f3f4f6', borderRadius:8 }}>
-                {filteredMembers.length === 0 ? (
+                {searchEntries.length === 0 ? (
                   <div style={{ padding:'0.625rem', textAlign:'center', color:'#9ca3af', fontSize:'0.8rem' }}>회원 없음</div>
                 ) : (
-                  filteredMembers.map(m => (
-                    <button key={m.id} onClick={() => setMemberId(m.id)}
-                      style={{ width:'100%', textAlign:'left', padding:'0.45rem 0.625rem', border:'none', borderBottom:'1px solid #f3f4f6', background:'white', cursor:'pointer' }}>
-                      <span style={{ fontSize:'0.85rem', fontWeight:600, color:'#111827' }}>{m.name}</span>
-                      {m.phone && <span style={{ fontSize:'0.7rem', color:'#9ca3af', marginLeft:'0.5rem' }}>{m.phone}</span>}
+                  searchEntries.map((entry, idx) => {
+                    const m = entry.member
+                    const isChild = !!entry.childId
+                    return (
+                    <button key={`${m.id}-${entry.childId ?? 'self'}-${idx}`}
+                      onClick={() => {
+                        setMemberId(m.id)
+                        // ✅ 자녀 매칭: parent + child 동시 세팅 / 부모 매칭: family 초기화
+                        setFamilyId(isChild ? entry.childId! : '')
+                      }}
+                      style={{ width:'100%', textAlign:'left', padding:'0.45rem 0.625rem', border:'none', borderBottom:'1px solid #f3f4f6', background: isChild ? '#fdf4ff' : 'white', cursor:'pointer' }}>
+                      {isChild ? (
+                        <>
+                          <span style={{ fontSize:'0.85rem', fontWeight:700, color:'#7e22ce' }}>{entry.childName}</span>
+                          <span style={{ fontSize:'0.7rem', color:'#9ca3af', marginLeft:'0.5rem' }}>(자녀 · 부모: {m.name})</span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontSize:'0.85rem', fontWeight:600, color:'#111827' }}>{m.name}</span>
+                          {m.phone && <span style={{ fontSize:'0.7rem', color:'#9ca3af', marginLeft:'0.5rem' }}>{m.phone}</span>}
+                        </>
+                      )}
                     </button>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </>
