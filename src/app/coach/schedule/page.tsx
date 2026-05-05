@@ -2,6 +2,8 @@
 // src/app/coach/schedule/page.tsx
 // ✅ fix: 주간뷰 슬롯 날짜 그룹핑 KST 기준으로 수정 (자정 근처 오표시 버그)
 // ✅ fix: family_member_name 표시 (가족 신청 시 자녀 이름 표시)
+// ✅ NEW: 주간 뷰를 운영자 주간 스케줄과 동일한 시간 그리드 레이아웃으로 교체
+//        (클릭 시에는 기존 코치용 수업 처리 모달 유지)
 
 import { useEffect, useState, useCallback } from 'react'
 import CoachBottomNav from '@/components/CoachBottomNav'
@@ -29,7 +31,39 @@ const STATUS_STYLE: Record<string, { bg: string; border: string; color: string; 
   makeup:    { bg: '#fdf4ff', border: '#c084fc', color: '#7e22ce', label: '보강' },
 }
 
-const DAY_KO = ['일','월','화','수','목','금','토']
+// ── 운영자 주간 스케줄과 동일한 그리드 상수 ──
+const GRID_DAYS = ['월','화','수','목','금','토','일']
+const START_HOUR = 8, END_HOUR = 24, CELL_MIN = 10
+const STATUS_COLOR_GRID: Record<string,string> = {
+  scheduled: '#16A34A', completed: '#1d4ed8', absent: '#b91c1c', cancelled: '#b91c1c', makeup: '#7e22ce',
+}
+const STATUS_BG_GRID: Record<string,string> = {
+  scheduled: '#f0fdf4', completed: '#eff6ff', absent: '#fef2f2', cancelled: '#fef2f2', makeup: '#fdf4ff',
+}
+
+// ── 겹치는 그룹만 좌우 분할하는 lane 알고리즘 (owner/weekly 와 동일) ──
+function layoutDay(groups: { key: string; startMin: number; endMin: number }[]) {
+  const sorted = [...groups].sort((a, b) => a.startMin - b.startMin)
+  const assigned = new Map<string, number>()
+  const laneEnds: number[] = []
+  for (const g of sorted) {
+    let lane = laneEnds.findIndex(e => e <= g.startMin)
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(0) }
+    laneEnds[lane] = g.endMin
+    assigned.set(g.key, lane)
+  }
+  const clusterSize = new Map<string, number>()
+  for (const g of sorted) {
+    let maxLane = assigned.get(g.key)!
+    for (const o of sorted) {
+      if (o.startMin < g.endMin && o.endMin > g.startMin) {
+        maxLane = Math.max(maxLane, assigned.get(o.key)!)
+      }
+    }
+    clusterSize.set(g.key, maxLane + 1)
+  }
+  return { assigned, clusterSize }
+}
 
 // ✅ KST 기준 today
 function getTodayKST() {
@@ -74,6 +108,166 @@ function displayName(s: Slot): string {
   return s.lesson_plan?.member?.name ?? '-'
 }
 
+// ── 주간 시간 그리드 (운영자 /owner/weekly 와 동일한 레이아웃) ──
+function CoachTimeGrid({
+  weekDates,
+  todayKST,
+  slots,
+  isMobile,
+  onSlotClick,
+  displayName: dispNm,
+}: {
+  weekDates: string[]
+  todayKST: string
+  slots: Slot[]
+  isMobile: boolean
+  onSlotClick: (s: Slot) => void
+  displayName: (s: Slot) => string
+}) {
+  const CELL_H = isMobile ? 16 : 18
+  const TOTAL_CELLS = ((END_HOUR - START_HOUR) * 60) / CELL_MIN
+  const MIN_WIDTH = isMobile ? 560 : 700
+  const TIME_COL_W = isMobile ? 26 : 32
+  const timeLabels = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i)
+  const now = new Date()
+  const nowKstHour = (new Date(now.getTime() + 9 * 60 * 60 * 1000)).getUTCHours()
+  const nowKstMin  = (new Date(now.getTime() + 9 * 60 * 60 * 1000)).getUTCMinutes()
+
+  return (
+    <div style={{ display:'flex', minWidth: MIN_WIDTH + 'px' }}>
+      <div style={{ width: TIME_COL_W + 'px', flexShrink: 0, marginTop: '40px' }}>
+        <div style={{ position:'relative', height: TOTAL_CELLS * CELL_H }}>
+          {timeLabels.map((h, i) => (
+            <div key={h} style={{ position:'absolute', top: i*6*CELL_H - 7, right: 2, fontSize:'9px', color:'#9ca3af', fontFamily:'monospace', whiteSpace:'nowrap' }}>
+              {String(h).padStart(2,'0')}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'2px' }}>
+        {weekDates.map((ymd, di) => {
+          const [dy, dm, dd] = ymd.split('-').map(Number)
+          const dateObj = new Date(dy, dm - 1, dd)
+          const isToday = ymd === todayKST
+          const dow     = dateObj.getDay()
+          const daySlots = slots.filter(s => slotToKSTDate(s.scheduled_at) === ymd)
+          const nowMin = isToday ? (nowKstHour - START_HOUR) * 60 + nowKstMin : -1
+
+          // 같은 시간 슬롯을 묶어 그룹 처리 (그룹 레슨 대응) — 코치 본인 1명이라 coach key 는 무관
+          const slotGroupMap = new Map<string, Slot[]>()
+          daySlots.forEach(s => {
+            const dt  = new Date(s.scheduled_at)
+            const kst = new Date(dt.getTime() + 9 * 60 * 60 * 1000)
+            const kstH = String(kst.getUTCHours()).padStart(2,'0')
+            const kstM = String(kst.getUTCMinutes()).padStart(2,'0')
+            const key = `${kstH}:${kstM}`
+            if (!slotGroupMap.has(key)) slotGroupMap.set(key, [])
+            slotGroupMap.get(key)!.push(s)
+          })
+
+          const groupsWithTime = Array.from(slotGroupMap.entries()).map(([key, arr]) => {
+            const s   = arr[0]
+            const dt  = new Date(s.scheduled_at)
+            const kst = new Date(dt.getTime() + 9 * 60 * 60 * 1000)
+            const startMin = (kst.getUTCHours() - START_HOUR) * 60 + kst.getUTCMinutes()
+            const dur = s.duration_minutes || 30
+            return { key, slots: arr, startMin, endMin: startMin + dur }
+          })
+
+          const { assigned, clusterSize } = layoutDay(groupsWithTime)
+
+          return (
+            <div key={di} style={{ display:'flex', flexDirection:'column' }}>
+              <div style={{ textAlign:'center', height:'40px', background: isToday ? '#16A34A' : 'white', border:'1.5px solid ' + (isToday ? '#16A34A' : '#e5e7eb'), borderRadius:'8px 8px 0 0', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+                <div style={{ fontFamily:'Oswald,sans-serif', fontWeight:700, fontSize:'0.8rem', color: isToday ? 'white' : dow === 0 ? '#ef4444' : dow === 6 ? '#3b82f6' : '#374151' }}>{GRID_DAYS[di]}</div>
+                <div style={{ fontSize:'0.65rem', color: isToday ? 'rgba(255,255,255,0.8)' : '#9ca3af' }}>{dm}/{dd}</div>
+              </div>
+
+              <div style={{ position:'relative', height: TOTAL_CELLS * CELL_H, background:'white', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 8px 8px', overflow:'hidden' }}>
+                {Array.from({ length: TOTAL_CELLS }, (_, i) => (
+                  <div key={i} style={{ position:'absolute', left:0, right:0, top: i * CELL_H, height: CELL_H, borderBottom: i % 6 === 5 ? '1px solid #e5e7eb' : '1px solid #f3f4f6', background: i % 6 === 0 ? '#fafafa' : 'transparent' }} />
+                ))}
+
+                {isToday && nowMin >= 0 && nowMin <= (END_HOUR - START_HOUR) * 60 && (
+                  <div style={{ position:'absolute', left:0, right:0, top: (nowMin / CELL_MIN) * CELL_H, borderTop:'2px solid #ef4444', zIndex:10, display:'flex', alignItems:'center' }}>
+                    <div style={{ width:6, height:6, borderRadius:'50%', background:'#ef4444', marginTop:-3, marginLeft:-1, flexShrink:0 }} />
+                  </div>
+                )}
+
+                {groupsWithTime.map(g => {
+                  const slot = g.slots[0]
+                  const dt   = new Date(slot.scheduled_at)
+                  const kst  = new Date(dt.getTime() + 9 * 60 * 60 * 1000)
+                  const kstH = kst.getUTCHours()
+                  const kstM = kst.getUTCMinutes()
+                  if (g.startMin < 0 || g.startMin >= (END_HOUR - START_HOUR) * 60) return null
+                  const top    = (g.startMin / CELL_MIN) * CELL_H
+                  const height = Math.max((slot.duration_minutes || 30) / CELL_MIN * CELL_H, CELL_H * 2)
+                  const status = slot.status
+                  const color  = STATUS_COLOR_GRID[status] ?? STATUS_COLOR_GRID.scheduled
+                  const bg     = STATUS_BG_GRID[status] ?? STATUS_BG_GRID.scheduled
+                  const count  = g.slots.length
+
+                  const lane = assigned.get(g.key) ?? 0
+                  const size = clusterSize.get(g.key) ?? 1
+                  const leftPct  = (lane / size) * 100
+                  const widthPct = 100 / size
+
+                  if (count >= 2) {
+                    const rawNames = g.slots.map(s =>
+                      s.family_member_name ? s.family_member_name : (s.lesson_plan?.member?.name ?? '-'),
+                    )
+                    const names = [...new Set(rawNames)]
+                    const groupColor = '#7c3aed'
+                    const groupBg    = groupColor + '18'
+                    return (
+                      <div key={g.key} onClick={() => onSlotClick(g.slots[0])}
+                        style={{ position:'absolute', top: top + 1, left: `calc(${leftPct}% + 2px)`, width: `calc(${widthPct}% - 4px)`, height: height - 2, background: groupBg, borderLeft: '3px solid ' + groupColor, borderRadius:'0 4px 4px 0', padding:'2px 3px', zIndex:5, overflow:'hidden', boxShadow:'0 1px 2px rgba(0,0,0,0.06)', cursor:'pointer' }}>
+                        <div style={{ fontSize:'9px', fontWeight:700, color: groupColor, lineHeight: 1.3 }}>
+                          {String(kstH).padStart(2,'0')}:{String(kstM).padStart(2,'0')}
+                        </div>
+                        <div style={{ fontSize:'8px', fontWeight:700, background: groupColor, color:'white', borderRadius:'9999px', padding:'0 4px', display:'inline-block', marginBottom:'1px' }}>
+                          그룹 {names.length}명
+                        </div>
+                        {names.slice(0, size > 1 ? 2 : 3).map((n, ni) => (
+                          <div key={ni} style={{ fontSize:'9px', color:'#111827', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{n}</div>
+                        ))}
+                        {names.length > (size > 1 ? 2 : 3) && (
+                          <div style={{ fontSize:'8px', color:'#6b7280' }}>외 {names.length - (size > 1 ? 2 : 3)}명</div>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  const name = dispNm(slot)
+                  return (
+                    <div key={g.key} onClick={() => onSlotClick(slot)}
+                      style={{ position:'absolute', top: top + 1, left: `calc(${leftPct}% + 2px)`, width: `calc(${widthPct}% - 4px)`, height: height - 2, background: bg, borderLeft: '3px solid ' + color, borderRadius:'0 4px 4px 0', padding:'2px 3px', zIndex:5, overflow:'hidden', boxShadow:'0 1px 2px rgba(0,0,0,0.06)', cursor:'pointer' }}>
+                      <div style={{ fontSize:'9px', fontWeight:700, color, lineHeight:1.3 }}>
+                        {String(kstH).padStart(2,'0')}:{String(kstM).padStart(2,'0')}
+                      </div>
+                      <div style={{ fontSize:'10px', fontWeight:700, color:'#111827', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</div>
+                      {height >= 42 && (
+                        <div style={{ fontSize:'9px', color:'#6b7280', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {slot.duration_minutes}분 · {slot.lesson_plan?.lesson_type}
+                        </div>
+                      )}
+                      {status === 'makeup' && (
+                        <div style={{ fontSize:'8px', background:'#e9d5ff', color:'#7e22ce', borderRadius:'9999px', padding:'0 4px', display:'inline-block', marginTop:'1px' }}>보강</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function CoachSchedulePage() {
   const today = getTodayKST()
 
@@ -93,11 +287,20 @@ export default function CoachSchedulePage() {
   const [showReschedule, setShowReschedule] = useState(false)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
+  const [isMobile,       setIsMobile]       = useState(false)
 
   useEffect(() => {
     fetch('/api/session').then(r => r.json()).then(d => {
       if (d?.id) setCoachId(d.id)
     })
+  }, [])
+
+  // 반응형 플래그 (768px 미만 = 폰)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
   }, [])
 
   const load = useCallback(async () => {
@@ -221,12 +424,6 @@ export default function CoachSchedulePage() {
   }
 
   const weekDates = getWeekDatesKST(today, weekOffset)
-  const slotsByDate: Record<string, Slot[]> = {}
-  weekDates.forEach(d => { slotsByDate[d] = [] })
-  weekSlots.forEach(s => {
-    const d = slotToKSTDate(s.scheduled_at)
-    if (slotsByDate[d]) slotsByDate[d].push(s)
-  })
 
   const openSlot = (s: Slot) => {
     setSelected(s)
@@ -310,51 +507,34 @@ export default function CoachSchedulePage() {
                 </div>
         )}
 
-        {/* 주간 뷰 */}
+        {/* 주간 뷰 — 운영자 주간 스케줄과 동일한 시간 그리드 */}
         {tab === 'week' && (
           loading
             ? <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>불러오는 중...</div>
-            : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {weekDates.map(d => {
-                  const daySlots = slotsByDate[d] ?? []
-                  const [dy, dm, dd] = d.split('-').map(Number)
-                  const dateObj = new Date(dy, dm - 1, dd)
-                  const isToday = d === today
-                  const dow     = dateObj.getDay()
-                  return (
-                    <div key={d}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
-                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', background: isToday ? '#1d4ed8' : '#f3f4f6', flexShrink: 0 }}>
-                          <span style={{ fontSize: '0.6rem', fontWeight: 700, color: isToday ? 'rgba(255,255,255,.8)' : dow === 0 ? '#b91c1c' : dow === 6 ? '#1d4ed8' : '#6b7280' }}>{DAY_KO[dow]}</span>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isToday ? 'white' : dow === 0 ? '#b91c1c' : dow === 6 ? '#1d4ed8' : '#374151', lineHeight: 1 }}>{dd}</span>
-                        </div>
-                        <div style={{ flex: 1, height: '1px', background: '#f3f4f6' }} />
-                        {daySlots.length > 0 && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280' }}>{daySlots.length}건</span>}
-                      </div>
-                      {daySlots.length === 0
-                        ? <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: '#d1d5db' }}>수업 없음</div>
-                        : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                            {daySlots.sort((a,b) => a.scheduled_at.localeCompare(b.scheduled_at)).map(s => {
-                              const st = STATUS_STYLE[s.status] ?? STATUS_STYLE.scheduled
-                              return (
-                                <div key={s.id} onClick={() => openSlot(s)}
-                                  style={{ background: st.bg, borderLeft: `3px solid ${st.border}`, borderRadius: '0 0.75rem 0.75rem 0', padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer' }}>
-                                  <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: '0.875rem', fontWeight: 700, color: st.color, flexShrink: 0, width: '42px' }}>{fmtTime(s.scheduled_at)}</div>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    {/* ✅ fix: 자녀이름(부모) 표시 */}
-                                    <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#111827' }}>{displayName(s)}</div>
-                                    <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>{s.duration_minutes}분 · {s.lesson_plan?.lesson_type}</div>
-                                  </div>
-                                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '9999px', background: `${st.border}33`, color: st.color, flexShrink: 0 }}>{st.label}</span>
-                                </div>
-                              )
-                            })}
-                          </div>
-                      }
+            : (
+              <>
+                <div style={{ display:'flex', gap: isMobile ? '0.625rem' : '1rem', marginBottom:'0.75rem', flexWrap:'wrap' }}>
+                  {[['scheduled','예정'],['completed','완료'],['absent','결석'],['makeup','보강']].map(([k,l]) => (
+                    <div key={k} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'0.7rem', color:'#6b7280' }}>
+                      <div style={{ width:'10px', height:'10px', background: STATUS_COLOR_GRID[k], borderRadius:'2px' }}/>{l}
                     </div>
-                  )
-                })}
-              </div>
+                  ))}
+                  <div style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'0.7rem', color:'#6b7280' }}>
+                    <div style={{ width:'10px', height:'10px', background:'#7c3aed', borderRadius:'2px' }}/>그룹수업
+                  </div>
+                </div>
+                <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+                  <CoachTimeGrid
+                    weekDates={weekDates}
+                    todayKST={today}
+                    slots={weekSlots}
+                    isMobile={isMobile}
+                    onSlotClick={openSlot}
+                    displayName={displayName}
+                  />
+                </div>
+              </>
+            )
         )}
       </div>
 
